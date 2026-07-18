@@ -1,0 +1,14 @@
+# Hugo build output
+/public/
+/resources/_gen/
+.hugo_build.lock
+
+# macOS
+.DS_Store
+
+# Non-blog artifacts (must not be published)
+*.pdf
+/SEED.md
+/tudul.md
+/docs/
+.superpowers/

@@ -1,0 +1,38 @@
+baseURL = "https://econ-blog.github.io/"
+languageCode = "ko-kr"
+defaultContentLanguage = "ko"
+title = "쉽게 읽는 경제뉴스"
+theme = "PaperMod"
+enableRobotsTXT = true
+pygmentsUseClasses = true
+
+[params]
+  defaultTheme = "auto"
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowBreadCrumbs = true
+  ShowCodeCopyButtons = false
+  ShowToc = false
+
+  [params.homeInfoParams]
+    Title = "쉽게 읽는 경제뉴스"
+    Content = "어려운 경제뉴스를 비전공자도 이해할 수 있게 풀어 설명하고, 경제 용어를 사전으로 정리합니다."
+
+[menu]
+  [[menu.main]]
+    identifier = "posts"
+    name = "뉴스 해설"
+    url = "/posts/"
+    weight = 1
+  [[menu.main]]
+    identifier = "dictionary"
+    name = "경제 용어 사전"
+    url = "/dictionary/"
+    weight = 2
+
+[taxonomies]
+  tag = "tags"
+
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
