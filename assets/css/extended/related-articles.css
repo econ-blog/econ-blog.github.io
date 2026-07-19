@@ -1,0 +1,32 @@
+.related-articles {
+    margin-top: var(--content-gap);
+}
+
+.related-articles-title {
+    font-size: 15px;
+    color: var(--secondary);
+    margin-bottom: 8px;
+}
+
+.related-articles-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.related-articles-list li {
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+
+.related-articles-list a {
+    color: var(--primary);
+    font-size: 14px;
+    text-decoration: underline;
+}
+
+.related-articles-source {
+    color: var(--secondary);
+    font-size: 13px;
+    margin-left: 6px;
+}

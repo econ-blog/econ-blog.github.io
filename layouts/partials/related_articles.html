@@ -1,0 +1,15 @@
+{{- if eq .Section "posts" }}
+{{- with .Params.related_articles }}
+<div class="related-articles">
+  <h3 class="related-articles-title">연관된 다른 기사</h3>
+  <ul class="related-articles-list">
+    {{- range . }}
+    <li>
+      <a href="{{ .url }}" target="_blank" rel="noopener noreferrer nofollow">{{ .title }}</a>
+      {{- with .source }}<span class="related-articles-source">{{ . }}</span>{{ end }}
+    </li>
+    {{- end }}
+  </ul>
+</div>
+{{- end }}
+{{- end }}
