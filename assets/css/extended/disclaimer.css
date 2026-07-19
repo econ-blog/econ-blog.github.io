@@ -1,0 +1,10 @@
+.disclaimer-box {
+    margin-top: var(--content-gap);
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    color: var(--secondary);
+    font-size: 13px;
+    line-height: 1.6;
+}

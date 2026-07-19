@@ -1,0 +1,10 @@
+.source-link {
+    margin-top: var(--content-gap);
+    color: var(--secondary);
+    font-size: 14px;
+}
+
+.source-link a {
+    color: var(--primary);
+    text-decoration: underline;
+}

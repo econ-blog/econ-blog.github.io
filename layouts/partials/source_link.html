@@ -1,0 +1,3 @@
+{{- if and (eq .Section "posts") .Params.source_url }}
+<p class="source-link">원문: <a href="{{ .Params.source_url }}" target="_blank" rel="noopener noreferrer">기사 보기</a></p>
+{{- end }}
