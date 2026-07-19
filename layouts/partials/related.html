@@ -1,5 +1,7 @@
 {{- if eq .Section "posts" }}
-{{- $relatedPages := (where site.RegularPages "Section" "posts").Related . | first 5 -}}
+{{- $posts := where site.RegularPages "Section" "posts" -}}
+{{- $notices := where $posts "Params.tags" "intersect" (slice "공지") -}}
+{{- $relatedPages := ($posts | complement $notices).Related . | first 5 -}}
 {{- with $relatedPages }}
 <div class="related-posts">
   <h3 class="related-posts-title">함께 보면 좋은 글</h3>
