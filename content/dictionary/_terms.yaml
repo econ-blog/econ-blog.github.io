@@ -4,3 +4,6 @@ base-rate:
 supply-shock:
   title: "공급충격"
   aliases: ["공급 충격", "공급망 충격"]
+per:
+  title: "주가수익비율"
+  aliases: ["PER", "선행 PER", "P/E"]
