@@ -4,6 +4,16 @@ date: 2026-07-18T21:30:00+09:00
 tags: ["국제경제", "원유", "공급망"]
 draft: false
 source_url: "https://www.hankyung.com/article/2026071819577"
+related_articles:
+  - title: "호르무즈 봉쇄 장기화로 글로벌 원유시장 '3개월 시한폭탄'"
+    url: "https://imnews.imbc.com/news/2026/world/article/6824601_36925.html"
+    source: "MBC"
+  - title: "다시 막힌 호르무즈…정부 \"7~8월 원유 100% 이상 확보\""
+    url: "https://www.newstomato.com/ReadNews.aspx?no=1306985"
+    source: "뉴스토마토"
+  - title: "이란 \"원유·가스 수출로 차단 각오해야\"…美 해상봉쇄에 '맞불'"
+    url: "https://www.fnnews.com/news/202607151628466890"
+    source: "파이낸셜뉴스"
 ---
 
 ## 무슨 일이 있었나
