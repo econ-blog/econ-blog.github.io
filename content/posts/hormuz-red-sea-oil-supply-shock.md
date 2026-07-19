@@ -3,6 +3,7 @@ title: "호르무즈·홍해, 두 원유동맥이 동시에 흔들리면 무슨 
 date: 2026-07-18T21:30:00+09:00
 tags: ["국제경제", "원유", "공급망"]
 draft: false
+source_url: "https://www.hankyung.com/article/2026071819577"
 ---
 
 ## 무슨 일이 있었나
