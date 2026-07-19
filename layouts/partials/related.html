@@ -1,0 +1,13 @@
+{{- if eq .Section "posts" }}
+{{- $relatedPages := (where site.RegularPages "Section" "posts").Related . | first 5 -}}
+{{- with $relatedPages }}
+<div class="related-posts">
+  <h3 class="related-posts-title">함께 보면 좋은 글</h3>
+  <ul class="related-posts-list">
+    {{- range . }}
+    <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{- end }}
+  </ul>
+</div>
+{{- end }}
+{{- end }}

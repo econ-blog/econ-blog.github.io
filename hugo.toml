@@ -19,6 +19,12 @@ pygmentsUseClasses = true
     Title = "쉽게 읽는 경제뉴스"
     Content = "어려운 경제뉴스를 비전공자도 이해할 수 있게 풀어 설명하고, 경제 용어를 사전으로 정리합니다."
 
+  [params.analytics]
+    [params.analytics.google]
+      SiteVerificationTag = "Pq-uzUwYArRYxLu2YzvnVhdM43JSCa7wQuHup-UJdGk"
+    [params.analytics.naver]
+      SiteVerificationTag = "9d0accb89d56184c70ab4aac11649e54d536dd34"
+
 [menu]
   [[menu.main]]
     identifier = "posts"
@@ -33,6 +39,14 @@ pygmentsUseClasses = true
 
 [taxonomies]
   tag = "tags"
+
+[related]
+  threshold = 10
+  includeNewer = true
+  toLower = false
+  [[related.indices]]
+    name = "tags"
+    weight = 100
 
 [outputs]
   home = ["HTML", "RSS", "JSON"]
