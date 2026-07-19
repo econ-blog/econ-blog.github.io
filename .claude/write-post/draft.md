@@ -10,10 +10,15 @@ front matter:
     ---
     title: "..."
     date: <현재시각, +09:00>
+    description: "..."
     tags: [...]
     draft: true
     source_url: "<입력받은 원문 URL>"
     ---
+
+description 작성 규칙:
+- 100자 내외. 이 글을 읽으면 무엇을 알게 되는지 한 문장으로 압축한다.
+- "~를 정리합니다", "~에 대해 알아봅니다" 같은 무미건조한 예고형 문장 금지 — 검색 결과·공유 미리보기에 그대로 노출되는 문장이므로, 클릭할 이유가 담겨야 한다.
 
 본문 규칙:
 - 비전공자가 이해할 난이도. **일상적인 비유**를 적극 활용(예: 금리를 "이자 온도조절기"에 빗대기).
@@ -33,7 +38,7 @@ front matter:
 
 ## 3. 용어 사전 (필요 시)
 본문에 새 핵심 용어가 등장하고 `content/dictionary/_terms.yaml`에 아직 슬러그가 없다면:
-1. `content/dictionary/<term-slug>.md` 에 설명 초안을 쓴다(`draft: true`, tags에 "용어사전").
+1. `content/dictionary/<term-slug>.md` 에 설명 초안을 쓴다(`draft: true`, tags에 "용어사전", description에 그 용어를 한 문장으로 정의).
 2. `content/dictionary/_terms.yaml`에 새 블록을 append한다:
 
    ```yaml
