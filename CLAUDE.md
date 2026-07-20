@@ -17,7 +17,7 @@ hugo --gc --minify       # production build (what CI runs), outputs to ./public
 
 `gh` is the preferred CLI for GitHub tasks in this repository. Check authentication with `gh auth status` before querying issues, pull requests, or Actions. Use `gh pr view`, `gh pr checks`, and `gh run view` for read-only inspection. Never merge, close, delete, or push through `gh` without explicit user approval. Keep post and dictionary drafts at `draft: true` until that approval is given.
 
-No test suite, no linter — this is prompt files + Markdown content + Hugo config. "Correctness" for the slash commands means the prompt text is internally consistent and matches Hugo's actual content-file conventions (see below), not passing tests. Verify changes to `.claude/commands/*.md` or `.claude/write-post/*.md` by running `hugo --gc --minify` and checking the `Pages` / `Non-page files` counts in the build summary, and by grepping for cross-file references (section numbers, file paths) actually resolving.
+No test suite, no linter — this is prompt files + Markdown content + Hugo config. "Correctness" for the slash commands means the prompt text is internally consistent and matches Hugo's actual content-file conventions (see below), not passing tests. Verify changes to `.claude/commands/*.md` or `.claude/daily-post/*.md` by running `hugo --gc --minify` and checking the `Pages` / `Non-page files` counts in the build summary, and by grepping for cross-file references (section numbers, file paths) actually resolving.
 
 CI (`.github/workflows/hugo.yml`) builds with Hugo `0.164.0` on push to `main` and deploys via `actions/deploy-pages` — no `gh-pages` branch. Locally installed Hugo should match that version.
 
@@ -58,7 +58,7 @@ If you need to re-derive or extend `macro-reference.md` from the PDF: the PDF's 
 
 - git commit author: `bjh7790` / `bjh7790@gmail.com`.
 - Push authenticates via a repo-dedicated SSH key (`~/.ssh/id_ed25519_econblog`), already registered on GitHub — pushes should not need credential prompts.
-- Never commit or push a post/dictionary draft without explicit user approval (see `/write-post` §4 above) — this applies even to trivial-looking fixes to already-drafted content.
+- Never commit or push a post/dictionary draft without explicit user approval (see the `/daily-post` §6 publish gate above) — this applies even to trivial-looking fixes to already-drafted content.
 
 ## Roadmap (not yet built)
 
