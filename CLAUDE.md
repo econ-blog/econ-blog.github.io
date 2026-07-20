@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Hugo static-site blog (theme: PaperMod, git submodule under `themes/PaperMod`) that explains Korean economic news to non-expert readers, deployed to GitHub Pages. There is no application code — the actual product is (a) the Hugo content/config and (b) two Claude Code custom slash commands that generate that content.
+A Hugo static-site blog (theme: PaperMod, git submodule under `themes/PaperMod`) that explains Korean economic news to non-expert readers, deployed to GitHub Pages. There is no application code — the actual product is (a) the Hugo content/config and (b) one Claude Code custom slash command (`/daily-post`) that generates that content.
 
 ## Commands
 
