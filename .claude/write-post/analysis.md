@@ -8,23 +8,10 @@
 2. **돈의 흐름/유동성**(금리·신용 여건이 풀리나 조이나)
 3. **기업 체력**(실적·밸류에이션)
 
-## 2. 관련 챕터만 골라 PDF 참고
-`Applied Financial Macroeconomics and Investment Strategy_ A Practitioners Guide to Tactical Asset - PDF Room.pdf`(저장소 루트)에서 뉴스 주제와 맞는 챕터만 Read(pages 파라미터)로 읽는다. 책 전체를 읽지 않는다. 파일페이지 = 인쇄페이지 + 19.
+## 2. 관련 챕터만 골라 매크로 참고 노트 확인
+`macro-reference.md`(같은 디렉터리)를 Read로 읽는다. 뉴스 주제와 맞는 챕터 절만 골라 참고하고, 다른 챕터는 읽지 않는다. 이 파일 자체가 원문 대체 요약이므로 원문 PDF는 더 이상 참조하지 않는다.
 
-| 뉴스 주제 | 챕터 | 시작 파일페이지(pages 파라미터 예시) |
-|---|---|---|
-| 개괄·복합 이슈(특정 챕터로 안 좁혀질 때) | 1장 Cycles and Trends | 20-33 |
-| 경기·성장 국면 | 2장 The Business Cycle | 34-53 |
-| 금리·통화정책 | 3장 Monetary Policy | 72-91 |
-| 채권·신용·스프레드 | 4장 Bonds and Credit | 114-133 |
-| 주식·기업실적·밸류에이션 | 5장 Equities and Profits | 148-167 |
-| 원자재·원유·실물자산 | 6장 Commodities and Tangible Assets | 194-211 |
-| 장기 구조변화 | 7장 Investing for Long-Term Change | 212-231 |
-| 위기·시스템 리스크 사례 | 8장 Lessons Learned from the Financial Crisis | 248-263 |
-
-각 챕터가 표의 범위보다 길면 이어서 최대 20페이지씩 더 읽는다(Read 도구 1회 한도). 읽은 페이지의 챕터 제목이 표와 다르면 목차(파일페이지 8)를 다시 확인해 오프셋을 재계산한다.
-
-PDF 파일을 찾을 수 없거나 읽을 수 없으면 이 2단계는 건너뛰고 1·3·4·5단계만 수행한다(1·4·5단계는 PDF 없이도 성립한다).
+macro-reference.md도 "이 책에 의하면" 식으로 직접 인용하지 않는다. 인과 논리만 가져와 분석에 녹여쓴다.
 
 ## 3. tudul.md와 PDF는 근거로만, 직접 인용 금지
 `tudul.md`(저장소 루트)와 위 PDF 모두 "이 책에 의하면", "OO 프레임워크에 따르면" 식으로 직접 인용하지 않는다. 프레임과 논리만 가져와 분석에 녹여쓴다.
