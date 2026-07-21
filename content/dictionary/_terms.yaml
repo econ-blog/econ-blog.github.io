@@ -10,3 +10,7 @@ per:
 brent-crude:
   title: "브렌트유"
   aliases: ["브렌트", "북해산 브렌트유"]
+cofix:
+  title: "코픽스"
+  aliases: ["COFIX", "자금조달비용지수"]
+
