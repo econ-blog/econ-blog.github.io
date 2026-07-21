@@ -7,3 +7,6 @@ supply-shock:
 per:
   title: "주가수익비율"
   aliases: ["PER", "선행 PER", "P/E"]
+brent-crude:
+  title: "브렌트유"
+  aliases: ["브렌트", "북해산 브렌트유"]
