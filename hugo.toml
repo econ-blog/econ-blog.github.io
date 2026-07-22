@@ -6,6 +6,10 @@ theme = "PaperMod"
 enableRobotsTXT = true
 pygmentsUseClasses = true
 
+[services]
+  [services.googleAnalytics]
+    ID = "G-E2V0CFN172"
+
 [params]
   defaultTheme = "auto"
   description = "어려운 경제·금융 뉴스를 비전공자도 이해할 수 있게 쉬운 말로 풀어 설명하고, 경제 용어를 사전으로 정리하는 블로그입니다."
