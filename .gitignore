@@ -23,3 +23,8 @@
 /tudul.md
 /docs/
 .superpowers/
+
+# GA4 Credentials & Venv
+ga4-credentials.json
+.venv/
+
