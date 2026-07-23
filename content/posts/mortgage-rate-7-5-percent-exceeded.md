@@ -2,7 +2,7 @@
 title: "주담대 최고금리 연 7.5% 돌파…은행채·코픽스 급등에 대출 문턱 높아졌다"
 date: 2026-07-21T19:30:00+09:00
 description: "5대 시중은행의 주택담보대출 최고 금리가 연 7.54%를 넘어섰습니다. 돈을 빌리는 이자 부담이 커지고 대출 한도도 줄어들고 있습니다."
-tags: ["주택담보대출", "금리", "가계부채", "부동산"]
+tags: ["금리", "부동산"]
 draft: false
 source_url: "https://www.hankyung.com/article/2026072176511"
 related_articles:

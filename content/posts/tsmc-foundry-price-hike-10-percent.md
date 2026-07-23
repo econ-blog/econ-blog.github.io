@@ -2,7 +2,7 @@
 title: "TSMC 파운드리 10% 기습 인상, IT 물가 자극하는 칩플레이션의 전조"
 date: 2026-07-22T19:30:00+09:00
 description: "글로벌 1위 반도체 위탁생산 기업 TSMC가 2027년부터 파운드리 가격을 최대 10% 인상하기로 결정했습니다. 반도체 제조 원가 상승이 전방 산업과 물가, 투자 지형에 미칠 파장을 분석합니다."
-tags: ["TSMC", "반도체", "파운드리", "칩플레이션", "IT산업"]
+tags: ["반도체", "물가", "국제경제"]
 draft: false
 source_url: "https://www.hankyung.com/article/2026072200591"
 related_articles:

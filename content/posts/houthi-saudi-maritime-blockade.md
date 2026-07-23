@@ -2,7 +2,7 @@
 title: "후티의 사우디 해상봉쇄 선언, 하루 400만 배럴이 걸린 바닷길"
 date: 2026-07-20T23:10:00+09:00
 description: "예멘 후티 반군이 사우디 선박의 통행 금지를 선언했습니다. 하루 400만 배럴이 오가는 얀부항이 막히면 유가와 물가, 업종 지형이 어떻게 움직이는지 담았습니다."
-tags: ["국제경제", "원유", "공급망"]
+tags: ["국제경제", "에너지", "공급망"]
 draft: false
 source_url: "https://www.hankyung.com/article/202607205413i"
 related_articles:
