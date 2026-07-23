@@ -1,9 +1,9 @@
 # 감사 리포트 형식 계약 (`topic-report.md`)
 
-`daily-post.md`의 랭킹 단계(`rank.md`)가 소비하는 `.claude/audit/topic-report.md`의 형식 계약이다. 이 파일(`topic-report.md`)을 실제로 만드는 주체(주간 감사 에이전트, "Agent3")는 아직 구현되지 않았다 — 이 README는 그 에이전트가 나중에 형식을 재설계하지 않도록 계약만 먼저 고정해 둔다.
+`rank.md`가 소비하는 `.claude/audit/topic-report.md`의 형식 계약이다. 이 파일을 만드는 주간 감사 에이전트("Agent3")는 아직 없다 — 나중에 형식을 재설계하지 않도록 계약만 먼저 고정해 둔다.
 
 ## 파일 유무
-`topic-report.md`가 없으면 `rank.md`는 조용히 건너뛴다 — 부재가 정상 상태이며 오류가 아니다.
+`topic-report.md`가 없으면 `rank.md`는 조용히 건너뛴다. 부재가 정상 상태이며 오류가 아니다.
 
 ## 필수 형식
 ```markdown
