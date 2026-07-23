@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 GA4 Analytics Reporter Script for AI Agent
-Fetches traffic summary, top pages, and traffic sources from Google Analytics 4 Data API.
+Fetches traffic summary, top pages, traffic sources, and realtime users from Google Analytics 4 Data API.
 """
 
 import os
@@ -36,7 +36,7 @@ def main():
     try:
         from google.analytics.data_v1beta import BetaAnalyticsDataClient
         from google.analytics.data_v1beta.types import (
-            DateRange, Dimension, Metric, RunReportRequest
+            DateRange, Dimension, Metric, RunReportRequest, RunRealtimeReportRequest
         )
     except ImportError:
         print(json.dumps({
@@ -47,6 +47,25 @@ def main():
 
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
     client = BetaAnalyticsDataClient()
+
+    # Realtime Check
+    realtime_request = RunRealtimeReportRequest(
+        property=f"properties/{property_id}",
+        metrics=[Metric(name="activeUsers")],
+        dimensions=[Dimension(name="deviceCategory"), Dimension(name="country")]
+    )
+    realtime_response = client.run_realtime_report(realtime_request)
+    
+    total_realtime_users = 0
+    realtime_details = []
+    for row in realtime_response.rows:
+        count = int(row.metric_values[0].value)
+        total_realtime_users += count
+        realtime_details.append({
+            "device": row.dimension_values[0].value,
+            "country": row.dimension_values[1].value,
+            "activeUsers": count
+        })
 
     # 1. Overall Traffic Summary (Last 7 Days)
     summary_request = RunReportRequest(
@@ -81,7 +100,6 @@ def main():
     )
     sources_response = client.run_report(sources_request)
 
-    # Format results
     summary_data = {}
     if summary_response.rows:
         row = summary_response.rows[0]
@@ -119,6 +137,8 @@ def main():
     report = {
         "fetchedAt": datetime.now().isoformat(),
         "propertyId": property_id,
+        "realtimeActiveUsers": total_realtime_users,
+        "realtimeBreakdown": realtime_details,
         "dateRange": "Last 7 Days",
         "summary": summary_data,
         "topPages": top_pages,
