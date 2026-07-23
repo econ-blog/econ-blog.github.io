@@ -1,0 +1,139 @@
+{
+  "abcdpubu_222721873820": {
+    "status": "rejected",
+    "reason": "too_few_sentences_1",
+    "query": "기준금리 인상 영향"
+  },
+  "aeworl_222813899887": {
+    "status": "kept",
+    "chars": 1689,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/aeworl/222813899887",
+    "date": "2022-07"
+  },
+  "anysks_222749427639": {
+    "status": "kept",
+    "chars": 1640,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/anysks/222749427639",
+    "date": "2022-05"
+  },
+  "eatingmeal_222527901025": {
+    "status": "kept",
+    "chars": 1336,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/eatingmeal/222527901025",
+    "date": "2021-10"
+  },
+  "hiday01_222685000653": {
+    "status": "rejected",
+    "reason": "too_short_417",
+    "query": "기준금리 인상 영향"
+  },
+  "isolan_222485553512": {
+    "status": "kept",
+    "chars": 2596,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/isolan/222485553512",
+    "date": "2021-08"
+  },
+  "joy014_224350117462": {
+    "status": "rejected",
+    "chars": 3535,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/joy014/224350117462",
+    "reason": "too_recent_2026"
+  },
+  "kimbori2022_222484312151": {
+    "status": "kept",
+    "chars": 2346,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/kimbori2022/222484312151",
+    "date": "2021-08"
+  },
+  "landjinpark_222517399624": {
+    "status": "rejected",
+    "reason": "register_0.00",
+    "query": "기준금리 인상 영향"
+  },
+  "lliac_222575877457": {
+    "status": "rejected",
+    "reason": "register_0.30",
+    "query": "기준금리 인상 영향"
+  },
+  "newgu98_222491072035": {
+    "status": "rejected",
+    "reason": "register_0.00",
+    "query": "기준금리 인상 영향"
+  },
+  "newstation_224348669853": {
+    "status": "rejected",
+    "reason": "register_0.00",
+    "query": "기준금리 인상 영향"
+  },
+  "olivia0069_224350071527": {
+    "status": "rejected",
+    "reason": "register_0.03",
+    "query": "기준금리 인상 영향"
+  },
+  "ori9690_222882926743": {
+    "status": "kept",
+    "chars": 2516,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/ori9690/222882926743",
+    "date": "2022-09"
+  },
+  "owls3753_222915823526": {
+    "status": "kept",
+    "chars": 2197,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/owls3753/222915823526",
+    "date": "2022-10"
+  },
+  "poslee777_224349719899": {
+    "status": "rejected",
+    "reason": "register_0.16",
+    "query": "기준금리 인상 영향"
+  },
+  "qingji3699_224348617226": {
+    "status": "rejected",
+    "reason": "register_0.00",
+    "query": "기준금리 인상 영향"
+  },
+  "qpeo1357_222714702465": {
+    "status": "kept",
+    "chars": 2048,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/qpeo1357/222714702465",
+    "date": "2022-04"
+  },
+  "samsung_fn_222662561205": {
+    "status": "kept",
+    "chars": 4745,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/samsung_fn/222662561205",
+    "date": "2022-03"
+  },
+  "sooheenam_222967661897": {
+    "status": "rejected",
+    "reason": "too_short_321",
+    "query": "기준금리 인상 영향"
+  },
+  "welcomebank1_222691040881": {
+    "status": "rejected",
+    "reason": "register_0.56",
+    "query": "기준금리 인상 영향"
+  },
+  "whaleblog_222900585402": {
+    "status": "rejected",
+    "reason": "register_0.00",
+    "query": "기준금리 인상 영향"
+  },
+  "yuyoung24_221234512993": {
+    "status": "kept",
+    "chars": 1033,
+    "query": "기준금리 인상 영향",
+    "url": "https://blog.naver.com/yuyoung24/221234512993",
+    "date": "2018-03"
+  }
+}
