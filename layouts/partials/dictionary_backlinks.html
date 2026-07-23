@@ -1,0 +1,21 @@
+{{- if eq .Section "dictionary" }}
+{{- $needle := printf "](%s)" .RelPermalink -}}
+{{- $posts := where site.RegularPages "Section" "posts" -}}
+{{- $notices := where $posts "Params.tags" "intersect" (slice "공지") -}}
+{{- $refs := slice -}}
+{{- range ($posts | complement $notices) -}}
+  {{- if strings.Contains .RawContent $needle -}}
+    {{- $refs = $refs | append . -}}
+  {{- end -}}
+{{- end -}}
+{{- with $refs | first 8 }}
+<div class="related-posts">
+  <h3 class="related-posts-title">이 용어가 나온 글</h3>
+  <ul class="related-posts-list">
+    {{- range . }}
+    <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{- end }}
+  </ul>
+</div>
+{{- end }}
+{{- end }}
