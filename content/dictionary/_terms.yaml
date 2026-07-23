@@ -16,5 +16,9 @@ cofix:
 foundry:
   title: "파운드리"
   aliases: ["반도체 파운드리", "반도체 위탁생산"]
+gdi:
+  title: "실질 국민총소득"
+  aliases: ["GDI", "실질 GDI", "국민총소득"]
+
 
 
