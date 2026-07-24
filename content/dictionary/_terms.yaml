@@ -19,6 +19,10 @@ foundry:
 gdi:
   title: "실질 국민총소득"
   aliases: ["GDI", "실질 GDI", "국민총소득"]
+aggregate-loan-cap:
+  title: "가계대출 총량규제"
+  aliases: ["가계대출 총량 규제", "총량규제", "대출 총량규제"]
+
 
 
 
