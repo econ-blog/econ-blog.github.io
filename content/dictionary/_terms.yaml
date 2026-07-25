@@ -22,6 +22,10 @@ gdi:
 aggregate-loan-cap:
   title: "가계대출 총량규제"
   aliases: ["가계대출 총량 규제", "총량규제", "대출 총량규제"]
+lng:
+  title: "액화천연가스"
+  aliases: ["LNG", "천연가스", "액화 천연가스"]
+
 
 
 
