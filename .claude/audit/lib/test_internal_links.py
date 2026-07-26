@@ -36,6 +36,21 @@ except ValueError:
     raised = True
 check("구조 위반 시 ValueError", raised, True)
 
+print("resolve_internal")
+from pathlib import Path as _P  # noqa: E402
+from internal_links import resolve_internal, scan_broken  # noqa: E402
+
+TERMS = load_terms(SAMPLE)
+check("사전 슬러그 해소", resolve_internal("/dictionary/base-rate/", _P("content"), TERMS), True)
+check("앵커 제거 후 해소", resolve_internal("/dictionary/per/#x", _P("content"), TERMS), True)
+check("없는 슬러그 미해소", resolve_internal("/dictionary/nope/", _P("content"), TERMS), False)
+check("사이트 루트 해소", resolve_internal("/", _P("content"), TERMS), True)
+
+print("scan_broken (실제 content)")
+REAL = load_terms(open("content/dictionary/_terms.yaml").read())
+broken = scan_broken(_P("content"), REAL)
+check("실제 저장소 깨진 내부링크 0건", broken, [])
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

@@ -50,5 +50,38 @@ def load_terms(text: str) -> dict:
     return terms
 
 
+def resolve_internal(target: str, content_root: Path, terms: dict) -> bool:
+    """내부 링크 target이 실재 콘텐츠 또는 사전 슬러그로 해소되는지."""
+    path = target.split("#", 1)[0].strip("/")
+    if not path:
+        return True  # 사이트 루트
+    if path.startswith("dictionary/"):
+        slug = path[len("dictionary/"):].strip("/")
+        if slug in terms:
+            return True
+        return (content_root / "dictionary" / f"{slug}.md").exists()
+    if (content_root / f"{path}.md").exists():
+        return True
+    if (content_root / path / "_index.md").exists():
+        return True
+    return False
+
+
+def scan_broken(content_root: Path, terms: dict) -> list[dict]:
+    out = []
+    for md in sorted(content_root.rglob("*.md")):
+        _, body = split_front_matter(md.read_text(encoding="utf-8"))
+        for ln in extract_links(body):
+            if ln["kind"] != "internal":
+                continue
+            if not resolve_internal(ln["target"], content_root, terms):
+                out.append(
+                    {"file": md.name, "anchor": ln["anchor"], "target": ln["target"]}
+                )
+    return out
+
+
 if __name__ == "__main__":
-    pass
+    terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
+    print(json.dumps(scan_broken(CONTENT_ROOT, terms), ensure_ascii=False, indent=2))
+
