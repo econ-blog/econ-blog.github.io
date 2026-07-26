@@ -25,6 +25,10 @@ aggregate-loan-cap:
 lng:
   title: "액화천연가스"
   aliases: ["LNG", "천연가스", "액화 천연가스"]
+real-effective-exchange-rate:
+  title: "실질실효환율"
+  aliases: ["REER", "실질 실효 환율", "실효환율"]
+
 
 
 
