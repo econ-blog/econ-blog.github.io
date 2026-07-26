@@ -44,6 +44,40 @@ check(
     True,
 )
 
+print("extract_links")
+from mdtext import extract_links, extract_front_matter_urls, inventory  # noqa: E402
+
+links = extract_links("[코픽스](/dictionary/cofix/) 그리고 [원문](https://a.com/x)")
+kinds = {ln["target"]: ln["kind"] for ln in links}
+check("내부 링크 분류", kinds["/dictionary/cofix/"], "internal")
+check("외부 링크 분류", kinds["https://a.com/x"], "external")
+check("링크 2건", len(links), 2)
+check(
+    "코드 안 링크는 추출 안 됨",
+    extract_links("`[x](/y/)` 실제 [진짜](/z/)"),
+    [{"anchor": "진짜", "target": "/z/", "kind": "internal"}],
+)
+
+print("extract_front_matter_urls")
+FM2 = (
+    '---\nsource_url: "https://src.com/a"\n'
+    "related_articles:\n"
+    '  - title: "t1"\n    url: "https://r.com/1"\n    source: "s"\n'
+    '  - title: "t2"\n    url: "https://r.com/2"\n    source: "s"\n---\n'
+)
+fmurls = extract_front_matter_urls(FM2)
+check("source_url 추출", fmurls["source_url"], "https://src.com/a")
+check("related url 2건", fmurls["related_urls"], ["https://r.com/1", "https://r.com/2"])
+
+print("inventory")
+inv = inventory(FM2 + "\n[코픽스](/dictionary/cofix/) 본문 [외부](https://b.com/y)")
+check("internal 1건", [x["target"] for x in inv["internal"]], ["/dictionary/cofix/"])
+check(
+    "external = 본문 + source_url + related",
+    sorted(inv["external"]),
+    ["https://b.com/y", "https://r.com/1", "https://r.com/2", "https://src.com/a"],
+)
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")
@@ -51,3 +85,4 @@ if FAILED:
         print("  -", f)
     sys.exit(1)
 print("전부 통과")
+
