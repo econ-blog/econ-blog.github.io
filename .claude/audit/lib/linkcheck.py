@@ -54,5 +54,35 @@ def update_ledger(ledger: dict, url: str, result: dict, today: str) -> dict:
     return ledger
 
 
+def _days(a: str, b: str) -> int:
+    return (date.fromisoformat(a) - date.fromisoformat(b)).days
+
+
+def confirmed_dead(entry: dict, today: str) -> bool:
+    """하드 2회 이상 + 하드 연속 시작으로부터 5일 이상. 수정 대상. (AC #9)"""
+    if entry.get("consecutive_hard_failures", 0) < 2:
+        return False
+    start = entry.get("hard_streak_started")
+    if not start:
+        return False
+    return _days(today, start) >= 5
+
+
+def needs_manual_review(entry: dict) -> bool:
+    """연성 4회 연속 → 리포트 사람 점검 섹션. 자동 수정 안 함. (AC #10)"""
+    return entry.get("consecutive_soft_failures", 0) >= 4
+
+
+def ledger_stale(ledger: dict, today: str) -> bool:
+    """최신 확인이 14일 초과 경과 또는 원장 없음 → 2-strike 판정 불가 경고. (AC #13)"""
+    if not ledger:
+        return True
+    checked = [e["last_checked"] for e in ledger.values() if e.get("last_checked")]
+    if not checked:
+        return True
+    return _days(today, max(checked)) > 14
+
+
 if __name__ == "__main__":
     pass
+

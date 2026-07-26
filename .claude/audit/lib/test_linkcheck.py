@@ -55,6 +55,25 @@ check("회복 후 하드 0", led3["u2"]["consecutive_hard_failures"], 0)
 check("회복 후 연성 0", led3["u2"]["consecutive_soft_failures"], 0)
 check("회복 후 하드 시작일 소거", led3["u2"]["hard_streak_started"], None)
 
+print("confirmed_dead / manual / stale")
+from linkcheck import confirmed_dead, needs_manual_review, ledger_stale  # noqa: E402
+
+dead = {"consecutive_hard_failures": 2, "hard_streak_started": "2026-07-20"}
+check("하드 2회 + 5일 경과 → 확정 사망", confirmed_dead(dead, "2026-07-25"), True)
+near = {"consecutive_hard_failures": 2, "hard_streak_started": "2026-07-23"}
+check("하드 2회지만 간격 <5일 → 미확정", confirmed_dead(near, "2026-07-25"), False)
+one = {"consecutive_hard_failures": 1, "hard_streak_started": "2026-07-01"}
+check("하드 1회 → 미확정", confirmed_dead(one, "2026-07-25"), False)
+
+check("연성 4회 → 사람 점검", needs_manual_review({"consecutive_soft_failures": 4}), True)
+check("연성 3회 → 아직", needs_manual_review({"consecutive_soft_failures": 3}), False)
+
+check("빈 원장 → 정체", ledger_stale({}, "2026-07-25"), True)
+fresh = {"u": {"last_checked": "2026-07-20"}}
+check("5일 전 확인 → 정상", ledger_stale(fresh, "2026-07-25"), False)
+old = {"u": {"last_checked": "2026-07-01"}}
+check("24일 전 확인 → 정체", ledger_stale(old, "2026-07-25"), True)
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")
@@ -62,3 +81,4 @@ if FAILED:
         print("  -", f)
     sys.exit(1)
 print("전부 통과")
+
