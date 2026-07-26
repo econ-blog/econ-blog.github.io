@@ -19,7 +19,7 @@ CI (`.github/workflows/hugo.yml`) builds with Hugo `0.164.0` on push to `main` a
 
 No test suite, no linter — this is prompt files + Markdown + Hugo config. "Correctness" for the slash commands means the prompt text is internally consistent and matches Hugo's content-file conventions, not passing tests. After editing `.claude/commands/*.md` or `.claude/daily-post/*.md`:
 
-1. Run `hugo --gc --minify`, check the `Pages` / `Non-page files` counts hold steady (currently 49 / 1).
+1. Run `hugo --gc --minify`. It must succeed with no new errors, and `Non-page files` must stay at 1 (that's `content/dictionary/_terms.yaml` being correctly skipped). `Pages` grows with every published post — don't pin it.
 2. Grep that cross-file references (section numbers, file paths, field names) actually resolve.
 
 ## GitHub CLI
