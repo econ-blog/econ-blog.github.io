@@ -55,6 +55,14 @@ with tempfile.TemporaryDirectory() as tmp:
     code = write(tmp, "e.md", "코드 `기준금리` 예시.")
     check("코드스팬 안은 후보 아님", find_candidates([code], TERMS), [])
 
+    # 다행 펜스 코드블록 안 등장은 무시 (AC #64)
+    multiline_code = write(tmp, "f.md", "```python\nprint(\"기준금리\")\n```")
+    check("다행 펜스 코드블록 안은 후보 아님", find_candidates([multiline_code], TERMS), [])
+
+    # 앵커가 포함된 링크도 인식
+    anchor_linked = write(tmp, "g.md", "[기준금리](/dictionary/base-rate/#section)를 올렸다.")
+    check("앵커 포함 링크 → 후보 0", find_candidates([anchor_linked], TERMS), [])
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

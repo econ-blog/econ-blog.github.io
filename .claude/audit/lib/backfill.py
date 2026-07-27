@@ -13,9 +13,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
-from mdtext import MD_LINK, split_front_matter, strip_code_spans  # noqa: E402
+import re
+from mdtext import FENCED_CODE, MD_LINK, split_front_matter, strip_code_spans  # noqa: E402
 
 DICT_PREFIX = "/dictionary/"
+
+
+def _mask_fenced_code(text: str) -> str:
+    """다행 펜스 코드블록 내 개행 제외 문자를 공백으로 대체하여 줄번호를 유지한다."""
+    return FENCED_CODE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
 
 
 def _linked_slugs_and_lines(body: str) -> dict:
@@ -24,8 +30,10 @@ def _linked_slugs_and_lines(body: str) -> dict:
     for lineno, line in enumerate(body.splitlines(), 1):
         for _, target in MD_LINK.findall(line):
             if DICT_PREFIX in target:
-                slug = target.split(DICT_PREFIX, 1)[1].strip("/").split("/")[0]
-                out.setdefault(slug, lineno)
+                clean_target = target.split("#")[0].split("?")[0]
+                slug = clean_target.split(DICT_PREFIX, 1)[1].strip("/").split("/")[0]
+                if slug:
+                    out.setdefault(slug, lineno)
     return out
 
 
@@ -41,10 +49,11 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
     for path in files:
         raw = path.read_text(encoding="utf-8")
         _, body = split_front_matter(raw)
+        masked_body = _mask_fenced_code(body)
         own_slug = path.stem  # 사전 항목이 자기 자신을 링크하지 않도록
-        linked = _linked_slugs_and_lines(body)
+        linked = _linked_slugs_and_lines(masked_body)
         seen: set = set()
-        for lineno, line in enumerate(body.splitlines(), 1):
+        for lineno, line in enumerate(masked_body.splitlines(), 1):
             stripped = line.lstrip()
             if stripped.startswith(("#", "|", ">")):
                 continue  # 제목·표·인용문 제외 (AC #64)
