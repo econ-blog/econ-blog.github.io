@@ -27,4 +27,6 @@
 # GA4 Credentials & Venv
 ga4-credentials.json
 .venv/
-
+# Python cache
+__pycache__/
+*.pyc

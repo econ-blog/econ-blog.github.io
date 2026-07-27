@@ -28,7 +28,8 @@ def load_terms(text: str) -> dict:
     terms: dict = {}
     cur = None
     for i, line in enumerate(text.splitlines(), 1):
-        if not line.strip():
+        sline = line.strip()
+        if not sline or sline.startswith("#"):
             continue
         m = SLUG.match(line)
         if m:
@@ -52,7 +53,7 @@ def load_terms(text: str) -> dict:
 
 def resolve_internal(target: str, content_root: Path, terms: dict) -> bool:
     """내부 링크 target이 실재 콘텐츠 또는 사전 슬러그로 해소되는지."""
-    path = target.split("#", 1)[0].strip("/")
+    path = target.split("#", 1)[0].split("?", 1)[0].strip("/")
     if not path:
         return True  # 사이트 루트
     if path.startswith("dictionary/"):

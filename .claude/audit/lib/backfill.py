@@ -29,9 +29,9 @@ def _linked_slugs_and_lines(body: str) -> dict:
     out: dict = {}
     for lineno, line in enumerate(body.splitlines(), 1):
         for _, target in MD_LINK.findall(line):
-            if DICT_PREFIX in target:
-                clean_target = target.split("#")[0].split("?")[0]
-                slug = clean_target.split(DICT_PREFIX, 1)[1].strip("/").split("/")[0]
+            if target.startswith(DICT_PREFIX) or target.startswith("dictionary/"):
+                clean_target = target.split("#", 1)[0].split("?", 1)[0]
+                slug = clean_target.split("dictionary/", 1)[1].strip("/").split("/")[0]
                 if slug:
                     out.setdefault(slug, lineno)
     return out

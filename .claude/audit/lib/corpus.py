@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 DRAFT = re.compile(r"^draft:\s*(true|false)\s*$", re.MULTILINE)
-DATE = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
+DATE = re.compile(r'^date:\s*"?(\d{4}-\d{2}-\d{2})', re.MULTILINE)
 TAGS = re.compile(r'^tags:\s*\[(.*)\]\s*$', re.MULTILINE)
 
 CONTENT_ROOT = Path("content")
