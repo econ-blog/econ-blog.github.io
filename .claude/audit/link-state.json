@@ -28,7 +28,7 @@
   },
   "https://portal.kfb.or.kr/compare/cofix.php": {
     "consecutive_hard_failures": 0,
-    "consecutive_soft_failures": 1,
+    "consecutive_soft_failures": 2,
     "final_url": "https://portal.kfb.or.kr/compare/cofix.php",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
@@ -45,22 +45,22 @@
     "last_status": 200
   },
   "https://www.e2news.com/news/articleView.html?idxno=311542": {
-    "consecutive_hard_failures": 1,
+    "consecutive_hard_failures": 0,
     "consecutive_soft_failures": 0,
     "final_url": "https://www.e2news.com/news/articleView.html?idxno=311542",
     "first_seen": "2026-07-27",
-    "hard_streak_started": "2026-07-27",
+    "hard_streak_started": null,
     "last_checked": "2026-07-27",
-    "last_status": 404
+    "last_status": 200
   },
   "https://www.einfomax.co.kr/news/articleView.html?idxno=4318721": {
-    "consecutive_hard_failures": 1,
+    "consecutive_hard_failures": 0,
     "consecutive_soft_failures": 0,
-    "final_url": "http://news.einfomax.co.kr?idxno=4318721",
+    "final_url": "https://news.einfomax.co.kr/?idxno=4318721",
     "first_seen": "2026-07-27",
-    "hard_streak_started": "2026-07-27",
+    "hard_streak_started": null,
     "last_checked": "2026-07-27",
-    "last_status": 404
+    "last_status": 200
   },
   "https://www.fnnews.com/news/202607151628466890": {
     "consecutive_hard_failures": 0,
@@ -243,13 +243,13 @@
     "last_status": 200
   },
   "https://www.jabon.co.kr/news/articleView.html?idxno=5045": {
-    "consecutive_hard_failures": 1,
+    "consecutive_hard_failures": 0,
     "consecutive_soft_failures": 0,
     "final_url": "https://www.jabon.co.kr/news/articleView.html?idxno=5045",
     "first_seen": "2026-07-27",
-    "hard_streak_started": "2026-07-27",
+    "hard_streak_started": null,
     "last_checked": "2026-07-27",
-    "last_status": 404
+    "last_status": 200
   },
   "https://www.newdaily.co.kr/site/data/html/2026/07/17/2026071700005.html": {
     "consecutive_hard_failures": 0,
