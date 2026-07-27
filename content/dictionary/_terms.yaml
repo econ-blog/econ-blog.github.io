@@ -28,6 +28,10 @@ lng:
 real-effective-exchange-rate:
   title: "실질실효환율"
   aliases: ["REER", "실질 실효 환율", "실효환율"]
+subrogated-payment:
+  title: "대위변제"
+  aliases: ["대위 변제", "대위변제율"]
+
 
 
 
