@@ -18,7 +18,9 @@ from mdtext import extract_links, split_front_matter  # noqa: E402
 SLUG = re.compile(r"^([a-z0-9][a-z0-9-]*):\s*$")
 KV = re.compile(r"^\s+(title|aliases):\s*(.+?)\s*$")
 
-CONTENT_ROOT = Path("content")
+_THIS_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _THIS_DIR.parents[3]
+CONTENT_ROOT = _REPO_ROOT / "content" if (_REPO_ROOT / "content").exists() else Path("content")
 TERMS_PATH = CONTENT_ROOT / "dictionary" / "_terms.yaml"
 
 
@@ -52,14 +54,15 @@ def load_terms(text: str) -> dict:
 
 
 def resolve_internal(target: str, content_root: Path, terms: dict) -> bool:
-    """내부 링크 target이 실재 콘텐츠 또는 사전 슬러그로 해소되는지."""
+    """내부 링크 target이 실재 콘텐츠로 해소되는지 (AC #6).
+
+    _terms.yaml 인덱스 등재만으로는 부족하며 .md 실재 파일이 존재해야 한다 (I3).
+    """
     path = target.split("#", 1)[0].split("?", 1)[0].strip("/")
     if not path:
         return True  # 사이트 루트
     if path.startswith("dictionary/"):
         slug = path[len("dictionary/"):].strip("/")
-        if slug in terms:
-            return True
         return (content_root / "dictionary" / f"{slug}.md").exists()
     if (content_root / f"{path}.md").exists():
         return True

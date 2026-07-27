@@ -90,18 +90,32 @@ def ledger_stale(ledger: dict, today: str) -> bool:
 UA = "Mozilla/5.0 (compatible; econ-blog-audit/1.0; +https://github.com)"
 
 
-def check_url(url: str, timeout: int = 10) -> dict:
-    """HEAD→(405/501 시)GET. 리다이렉트 ≤5 추적, 최종 상태 반환. (AC #7)
+def _normalize_url(url: str) -> str:
+    """URL 스킴·호스트 소문자화 및 후행 슬래시 정규화."""
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/")
+    query = f"?{parsed.query}" if parsed.query else ""
+    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+    return f"{scheme}://{netloc}{path}{query}{fragment}"
 
-    네트워크 함수. 결정론 규약 밖이며 단위 테스트하지 않는다 — Task 14 스모크가
-    저장소의 실제 외부 링크로 검증한다.
+
+def check_url(url: str, timeout: int = 10) -> dict:
+    """HEAD→(2xx/3xx 외 시)GET 폴백. 리다이렉트 ≤5 추적, 최종 상태 반환. (AC #7 확장)
+
+    HEAD에 404를 내는 일부 언론 CMS(articleView.html) 오탐을 막기 위해
+    HEAD 결과가 2xx/3xx가 아니면 항상 GET으로 재확인한다.
+    하드 판정(404/410)은 GET 결과로만 확정한다.
     """
     s = requests.Session()
     s.max_redirects = 5
     s.headers["User-Agent"] = UA
     try:
         r = s.head(url, allow_redirects=True, timeout=timeout)
-        if r.status_code in (405, 501):
+        if r.status_code not in range(200, 400):
             r = s.get(url, allow_redirects=True, timeout=timeout, stream=True)
         return {"final_status": r.status_code, "final_url": r.url, "error": None}
     except requests.TooManyRedirects:
@@ -139,16 +153,20 @@ if __name__ == "__main__":
     check_all(ledger, urls, today)
     with open(ledger_path, "w", encoding="utf-8") as fh:
         json.dump(ledger, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        fh.write("\n")
+
+    active_urls = urls if urls else list(ledger.keys())
     summary = {
         "ledger_was_stale": stale_before,
-        "confirmed_dead": [u for u, e in ledger.items() if confirmed_dead(e, today)],
-        "manual_review": [u for u, e in ledger.items() if needs_manual_review(e)],
+        "confirmed_dead": [u for u in active_urls if u in ledger and confirmed_dead(ledger[u], today)],
+        "manual_review": [u for u in active_urls if u in ledger and needs_manual_review(ledger[u])],
         "moved": [
-            {"url": u, "final_url": e["final_url"]}
-            for u, e in ledger.items()
-            if e.get("final_url") and e["final_url"] != u and classify(
-                {"final_status": e["last_status"]}
-            ) == "ok"
+            {"url": u, "final_url": ledger[u]["final_url"]}
+            for u in active_urls
+            if u in ledger
+            and ledger[u].get("final_url")
+            and _normalize_url(ledger[u]["final_url"]) != _normalize_url(u)
+            and classify({"final_status": ledger[u]["last_status"]}) == "ok"
         ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))

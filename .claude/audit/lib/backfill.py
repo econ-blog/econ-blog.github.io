@@ -48,15 +48,17 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
     out = []
     for path in files:
         raw = path.read_text(encoding="utf-8")
-        _, body = split_front_matter(raw)
+        fm, body = split_front_matter(raw)
+        fm_offset = fm.count("\n") if fm else 0
         masked_body = _mask_fenced_code(body)
         own_slug = path.stem  # 사전 항목이 자기 자신을 링크하지 않도록
         linked = _linked_slugs_and_lines(masked_body)
         seen: set = set()
         for lineno, line in enumerate(masked_body.splitlines(), 1):
+            file_line = lineno + fm_offset
             stripped = line.lstrip()
-            if stripped.startswith(("#", "|", ">")):
-                continue  # 제목·표·인용문 제외 (AC #64)
+            if stripped.startswith(("#", "|", ">")) or line.startswith("    ") or line.startswith("\t"):
+                continue  # 제목·표·인용문·들여쓰기 코드블록 제외 (AC #64)
             # 코드스팬 제거 후 기존 링크 텍스트도 제거해 앵커 안 등장을 배제
             clean = MD_LINK.sub(" ", strip_code_spans(line))
             for surface, slug in lookup:
@@ -66,11 +68,11 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
                     if slug in linked:
                         if lineno < linked[slug]:
                             out.append({"file": path.name, "slug": slug,
-                                        "term": surface, "line": lineno,
+                                        "term": surface, "line": file_line,
                                         "kind": "precedence"})  # AC #66 소견만
                     else:
                         out.append({"file": path.name, "slug": slug,
-                                    "term": surface, "line": lineno,
+                                    "term": surface, "line": file_line,
                                     "kind": "backfill"})  # AC #65
                     seen.add(slug)
     return out

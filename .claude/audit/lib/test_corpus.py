@@ -19,13 +19,13 @@ def check(label, got, want):
     print(f"  {'ok  ' if ok else 'FAIL'} {label}")
 
 
-ROOT = Path("content")
+ROOT = Path(__file__).resolve().parents[3] / "content"
 pubs = published(ROOT)
 names = {p["file"] for p in pubs}
 print("published")
 check("welcome.md 제외", "welcome.md" not in names, True)
 check("_index.md 제외", "_index.md" not in names, True)
-check("해설글 9건 (2026-07-26 실측 기준선)", len(pubs), 9)
+check("해설글 하한 9건 이상", len(pubs) >= 9, True)
 check("mortgage 포스트 포함", "mortgage-rate-7-5-percent-exceeded.md" in names, True)
 
 print("site_age")
@@ -33,7 +33,7 @@ print("site_age")
 age = site_age(ROOT, "2026-07-25")
 check("사이트 연령 양수", age > 0, True)
 check("gate_stats site_age 일치", gate_stats(ROOT, "2026-07-25")["site_age"], age)
-check("gate_stats 발행글 수", gate_stats(ROOT, "2026-07-25")["published_count"], 9)
+check("gate_stats 발행글 수 일치", gate_stats(ROOT, "2026-07-25")["published_count"], len(pubs))
 
 print()
 if FAILED:

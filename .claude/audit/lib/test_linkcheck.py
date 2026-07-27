@@ -6,7 +6,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from linkcheck import classify, update_ledger  # noqa: E402
+from linkcheck import _normalize_url, classify, update_ledger  # noqa: E402
 
 FAILED = []
 
@@ -31,6 +31,10 @@ check("500 → soft", classify(R(500)), "soft")
 check("None(타임아웃) → soft", classify(R(None, error="Timeout")), "soft")
 check("200 → ok", classify(R(200)), "ok")
 check("301 → ok", classify(R(301)), "ok")
+
+print("_normalize_url")
+check("후행 슬래시 차이 정규화", _normalize_url("https://ecos.bok.or.kr/"), _normalize_url("https://ecos.bok.or.kr"))
+check("호스트 대소문자 정규화", _normalize_url("HTTPS://ECOS.BOK.OR.KR/x"), _normalize_url("https://ecos.bok.or.kr/x"))
 
 print("update_ledger — 하드")
 led = update_ledger({}, "u1", R(404), "2026-07-25")
