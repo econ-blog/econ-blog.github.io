@@ -58,6 +58,29 @@ check("표 행이 scope", t[0]["scope"], TABLE[2])
 check("표 안이면 in_table True", t[0]["in_table"], True)
 check("표 줄 번호", t[0]["line"], 8)
 
+print("N1 기준일 누락")
+from numerics import n1_missing_asof  # noqa: E402
+
+check("기준일 있는 문장은 통과",
+      n1_missing_asof("2026년 7월 16일 기준금리는 2.75%입니다.\n"), [])
+check("ISO 기준일도 통과",
+      n1_missing_asof("2026-07-19 낙폭은 -23.65%였습니다.\n"), [])
+check("연·월만 있어도 통과",
+      n1_missing_asof("코픽스는 2026년 6월 기준 3.05%입니다.\n"), [])
+check("기준일 없으면 적발",
+      [x["value"] for x in n1_missing_asof("단가를 10% 올렸습니다.\n")], ["10"])
+check("같은 줄 다른 문장의 기준일은 빌려오지 못한다",
+      [x["value"] for x in n1_missing_asof(
+          "2026년 7월 기준 3.05%입니다. 이후 10% 올랐습니다.\n")], ["10"])
+check("표 행은 행 전체에서 기준일을 찾는다",
+      n1_missing_asof(
+          "| 지표 | 값 | 출처 | 기준일 |\n|---|---|---|---|\n"
+          "| 기준금리 | 연 2.75% | 한국은행 | 2026년 7월 16일 |\n"), [])
+check("기준일 열이 빈 표 행은 적발",
+      [x["value"] for x in n1_missing_asof(
+          "| 지표 | 값 | 출처 | 기준일 |\n|---|---|---|---|\n"
+          "| 기준금리 | 연 2.75% | 한국은행 |  |\n")], ["2.75"])
+
 print()
 if FAILED:
     print("실패:")
@@ -65,3 +88,4 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+

@@ -94,5 +94,14 @@ def claims(raw: str) -> list[dict]:
     return out
 
 
+def n1_missing_asof(raw: str) -> list[dict]:
+    """N1 — 같은 문장/표 행에 기준일이 없는 수치 주장. (AC #55)
+
+    writing-styles.md가 기준일 병기를 이미 요구하므로 규칙 위반이지 취향이 아니다.
+    """
+    return [c for c in claims(raw) if not ASOF.search(c["scope"])]
+
+
 if __name__ == "__main__":
     pass
+
