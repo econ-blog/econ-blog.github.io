@@ -73,6 +73,42 @@ with tempfile.TemporaryDirectory() as tmp:
                     "draft: false\n---\n\n본문\n")
     check("사전은 source_url 면제", front_matter_issues(dict_ok), [])
 
+print("stale_drafts (Q4)")
+from quality import stale_drafts, self_review_budget, internal_link_density  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "old-draft.md",
+          '---\ntitle: "x"\ndate: 2026-07-01T00:00:00+09:00\n'
+          'tags: ["금리"]\ndraft: true\n---\n\n본문\n')
+    write(tmp, "posts", "new-draft.md",
+          '---\ntitle: "y"\ndate: 2026-07-24T00:00:00+09:00\n'
+          'tags: ["금리"]\ndraft: true\n---\n\n본문\n')
+    write(tmp, "posts", "published.md", FULL_POST)
+    st = stale_drafts(root, "2026-07-25")
+    check("7일 이상 방치만", [s["file"] for s in st], ["old-draft.md"])
+    check("경과일 계산", st[0]["age"], 24)
+
+print("self_review_budget (Q5)")
+WS5 = "## AI 흔적 자가검토\n1. a\n2. b\n3. c\n"
+b = self_review_budget(WS5)
+check("항목 수", b["count"], 3)
+check("예산", b["budget"], 12)
+check("잔량", b["remaining"], 9)
+
+print("internal_link_density (P2)")
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "two.md", FULL_POST.replace(
+        "본문\n", "[a](/dictionary/base-rate/) [b](/dictionary/per/)\n"))
+    write(tmp, "posts", "zero.md", FULL_POST)
+    d = internal_link_density(root)
+    per = {x["file"]: x["internal_links"] for x in d["per_post"]}
+    check("링크 2건 문서", per["two.md"], 2)
+    check("링크 0건 문서", per["zero.md"], 0)
+    check("무링크 포스트 목록", d["zero_link_posts"], ["zero.md"])
+    check("중앙값", d["median"], 1.0)
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")
