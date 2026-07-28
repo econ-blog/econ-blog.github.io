@@ -211,6 +211,44 @@ with tempfile.TemporaryDirectory() as tmp:
         "2026년 7월 16일 기준금리는 2.80%입니다.\n")])
     check("한 파일 안의 불일치는 내지 않는다", n3_conflicts(fs, TERMS), [])
 
+print("N5 발행글 수치 전재")
+from numerics import n5_reprint  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    posts = _files(tmp, [("p.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n")])
+    dicts = _files(tmp, [("d.md", "기준금리는 2026년 7월 16일 2.75%입니다.\n")])
+    r = n5_reprint(dicts, posts)
+    check("값·단위가 같으면 확인 요청", len(r), 1)
+    check("사전 위치 기록", r[0]["at"].endswith("d.md:1"), True)
+    check("포스트 위치 병기", r[0]["also_in"][0].endswith("p.md:1"), True)
+
+with tempfile.TemporaryDirectory() as tmp:
+    posts = _files(tmp, [("p.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n")])
+    dicts = _files(tmp, [("d.md", "기준금리는 2026년 8월 20일 3.00%입니다.\n")])
+    check("값이 다르면 대상 아님", n5_reprint(dicts, posts), [])
+
+with tempfile.TemporaryDirectory() as tmp:
+    posts = _files(tmp, [("p.md", "유가는 80달러입니다.\n")])
+    dicts = _files(tmp, [("d.md", "지분은 80%입니다.\n")])
+    check("단위가 다르면 대상 아님", n5_reprint(dicts, posts), [])
+
+print("claims 집계")
+from numerics import claims_summary  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    files = _files(tmp, [
+        ("a.md", "기준금리는 2.75%이고 유가는 80달러입니다.\n"),
+        ("b.md", "환율은 1,450원입니다.\n"),
+        ("c.md", "숫자가 없는 글입니다.\n"),
+    ])
+    s = claims_summary(files)
+    check("총합", s["claims_total"], 3)
+    check("문서 수", s["claims_docs"], 3)
+    check("포스트당", s["claims_per_post"], 1.0)
+    check("중앙값", s["claims_median"], 1)
+    check("0건 문서도 분모에 포함", claims_summary(files[2:])["claims_per_post"], 0.0)
+    check("빈 목록 0 나눗셈", claims_summary([])["claims_per_post"], 0.0)
+
 print()
 if FAILED:
     print("실패:")

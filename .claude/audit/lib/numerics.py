@@ -50,6 +50,9 @@ SUPERLATIVES = ("사상 최고", "사상 최대", "사상 최저",
 # 기간이 명시된 최상급('38년 만에 최고')은 검증 가능한 형태이므로 대상이 아니다.
 BOUNDED = re.compile(r"\d+\s*(?:년|개월|주|일)\s*만에")
 
+# 공지(welcome.md)와 섹션 인덱스는 해설글이 아니므로 대상에서 뺀다.
+EXCLUDE = {"_index.md", "welcome.md"}
+CAP = 10  # AC #60 — 한 번의 감사에서 출력하는 최대 소견 수
 
 
 def _cells(row: str) -> list[str]:
@@ -258,6 +261,99 @@ def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
     return out
 
 
+def n5_reprint(dict_files: list[Path], post_files: list[Path]) -> list[dict]:
+    """N5 — 사전의 수치가 포스트의 수치와 값·단위 모두 같은 경우. (AC #59)
+
+    draft.md의 "이미 발행된 글의 수치를 사전으로 옮겨 적지 않는다"가 근거다.
+    우연의 일치일 수 있으므로 판정이 아니라 확인 요청으로 낸다.
+    """
+    in_posts: dict[tuple, list[str]] = {}
+    for path in post_files:
+        for c in claims(path.read_text(encoding="utf-8")):
+            key = (norm_value(c["value"]), c["unit"])
+            in_posts.setdefault(key, []).append(f"{path.as_posix()}:{c['line']}")
+    out = []
+    for path in dict_files:
+        for c in claims(path.read_text(encoding="utf-8")):
+            key = (norm_value(c["value"]), c["unit"])
+            if key in in_posts:
+                out.append({"at": f"{path.as_posix()}:{c['line']}",
+                            "value": c["value"], "unit": c["unit"],
+                            "also_in": sorted(in_posts[key])})
+    return out
+
+
+def _md(sub: str) -> list[Path]:
+    return sorted(p for p in (CONTENT_ROOT / sub).glob("*.md")
+                  if p.name not in EXCLUDE)
+
+
+def claims_summary(files: list[Path]) -> dict:
+    """수치 주장의 총량. N1 건수의 분모이며 회피 탐지의 유일한 신호다.
+
+    N1을 작성 시점에 막으면 가장 싼 해소 경로는 기준일 추가가 아니라 수치 삭제다.
+    건수만 세면 개선과 회피가 같은 숫자로 보인다 — 분모가 함께 줄면 비율이
+    개선돼 보이지 않는다는 것이 이 값을 고른 이유다. (Plan 5 판단 라)
+    """
+    per_doc = [len(claims(p.read_text(encoding="utf-8"))) for p in files]
+    total = sum(per_doc)
+    ordered = sorted(per_doc)
+    return {
+        "claims_total": total,
+        "claims_docs": len(per_doc),
+        "claims_per_post": round(total / len(per_doc), 1) if per_doc else 0.0,
+        "claims_median": ordered[len(ordered) // 2] if ordered else 0,
+    }
+
+
+def main() -> None:
+    posts, dicts = _md("posts"), _md("dictionary")
+    terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
+
+    rows = []
+    for path in posts + dicts:
+        raw = path.read_text(encoding="utf-8")
+        at = path.as_posix()
+        for c in n1_missing_asof(raw):
+            rows.append({"check": "N1", "at": f"{at}:{c['line']}",
+                         "quote": c["scope"][:60],
+                         "why": f"{c['value']}{c['unit']} 에 기준일 없음"})
+        for c in n2_nonprimary(raw):
+            rows.append({"check": "N2", "at": f"{at}:{c['line']}",
+                         "quote": c["target"],
+                         "why": f"{c['host']} 는 1차 출처 목록 밖"})
+        for c in n4_unbounded_superlative(raw):
+            rows.append({"check": "N4", "at": f"{at}:{c['line']}",
+                         "quote": c["text"][:60],
+                         "why": "·".join(c["words"]) + " — 기간 한정도 1차 출처도 없음"})
+    for c in n3_conflicts(posts + dicts, terms):
+        rows.append({"check": "N3", "at": c["values"][0]["at"][0],
+                     "quote": " vs ".join(f"{v['value']}{c['unit']}"
+                                          for v in c["values"]),
+                     "why": f"{c['indicator']} {c['asof']} 값 불일치 — "
+                            + " / ".join(loc for v in c["values"]
+                                         for loc in v["at"])})
+    for c in n5_reprint(dicts, posts):
+        rows.append({"check": "N5", "at": c["at"],
+                     "quote": f"{c['value']}{c['unit']}",
+                     "why": ", ".join(c["also_in"]) + " 와 값·단위 동일 — 전재 확인 요청"})
+
+    counts = {n: sum(1 for r in rows if r["check"] == n)
+              for n in ("N1", "N2", "N3", "N4", "N5")}
+    # 희소한 검사부터 낸다. 이름순으로 자르면 N1(실측 42건)이 상한 10건을 통째로
+    # 먹어 N5(3건)가 overflow에 묻힌다 — 흔한 결함이 드문 결함을 가리는 것은
+    # 상한을 둔 취지(AC #60)에 반한다. 정렬은 결정론적이다.
+    rows.sort(key=lambda r: (counts[r["check"]], r["check"], r["at"]))
+
+    summary = claims_summary(posts)
+    n1_share = (round(counts["N1"] / summary["claims_total"], 3)
+                if summary["claims_total"] else 0.0)
+    print(json.dumps({"counts": counts, "total": len(rows),
+                      "rows": rows[:CAP], "overflow": max(0, len(rows) - CAP),
+                      "claims": summary, "n1_share": n1_share},
+                     ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
-    pass
+    main()
 
