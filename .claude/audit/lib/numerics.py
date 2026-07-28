@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
 from mdtext import MD_LINK, mask_code_spans, split_front_matter  # noqa: E402
 
 # AC #54 — 단위는 닫힌 목록. 긴 것을 먼저 둬야 '%포인트'가 '%'에, '배럴'이
@@ -171,6 +172,89 @@ def n4_unbounded_superlative(raw: str) -> list[dict]:
         if any(is_primary(h) for h in hosts):
             continue
         out.append({"line": offset + i + 1, "words": hits, "text": line.strip()})
+    return out
+
+
+def norm_value(value: str) -> float:
+    """천단위 구분을 지우고 실수로. '2.50'과 '2.5'를 같은 값으로 만든다."""
+    return float(value.replace(",", ""))
+
+
+def norm_asof(scope: str) -> str | None:
+    """기준일을 'YYYY-MM' 또는 'YYYY-MM-DD'로 정규화. 없으면 None.
+
+    한글형('2026년 7월 16일')과 ISO형('2026-07-19')이 실제로 공존하므로
+    대조 전에 한 형태로 모은다.
+    """
+    m = ASOF.search(scope)
+    if not m:
+        return None
+    s = m.group(0)
+    k = re.match(r"(20\d{2})년\s*(\d{1,2})월(?:\s*(\d{1,2})일)?", s)
+    if not k:
+        return s
+    out = f"{k.group(1)}-{int(k.group(2)):02d}"
+    if k.group(3):
+        out += f"-{int(k.group(3)):02d}"
+    return out
+
+
+def indicator_of(scope: str, terms: dict) -> str | None:
+    """scope에 등장하는 _terms.yaml title/alias 중 가장 긴 것의 slug. (AC #57)
+
+    가장 긴 것을 고르는 이유: '기준금리'와 '금리'가 둘 다 사전에 있으면 짧은
+    쪽이 먼저 걸려 서로 다른 지표가 한 통에 섞인다.
+    """
+    best = None
+    for slug, entry in terms.items():
+        for name in [entry["title"], *entry.get("aliases", [])]:
+            if name and name in scope and (best is None or len(name) > best[0]):
+                best = (len(name), slug)
+    return best[1] if best else None
+
+
+def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
+    """N3 — 같은 지표·기준일·단위에 값이 다른 경우. (AC #57 + 좁힌 세 규칙)
+
+    지표 동일성은 _terms.yaml로만 판정한다. 사전 항목이 없는 지표는 대조되지
+    않으며, 커버리지가 _terms.yaml 크기에 묶이는 것이 의도된 경계다.
+
+    이름만으로는 수량이 식별되지 않아('브렌트유'가 종가·장중가·등락률을 모두
+    덮는다) 문면 그대로면 오탐만 난다. 세 규칙으로 좁힌다:
+      1. 단위가 다르면 다른 수량이다 — 버킷 키에 unit을 넣는다.
+      2. 한 scope가 그 버킷의 값을 전부 담고 있으면 전이·열거이지 모순이 아니다.
+      3. 파일이 교차할 때만 낸다 — 한 글 안에서 여러 변형을 나란히 적는 것은 정상.
+    """
+    buckets: dict[tuple, list[tuple]] = {}
+    for path in files:
+        for c in claims(path.read_text(encoding="utf-8")):
+            slug = indicator_of(c["scope"], terms)
+            asof = norm_asof(c["scope"])
+            if not slug or not asof:
+                continue
+            buckets.setdefault((slug, asof, c["unit"]), []).append(
+                (norm_value(c["value"]), path.as_posix(), c["line"], c["scope"]))
+
+    out = []
+    for (slug, asof, unit), items in sorted(buckets.items()):
+        values = {v for v, _f, _l, _s in items}
+        if len(values) < 2:
+            continue
+        by_scope: dict[str, set] = {}
+        for v, _f, _l, scope in items:
+            by_scope.setdefault(scope, set()).add(v)
+        if any(vs == values for vs in by_scope.values()):
+            continue  # 규칙 2 — 한 scope 안의 전이·열거
+        if len({f for _v, f, _l, _s in items}) < 2:
+            continue  # 규칙 3 — 파일 교차만
+        locs: dict[float, list[str]] = {}
+        for v, f, line, _s in items:
+            locs.setdefault(v, []).append(f"{f}:{line}")
+        out.append({
+            "indicator": slug, "asof": asof, "unit": unit,
+            "values": [{"value": v, "at": sorted(set(locs[v]))}
+                       for v in sorted(values)],
+        })
     return out
 
 

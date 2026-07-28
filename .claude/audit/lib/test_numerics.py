@@ -127,6 +127,90 @@ check("한 줄에 둘이면 함께 보고",
 check("코드스팬 안은 제외", n4("설정 `사상 최고` 플래그입니다.\n"), [])
 check("front matter는 제외", n4(FM.replace("제목 10%", "사상 최대 돌파")), [])
 
+print("N3 교차 불일치")
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+from numerics import indicator_of, n3_conflicts, norm_asof, norm_value  # noqa: E402
+
+TERMS = {
+    "base-rate": {"title": "기준금리", "aliases": ["정책금리"]},
+    "cofix": {"title": "코픽스", "aliases": []},
+}
+
+check("값 정규화", [norm_value("1,200"), norm_value("2.50")], [1200.0, 2.5])
+check("기준일 정규화",
+      [norm_asof("2026년 7월 16일 발표"), norm_asof("2026년 6월 기준"),
+       norm_asof("2026-07-19 종가"), norm_asof("기준일 없음")],
+      ["2026-07-16", "2026-06", "2026-07-19", None])
+check("가장 긴 이름이 이긴다",
+      indicator_of("한국은행 기준금리는", TERMS), "base-rate")
+check("별칭도 인식", indicator_of("정책금리를 올렸다", TERMS), "base-rate")
+check("사전에 없으면 None", indicator_of("환율이 올랐다", TERMS), None)
+
+
+def _files(tmp, pairs):
+    out = []
+    for name, text in pairs:
+        p = Path(tmp) / name
+        p.write_text(text, encoding="utf-8")
+        out.append(p)
+    return out
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+        ("b.md", "2026년 7월 16일 기준금리는 2.50%입니다.\n"),
+    ])
+    r = n3_conflicts(fs, TERMS)
+    check("파일 교차 + 다른 값 → 적발", len(r), 1)
+    check("지표·기준일·단위 기록",
+          (r[0]["indicator"], r[0]["asof"], r[0]["unit"]),
+          ("base-rate", "2026-07-16", "%"))
+    check("값 두 개 모두 기록",
+          [v["value"] for v in r[0]["values"]], [2.5, 2.75])
+
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+        ("b.md", "2026년 8월 20일 기준금리는 3.00%입니다.\n"),
+    ])
+    check("기준일이 다르면 불일치 아님", n3_conflicts(fs, TERMS), [])
+
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+        ("b.md", "2026년 7월 16일 코픽스는 3.05%입니다.\n"),
+    ])
+    check("지표가 다르면 불일치 아님", n3_conflicts(fs, TERMS), [])
+
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [("a.md", "2026년 7월 16일 환율은 1,400원입니다.\n")])
+    check("사전에 없는 지표는 대조 안 함", n3_conflicts(fs, TERMS), [])
+
+# 규칙 1 — 단위별 버킷 (브렌트유 88.4달러 vs 0.3% 오탐 재현 방지)
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+        ("b.md", "2026년 7월 16일 기준금리 인상폭은 25bp입니다.\n"),
+    ])
+    check("단위가 다르면 다른 수량", n3_conflicts(fs, TERMS), [])
+
+# 규칙 2 — 한 scope가 값을 전부 담으면 전이·열거이지 모순이 아니다
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리를 2.50%에서 2.75%로 올렸습니다.\n"),
+        ("b.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+    ])
+    check("한 문장의 전이 표현은 모순 아님", n3_conflicts(fs, TERMS), [])
+
+# 규칙 3 — 파일 교차일 때만
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [("a.md",
+        "2026년 7월 16일 기준금리는 2.75%입니다.\n"
+        "2026년 7월 16일 기준금리는 2.80%입니다.\n")])
+    check("한 파일 안의 불일치는 내지 않는다", n3_conflicts(fs, TERMS), [])
+
 print()
 if FAILED:
     print("실패:")
