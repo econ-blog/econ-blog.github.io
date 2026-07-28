@@ -35,6 +35,14 @@ TABLE_ROW = re.compile(r"^\s*\|")
 # 소수점과 문장 끝을 가르는 유일한 신호는 마침표 앞 글자가 한글인지다.
 SENT_END = re.compile(r"(?<=[가-힣])\.(?=\s|$)")
 
+# AC #56 — draft.md:68이 정한 1차 출처. SEED D4(AC #44)의 목록과 다르다(D4는
+# bok.or.kr을 포함하고 portal.kfb.or.kr을 빼놓았다). AC #56이 draft.md를
+# 지목하므로 N2는 이쪽을 따른다. 목록 자체를 이 축이 고치지 않는다.
+PRIMARY_HOSTS = ("ecos.bok.or.kr", "fred.stlouisfed.org", "kosis.kr",
+                 "dart.fss.or.kr", "portal.kfb.or.kr")
+HOST = re.compile(r"^https?://([^/?#]+)")
+NUMBERS_HEADER = "## 숫자로 보면"
+
 
 def _cells(row: str) -> list[str]:
     return [c.strip() for c in row.strip().strip("|").split("|")]
@@ -100,6 +108,43 @@ def n1_missing_asof(raw: str) -> list[dict]:
     writing-styles.md가 기준일 병기를 이미 요구하므로 규칙 위반이지 취향이 아니다.
     """
     return [c for c in claims(raw) if not ASOF.search(c["scope"])]
+
+
+def is_primary(host: str) -> bool:
+    """1차 출처 호스트인가. 서브도메인은 허용하되 상위 도메인은 아니다."""
+    host = host.lower()
+    return any(host == p or host.endswith("." + p) for p in PRIMARY_HOSTS)
+
+
+def numbers_block(raw: str) -> list[tuple[int, str]]:
+    """'## 숫자로 보면' 블록의 (파일 기준 줄번호, 줄). 다음 '## '에서 끝난다."""
+    front, body = split_front_matter(raw)
+    offset = front.count("\n")
+    out, inside = [], False
+    for i, line in enumerate(mask_code_spans(body).split("\n")):
+        if line.startswith("## "):
+            inside = line.strip() == NUMBERS_HEADER
+            continue
+        if inside:
+            out.append((offset + i + 1, line))
+    return out
+
+
+def n2_nonprimary(raw: str) -> list[dict]:
+    """N2 — 숫자 슬롯 안의 외부 링크 중 1차 출처 목록 밖인 것. (AC #56)
+
+    도메인 문자열 비교만 한다. 문서를 열지 않으며 네트워크를 쓰지 않는다.
+    """
+    out = []
+    for lineno, line in numbers_block(raw):
+        for _anchor, target in MD_LINK.findall(line):
+            m = HOST.match(target)
+            if not m:
+                continue
+            host = m.group(1).lower()
+            if not is_primary(host):
+                out.append({"line": lineno, "host": host, "target": target})
+    return out
 
 
 if __name__ == "__main__":

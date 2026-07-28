@@ -81,6 +81,33 @@ check("기준일 열이 빈 표 행은 적발",
           "| 지표 | 값 | 출처 | 기준일 |\n|---|---|---|---|\n"
           "| 기준금리 | 연 2.75% | 한국은행 |  |\n")], ["2.75"])
 
+print("N2 비1차 출처")
+from numerics import is_primary, n2_nonprimary, numbers_block  # noqa: E402
+
+check("1차 출처 판정", [is_primary(h) for h in
+      ("ecos.bok.or.kr", "portal.kfb.or.kr", "www.hankyung.com", "bok.or.kr")],
+      [True, True, False, False])
+
+BLOCK = (
+    "리드 문단입니다.\n\n"
+    "## 숫자로 보면\n\n"
+    "기준금리는 2.75%입니다(출처: [ECOS](https://ecos.bok.or.kr/x)).\n\n"
+    "## 함께 보면 좋은 용어\n\n"
+    "[한경](https://www.hankyung.com/a)\n"
+)
+check("블록 범위", [n for n, _ in numbers_block(BLOCK)], [4, 5, 6])
+check("1차 출처만 있으면 통과", n2_nonprimary(BLOCK), [])
+
+BAD = BLOCK.replace("https://ecos.bok.or.kr/x", "https://www.hankyung.com/n")
+check("목록 밖 도메인 적발",
+      [(x["line"], x["host"]) for x in n2_nonprimary(BAD)],
+      [(5, "www.hankyung.com")])
+check("블록 밖 링크는 무시", "hankyung" in str(n2_nonprimary(BLOCK)), False)
+check("숫자 블록이 없으면 빈 결과",
+      n2_nonprimary("## 실생활에서는\n\n[한경](https://www.hankyung.com/a)\n"), [])
+check("내부 링크는 무시",
+      n2_nonprimary("## 숫자로 보면\n\n[기준금리](/dictionary/base-rate/)\n"), [])
+
 print()
 if FAILED:
     print("실패:")
