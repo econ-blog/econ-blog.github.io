@@ -19,8 +19,10 @@ SLUG = re.compile(r"^([a-z0-9][a-z0-9-]*):\s*$")
 KV = re.compile(r"^\s+(title|aliases):\s*(.+?)\s*$")
 
 _THIS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _THIS_DIR.parents[3]
-CONTENT_ROOT = _REPO_ROOT / "content" if (_REPO_ROOT / "content").exists() else Path("content")
+# lib → audit → .claude → 저장소 루트. parents[3]은 루트의 부모라 폴백이 항상
+# 걸렸고, 앵커링이 작동하지 않은 채 전 모듈이 CWD 상대로 동작했다.
+REPO_ROOT = _THIS_DIR.parents[2]
+CONTENT_ROOT = REPO_ROOT / "content" if (REPO_ROOT / "content").exists() else Path("content")
 TERMS_PATH = CONTENT_ROOT / "dictionary" / "_terms.yaml"
 
 

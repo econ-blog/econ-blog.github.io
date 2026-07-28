@@ -93,6 +93,20 @@ check("생성일 누락 → 위반", len(check_topic_report_format("## 잘 되�
 OUT_OF_RANGE = GOOD.replace("(조정치: +2)", "(조정치: +9)")
 check("조정치 범위 이탈 → 위반", len(check_topic_report_format(OUT_OF_RANGE)), 1)
 
+# 부호 없는 표기는 매치 자체를 피해 범위 검사를 통과하던 미탐이었다.
+UNSIGNED = GOOD.replace("(조정치: +2)", "(조정치: 2)")
+v3 = check_topic_report_format(UNSIGNED)
+check("부호 없는 조정치 → 위반 1건", len(v3), 1)
+check("부호 위반 문구", "부호가 없다" in v3[0]["detail"], True)
+UNSIGNED_OOR = GOOD.replace("(조정치: +2)", "(조정치: 9)")
+check("부호 없고 범위도 이탈 → 위반 2건", len(check_topic_report_format(UNSIGNED_OOR)), 2)
+
+# README는 생성일이 "파일 최상단"일 것을 요구한다.
+NOT_TOP = GOOD.replace("생성일: 2026-07-25\n\n", "") + "\n생성일: 2026-07-25\n"
+v4 = check_topic_report_format(NOT_TOP)
+check("생성일 위치 이탈 → 위반 1건", len(v4), 1)
+check("위치 위반 문구", "최상단이 아니다" in v4[0]["detail"], True)
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

@@ -5,7 +5,7 @@
     "final_url": "https://ecos.bok.or.kr/",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://imnews.imbc.com/news/2026/world/article/6824601_36925.html": {
@@ -28,12 +28,12 @@
   },
   "https://portal.kfb.or.kr/compare/cofix.php": {
     "consecutive_hard_failures": 0,
-    "consecutive_soft_failures": 2,
+    "consecutive_soft_failures": 3,
     "final_url": "https://portal.kfb.or.kr/compare/cofix.php",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
-    "last_status": 502
+    "last_checked": "2026-07-28",
+    "last_status": null
   },
   "https://www.bis.org": {
     "consecutive_hard_failures": 0,
@@ -41,7 +41,7 @@
     "final_url": "https://www.bis.org/",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.e2news.com/news/articleView.html?idxno=311542": {
@@ -50,7 +50,7 @@
     "final_url": "https://www.e2news.com/news/articleView.html?idxno=311542",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.einfomax.co.kr/news/articleView.html?idxno=4318721": {
@@ -59,7 +59,7 @@
     "final_url": "https://news.einfomax.co.kr/?idxno=4318721",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.fnnews.com/news/202607151628466890": {
@@ -131,7 +131,7 @@
     "final_url": "https://www.hankyung.com/article/2026071929151",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/2026072051351": {
@@ -140,7 +140,7 @@
     "final_url": "https://www.hankyung.com/article/2026072051351",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/202607205413i": {
@@ -158,7 +158,7 @@
     "final_url": "https://www.hankyung.com/article/2026072175601",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/2026072176511": {
@@ -167,7 +167,7 @@
     "final_url": "https://www.hankyung.com/article/2026072176511",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/2026072200591": {
@@ -176,7 +176,7 @@
     "final_url": "https://www.hankyung.com/article/2026072200591",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/2026072299811": {
@@ -230,7 +230,7 @@
     "final_url": "https://www.hankyung.com/article/2026072557777",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.hankyung.com/article/2026072664951": {
@@ -239,7 +239,16 @@
     "final_url": "https://www.hankyung.com/article/2026072664951",
     "first_seen": "2026-07-27",
     "hard_streak_started": null,
-    "last_checked": "2026-07-27",
+    "last_checked": "2026-07-28",
+    "last_status": 200
+  },
+  "https://www.hankyung.com/article/2026072788911": {
+    "consecutive_hard_failures": 0,
+    "consecutive_soft_failures": 0,
+    "final_url": "https://www.hankyung.com/article/2026072788911",
+    "first_seen": "2026-07-28",
+    "hard_streak_started": null,
+    "last_checked": "2026-07-28",
     "last_status": 200
   },
   "https://www.jabon.co.kr/news/articleView.html?idxno=5045": {
@@ -250,6 +259,15 @@
     "hard_streak_started": null,
     "last_checked": "2026-07-27",
     "last_status": 200
+  },
+  "https://www.kinfa.or.kr": {
+    "consecutive_hard_failures": 0,
+    "consecutive_soft_failures": 1,
+    "final_url": "https://www.kinfa.or.kr",
+    "first_seen": "2026-07-28",
+    "hard_streak_started": null,
+    "last_checked": "2026-07-28",
+    "last_status": null
   },
   "https://www.newdaily.co.kr/site/data/html/2026/07/17/2026071700005.html": {
     "consecutive_hard_failures": 0,

@@ -73,6 +73,10 @@ with tempfile.TemporaryDirectory() as tmp:
                     "draft: false\n---\n\n본문\n")
     check("사전은 source_url 면제", front_matter_issues(dict_ok), [])
 
+    print("front_matter_issues — front matter 부재")
+    bare = write(tmp, "posts", "bare.md", "본문만 있고 front matter가 없다\n")
+    check("front matter 없음 감지", front_matter_issues(bare), ["front matter 없음"])
+
 print("stale_drafts (Q4)")
 from quality import stale_drafts, self_review_budget, internal_link_density  # noqa: E402
 
@@ -85,8 +89,15 @@ with tempfile.TemporaryDirectory() as tmp:
           '---\ntitle: "y"\ndate: 2026-07-24T00:00:00+09:00\n'
           'tags: ["금리"]\ndraft: true\n---\n\n본문\n')
     write(tmp, "posts", "published.md", FULL_POST)
+    write(tmp, "dictionary", "old-draft.md",
+          '---\ntitle: "z"\ndate: 2026-07-01T00:00:00+09:00\n'
+          'tags: ["용어사전"]\ndraft: true\n---\n\n본문\n')
     st = stale_drafts(root, "2026-07-25")
-    check("7일 이상 방치만", [s["file"] for s in st], ["old-draft.md"])
+    # 위치는 저장소 상대경로 — posts/와 dictionary/에 같은 슬러그가 있어도
+    # 소견이 어느 파일을 가리키는지 모호해지지 않는다 (AC #33).
+    check("7일 이상 방치만 + 경로로 구분",
+          [s["file"] for s in st],
+          ["dictionary/old-draft.md", "posts/old-draft.md"])
     check("경과일 계산", st[0]["age"], 24)
 
 print("self_review_budget (Q5)")
@@ -108,6 +119,12 @@ with tempfile.TemporaryDirectory() as tmp:
     check("링크 0건 문서", per["zero.md"], 0)
     check("무링크 포스트 목록", d["zero_link_posts"], ["zero.md"])
     check("중앙값", d["median"], 1.0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    (Path(tmp) / "posts").mkdir()
+    empty = internal_link_density(Path(tmp))
+    check("포스트 0건 → 중앙값 0.0", empty["median"], 0.0)
+    check("포스트 0건 → 무링크 목록 빈 것", empty["zero_link_posts"], [])
 
 print("term_candidates (Q3)")
 from quality import term_candidates  # noqa: E402

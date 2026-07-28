@@ -13,24 +13,28 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from internal_links import load_terms  # noqa: E402
+from internal_links import CONTENT_ROOT, REPO_ROOT, load_terms  # noqa: E402
 
 # analysis.md §4가 방출하고 draft.md §2가 소비해야 하는 4개 필드.
 # 하나라도 짝을 잃으면 런타임에 조용히 드롭된다 — 실제로 한 번 일어났고
 # 자동 검사가 없어 사람 리뷰로 잡혔다.
 ANALYSIS_FIELDS = ("건드리는 렌즈", "선행 vs 동행", "확인된 수치", "자산군별 함의")
 
-ANALYSIS_PATH = Path(".claude/daily-post/analysis.md")
-DRAFT_PATH = Path(".claude/daily-post/draft.md")
-WRITING_STYLES_PATH = Path(".claude/daily-post/writing-styles.md")
-TERMS_PATH = Path("content/dictionary/_terms.yaml")
-DICT_DIR = Path("content/dictionary")
-TOPIC_REPORT_PATH = Path(".claude/audit/topic-report.md")
+# 저장소 루트 기준 — CWD 상대로 두면 하위 디렉터리에서 호출할 때 검사 대상이
+# 사라지고, 부재를 정상으로 보는 검사가 섞여 있어 오탐이 아니라 미탐이 된다.
+ANALYSIS_PATH = REPO_ROOT / ".claude/daily-post/analysis.md"
+DRAFT_PATH = REPO_ROOT / ".claude/daily-post/draft.md"
+WRITING_STYLES_PATH = REPO_ROOT / ".claude/daily-post/writing-styles.md"
+DICT_DIR = CONTENT_ROOT / "dictionary"
+TERMS_PATH = DICT_DIR / "_terms.yaml"
+TOPIC_REPORT_PATH = REPO_ROOT / ".claude/audit/topic-report.md"
 
 SELF_REVIEW_HEADING = "## AI 흔적 자가검토"
 NUMBERED_ITEM = re.compile(r"^\s*(\d+)\.\s+\S", re.MULTILINE)
 CREATED_AT = re.compile(r"^생성일:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
-ADJUSTMENT = re.compile(r"\(조정치:\s*([+-]\d+)\)")
+# 부호를 선택으로 둔다 — `[+-]\d+`만 받으면 `(조정치: 9)`처럼 표기가 어긋난
+# 값이 매치 자체를 피해 범위 검사를 통과한다(미탐).
+ADJUSTMENT = re.compile(r"\(조정치:\s*([+-]?\d+)\)")
 
 
 def check_four_fields(analysis_text: str, draft_text: str) -> list[dict]:
@@ -110,10 +114,18 @@ def check_topic_report_format(text: str | None) -> list[dict]:
     if text is None:
         return []
     out = []
-    if not CREATED_AT.search(text):
+    m = CREATED_AT.search(text)
+    if not m:
         out.append({
             "check": "리포트 형식",
             "detail": "topic-report.md 최상단 '생성일: YYYY-MM-DD' 누락",
+        })
+    elif text[:m.start()].strip():
+        # README는 "파일 최상단"을 요구한다. 본문 중간의 생성일은 신선도 규칙
+        # (90일 경과 시 감점 차단)이 어느 날짜를 읽는지 모호하게 만든다.
+        out.append({
+            "check": "리포트 형식",
+            "detail": "topic-report.md '생성일:'이 파일 최상단이 아니다",
         })
     for section in ("## 잘 되는 주제", "## 안 되는 주제", "## 좋은 포스트의 조건"):
         if section not in text:
@@ -122,6 +134,11 @@ def check_topic_report_format(text: str | None) -> list[dict]:
                 "detail": f"topic-report.md에 '{section}' 섹션 누락",
             })
     for raw in ADJUSTMENT.findall(text):
+        if raw[0] not in "+-":
+            out.append({
+                "check": "리포트 형식",
+                "detail": f"조정치 '{raw}'에 부호가 없다 — 계약 표기는 (조정치: ±N)",
+            })
         val = int(raw)
         if not (-2 <= val <= 3):
             out.append({

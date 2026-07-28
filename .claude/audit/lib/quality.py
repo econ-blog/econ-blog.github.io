@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from contracts import count_self_review_items  # noqa: E402
+from contracts import WRITING_STYLES_PATH, count_self_review_items  # noqa: E402
 from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
 from mdtext import inventory, split_front_matter, strip_code_spans  # noqa: E402
 
@@ -80,7 +80,13 @@ def stale_drafts(content_root: Path, today: str, days: int = 7) -> list[dict]:
             continue
         age = (date.fromisoformat(today) - date.fromisoformat(m.group(1))).days
         if age >= days:
-            out.append({"file": md.name, "date": m.group(1), "age": age})
+            # posts/와 dictionary/를 함께 훑으므로 파일명만으로는 소견의 '위치'가
+            # 되지 못한다 — 같은 슬러그가 양쪽에 존재할 수 있다 (AC #33).
+            out.append({
+                "file": md.relative_to(content_root).as_posix(),
+                "date": m.group(1),
+                "age": age,
+            })
     return out
 
 
@@ -116,7 +122,10 @@ def internal_link_density(content_root: Path) -> dict:
 
 HANGUL_TOKEN = re.compile(r"[가-힣]{2,10}|[A-Z]{2,6}")
 
-# 경제 용어가 아닌 고빈도 일반어. 닫힌 목록이며 늘리려면 SEED를 개정한다.
+# 경제 용어가 아닌 고빈도 일반어. SEED에 이 목록의 근거는 없다 — AC #30이 못박은
+# "닫힌 목록"은 E/Q/P 점검 축 자체를 가리키며, 이 불용어 집합은 구현 판단이다.
+# 자유롭게 조정 가능하다(SEED 개정 불필요). 값은 2026-07-28 실행에서 LLM 선별이
+# 잡음을 정확히 걸러낸 것으로 검증됨(대출·반도체·달러·경기·물가 전부 진짜 경제 용어).
 STOPWORDS = {
     "그리고", "하지만", "그러나", "때문에", "이라고", "합니다", "입니다", "있습니다",
     "없습니다", "됩니다", "습니다", "경우에", "우리나라", "이번에", "지난해", "올해",
@@ -170,10 +179,13 @@ if __name__ == "__main__":
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
     files = sorted((CONTENT_ROOT / "posts").glob("*.md")) + \
         sorted((CONTENT_ROOT / "dictionary").glob("*.md"))
-    ws = Path(".claude/daily-post/writing-styles.md").read_text(encoding="utf-8")
+    ws = WRITING_STYLES_PATH.read_text(encoding="utf-8")
     print(json.dumps({
         "Q1": [
-            {"file": p.name, "issues": front_matter_issues(p)}
+            {
+                "file": p.relative_to(CONTENT_ROOT).as_posix(),
+                "issues": front_matter_issues(p),
+            }
             for p in files
             if not p.name.startswith("_") and front_matter_issues(p)
         ],
