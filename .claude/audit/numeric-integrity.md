@@ -34,11 +34,11 @@
 .venv/bin/python .claude/audit/lib/hypothesis.py .claude/audit/direction-log.json
 ```
 
-`portfolio_history`의 **마지막 항목**이 직전 감사의 스냅샷이며 거기에
+`.claude/audit/lib/hypothesis.py` 스크립트나 `.claude/audit/direction-log.json` 원장이 없으면(Plan 5 미구현 상태 포함) 스크립트를 실행하지 않고 **회귀 판정을 생략하고 절대값만 낸다.** `portfolio_history`의 **마지막 항목**이 직전 감사의 스냅샷이며 거기에
 `n1_count`·`claims_total`·`claims_per_post` 세 키가 있다. 원장이 없거나
 `stale`이 null이 아니면(첫 실행·PR 미병합) **회귀 판정을 생략하고 절대값만 낸다.**
 
-산출한 세 값을 시퀀서에 함께 돌려준다 — 시퀀서가 §6(⑤)에 넘겨 스냅샷에 기록시킨다.
+산출한 세 값을 시퀀서에 함께 돌려준다 — 시퀀서가 ⑤ 방향성 리뷰에 넘겨 스냅샷에 기록시킨다.
 **⑥이 직접 원장에 쓰지 않는다**(AC #61 무상태·읽기 전용). 실행 순서가 ⑥ → ⑤이므로
 ⑥이 읽는 것은 항상 직전 감사가 쓴 값이고, 같은 실행 안에서 자기가 쓴 값을 되읽는
 순환이 없다.
@@ -66,7 +66,7 @@
 ```
 ## ⑥ 수치 무결성
 
-N1 기준일 누락 {counts.N1}건 / 수치 주장 {claims.claims_total}건 ({n1_share:.0%})
+N1 기준일 누락 {n1_posts_count}건 / 포스트 수치 주장 {claims.claims_total}건 ({n1_share:.0%})
 · 포스트당 {claims.claims_per_post}건 (중앙값 {claims.claims_median})
 
 | 검사 | 건수 |

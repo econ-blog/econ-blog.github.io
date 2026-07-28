@@ -29,8 +29,12 @@ NUMBER = r"-?\d[\d,]*(?:\.\d+)?"
 # 같은 값으로 대조해 없는 모순을 만든다. 뽑지 않는 쪽이 틀리게 뽑는 쪽보다 낫다.
 CLAIM = re.compile(rf"({NUMBER})\s*({'|'.join(re.escape(u) for u in UNITS)})")
 
-# 연·월 또는 연·월·일. 한글형과 ISO형이 실제로 공존한다(실측).
-ASOF = re.compile(r"20\d{2}년\s*\d{1,2}월(?:\s*\d{1,2}일)?|20\d{2}-\d{2}(?:-\d{2})?")
+# 연·월·일, 연·월, 연도 단독(2025년/2025년 기준), 분기(2분기/2025년 2분기), ISO형 공존.
+ASOF = re.compile(
+    r"20\d{2}년(?:\s*[1-4]분기|\s*\d{1,2}월(?:\s*\d{1,2}일)?)?"
+    r"|[1-4]분기"
+    r"|20\d{2}-\d{2}(?:-\d{2})?"
+)
 
 TABLE_ROW = re.compile(r"^\s*\|")
 # 소수점과 문장 끝을 가르는 유일한 신호는 마침표 앞 글자가 한글인지다.
@@ -53,6 +57,15 @@ BOUNDED = re.compile(r"\d+\s*(?:년|개월|주|일)\s*만에")
 # 공지(welcome.md)와 섹션 인덱스는 해설글이 아니므로 대상에서 뺀다.
 EXCLUDE = {"_index.md", "welcome.md"}
 CAP = 10  # AC #60 — 한 번의 감사에서 출력하는 최대 소견 수
+
+
+def _rel(path: Path | str) -> str:
+    """리포트 및 JSON 출력의 상대 경로 (repository root 기준, e.g. content/posts/foo.md)."""
+    p = Path(path)
+    try:
+        return p.relative_to(CONTENT_ROOT.parent).as_posix()
+    except ValueError:
+        return p.as_posix()
 
 
 def _cells(row: str) -> list[str]:
@@ -193,13 +206,21 @@ def norm_asof(scope: str) -> str | None:
     if not m:
         return None
     s = m.group(0)
-    k = re.match(r"(20\d{2})년\s*(\d{1,2})월(?:\s*(\d{1,2})일)?", s)
+    k = re.match(r"(20\d{2})년(?:\s*([1-4])분기|\s*(\d{1,2})월(?:\s*(\d{1,2})일)?)?", s)
     if not k:
         return s
-    out = f"{k.group(1)}-{int(k.group(2)):02d}"
-    if k.group(3):
-        out += f"-{int(k.group(3)):02d}"
-    return out
+    year = k.group(1)
+    q = k.group(2)
+    month = k.group(3)
+    day = k.group(4)
+    if q:
+        return f"{year}-Q{q}"
+    if month:
+        out = f"{year}-{int(month):02d}"
+        if day:
+            out += f"-{int(day):02d}"
+        return out
+    return year
 
 
 def indicator_of(scope: str, terms: dict) -> str | None:
@@ -230,13 +251,14 @@ def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
     """
     buckets: dict[tuple, list[tuple]] = {}
     for path in files:
+        rel_path = _rel(path)
         for c in claims(path.read_text(encoding="utf-8")):
             slug = indicator_of(c["scope"], terms)
             asof = norm_asof(c["scope"])
             if not slug or not asof:
                 continue
             buckets.setdefault((slug, asof, c["unit"]), []).append(
-                (norm_value(c["value"]), path.as_posix(), c["line"], c["scope"]))
+                (norm_value(c["value"]), rel_path, c["line"], c["scope"]))
 
     out = []
     for (slug, asof, unit), items in sorted(buckets.items()):
@@ -269,17 +291,19 @@ def n5_reprint(dict_files: list[Path], post_files: list[Path]) -> list[dict]:
     """
     in_posts: dict[tuple, list[str]] = {}
     for path in post_files:
+        rel_path = _rel(path)
         for c in claims(path.read_text(encoding="utf-8")):
             key = (norm_value(c["value"]), c["unit"])
-            in_posts.setdefault(key, []).append(f"{path.as_posix()}:{c['line']}")
+            in_posts.setdefault(key, []).append(f"{rel_path}:{c['line']}")
     out = []
     for path in dict_files:
+        rel_path = _rel(path)
         for c in claims(path.read_text(encoding="utf-8")):
             key = (norm_value(c["value"]), c["unit"])
             if key in in_posts:
-                out.append({"at": f"{path.as_posix()}:{c['line']}",
+                out.append({"at": f"{rel_path}:{c['line']}",
                             "value": c["value"], "unit": c["unit"],
-                            "also_in": sorted(in_posts[key])})
+                            "also_in": sorted(set(in_posts[key]))})
     return out
 
 
@@ -313,7 +337,7 @@ def main() -> None:
     rows = []
     for path in posts + dicts:
         raw = path.read_text(encoding="utf-8")
-        at = path.as_posix()
+        at = _rel(path)
         for c in n1_missing_asof(raw):
             rows.append({"check": "N1", "at": f"{at}:{c['line']}",
                          "quote": c["scope"][:60],
@@ -329,7 +353,7 @@ def main() -> None:
     for c in n3_conflicts(posts + dicts, terms):
         rows.append({"check": "N3", "at": c["values"][0]["at"][0],
                      "quote": " vs ".join(f"{v['value']}{c['unit']}"
-                                          for v in c["values"]),
+                                           for v in c["values"]),
                      "why": f"{c['indicator']} {c['asof']} 값 불일치 — "
                             + " / ".join(loc for v in c["values"]
                                          for loc in v["at"])})
@@ -340,20 +364,17 @@ def main() -> None:
 
     counts = {n: sum(1 for r in rows if r["check"] == n)
               for n in ("N1", "N2", "N3", "N4", "N5")}
-    # 희소한 검사부터 낸다. 이름순으로 자르면 N1(실측 42건)이 상한 10건을 통째로
-    # 먹어 N5(3건)가 overflow에 묻힌다 — 흔한 결함이 드문 결함을 가리는 것은
-    # 상한을 둔 취지(AC #60)에 반한다. 정렬은 결정론적이다.
     rows.sort(key=lambda r: (counts[r["check"]], r["check"], r["at"]))
 
     summary = claims_summary(posts)
-    n1_share = (round(counts["N1"] / summary["claims_total"], 3)
+    n1_posts_count = sum(1 for r in rows if r["check"] == "N1" and r["at"].startswith("content/posts/"))
+    n1_share = (round(n1_posts_count / summary["claims_total"], 3)
                 if summary["claims_total"] else 0.0)
     print(json.dumps({"counts": counts, "total": len(rows),
                       "rows": rows[:CAP], "overflow": max(0, len(rows) - CAP),
-                      "claims": summary, "n1_share": n1_share},
+                      "claims": summary, "n1_posts_count": n1_posts_count, "n1_share": n1_share},
                      ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     main()
-
