@@ -108,6 +108,25 @@ check("숫자 블록이 없으면 빈 결과",
 check("내부 링크는 무시",
       n2_nonprimary("## 숫자로 보면\n\n[기준금리](/dictionary/base-rate/)\n"), [])
 
+print("N4 무한정 최상급")
+from numerics import n4_unbounded_superlative as n4  # noqa: E402
+
+check("무한정 최상급 적발",
+      [(x["line"], x["words"]) for x in n4("반도체 수출이 사상 최대를 기록했습니다.\n")],
+      [(1, ["사상 최대"])])
+check("기간 한정은 제외", n4("코픽스가 17개월 만에 가장 높은 수준이며 역대 최고는 아닙니다.\n"), [])
+check("1차 출처 링크 있으면 제외",
+      n4("사상 최고입니다([ECOS](https://ecos.bok.or.kr/x)).\n"), [])
+check("비1차 링크는 면제 아님",
+      [x["words"] for x in n4("사상 최고입니다([한경](https://www.hankyung.com/a)).\n")],
+      [["사상 최고"]])
+check("'최초로'도 대상", [x["words"] for x in n4("최초로 돌파했습니다.\n")], [["최초로"]])
+check("한 줄에 둘이면 함께 보고",
+      [x["words"] for x in n4("역대 최대이자 사상 최고입니다.\n")],
+      [["사상 최고", "역대 최대"]])
+check("코드스팬 안은 제외", n4("설정 `사상 최고` 플래그입니다.\n"), [])
+check("front matter는 제외", n4(FM.replace("제목 10%", "사상 최대 돌파")), [])
+
 print()
 if FAILED:
     print("실패:")

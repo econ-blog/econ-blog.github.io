@@ -43,6 +43,13 @@ PRIMARY_HOSTS = ("ecos.bok.or.kr", "fred.stlouisfed.org", "kosis.kr",
 HOST = re.compile(r"^https?://([^/?#]+)")
 NUMBERS_HEADER = "## 숫자로 보면"
 
+# AC #58 — 닫힌 목록. tuple 순서가 words 필드의 출력 순서를 정한다.
+SUPERLATIVES = ("사상 최고", "사상 최대", "사상 최저",
+                "역대 최고", "역대 최대", "역대 최저", "최초로")
+# 기간이 명시된 최상급('38년 만에 최고')은 검증 가능한 형태이므로 대상이 아니다.
+BOUNDED = re.compile(r"\d+\s*(?:년|개월|주|일)\s*만에")
+
+
 
 def _cells(row: str) -> list[str]:
     return [c.strip() for c in row.strip().strip("|").split("|")]
@@ -144,6 +151,26 @@ def n2_nonprimary(raw: str) -> list[dict]:
             host = m.group(1).lower()
             if not is_primary(host):
                 out.append({"line": lineno, "host": host, "target": target})
+    return out
+
+
+def n4_unbounded_superlative(raw: str) -> list[dict]:
+    """N4 — 기간 한정도 1차 출처 링크도 없는 최상급. (AC #58)
+
+    문단 = 줄이다. 이 저장소의 마크다운이 문단을 한 줄로 쓰기 때문이다(실측).
+    """
+    front, body = split_front_matter(raw)
+    offset = front.count("\n")
+    out = []
+    for i, line in enumerate(mask_code_spans(body).split("\n")):
+        hits = [w for w in SUPERLATIVES if w in line]
+        if not hits or BOUNDED.search(line):
+            continue
+        hosts = [HOST.match(t).group(1) for _a, t in MD_LINK.findall(line)
+                 if HOST.match(t)]
+        if any(is_primary(h) for h in hosts):
+            continue
+        out.append({"line": offset + i + 1, "words": hits, "text": line.strip()})
     return out
 
 
