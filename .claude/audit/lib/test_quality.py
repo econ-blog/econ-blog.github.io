@@ -109,6 +109,28 @@ with tempfile.TemporaryDirectory() as tmp:
     check("무링크 포스트 목록", d["zero_link_posts"], ["zero.md"])
     check("중앙값", d["median"], 1.0)
 
+print("term_candidates (Q3)")
+from quality import term_candidates  # noqa: E402
+
+TERMS_Q3 = {"base-rate": {"title": "기준금리", "aliases": ["정책금리"]}}
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    body = "환율 이야기. 환율 변동. 환율 전망. 기준금리 이야기."
+    write(tmp, "posts", "p1.md", FULL_POST.replace("본문\n", body + "\n"))
+    write(tmp, "posts", "p2.md", FULL_POST.replace("본문\n", "환율 재등장. 환율 또.\n"))
+    cands = term_candidates(root, TERMS_Q3, min_posts=2, min_count=3)
+    tokens = [c["token"] for c in cands]
+    check("반복 토큰 후보에 포함", "환율" in tokens, True)
+    check("_terms 등재 용어는 제외", "기준금리" not in tokens, True)
+    hit = [c for c in cands if c["token"] == "환율"][0]
+    check("등장 포스트 수", hit["posts"], 2)
+    check("총 등장 수", hit["count"], 5)
+
+    # 1개 포스트에만 있으면 탈락
+    write(tmp, "posts", "p3.md", FULL_POST.replace("본문\n", "고용 고용 고용.\n"))
+    tokens2 = [c["token"] for c in term_candidates(root, TERMS_Q3, 2, 3)]
+    check("단일 포스트 토큰 제외", "고용" not in tokens2, True)
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")
@@ -116,3 +138,4 @@ if FAILED:
         print("  -", f)
     sys.exit(1)
 print("전부 통과")
+

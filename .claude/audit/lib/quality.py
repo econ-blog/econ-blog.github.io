@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contracts import count_self_review_items  # noqa: E402
-from mdtext import inventory, split_front_matter  # noqa: E402
+from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
+from mdtext import inventory, split_front_matter, strip_code_spans  # noqa: E402
 
 DESC_MIN, DESC_MAX = 50, 160
 
@@ -113,6 +114,73 @@ def internal_link_density(content_root: Path) -> dict:
     }
 
 
+HANGUL_TOKEN = re.compile(r"[가-힣]{2,10}|[A-Z]{2,6}")
+
+# 경제 용어가 아닌 고빈도 일반어. 닫힌 목록이며 늘리려면 SEED를 개정한다.
+STOPWORDS = {
+    "그리고", "하지만", "그러나", "때문에", "이라고", "합니다", "입니다", "있습니다",
+    "없습니다", "됩니다", "습니다", "경우에", "우리나라", "이번에", "지난해", "올해",
+    "다음과", "이라는", "라는", "정도로", "만큼", "가운데", "사람들", "이야기",
+    "무슨", "의미", "관점", "지표", "상황", "영향", "수준", "가능성", "이유",
+}
+
+
+def term_candidates(
+    content_root: Path, terms: dict, min_posts: int = 2, min_count: int = 3
+) -> list[dict]:
+    """Q3 — 반복 등장하지만 _terms.yaml에 없는 토큰의 결정론적 빈도표.
+
+    경제 용어인지는 판정하지 않는다 — 그 선별은 스테이지의 LLM이 하며 재현되지
+    않는다. 형태소 분석기를 쓰지 않으므로 조사가 붙은 형태는 표면형이 달라져
+    자연히 탈락하고, 살아남는 토큰은 조사 없이 쓰인 명사·복합어에 치우친다.
+    """
+    known = set()
+    for t in terms.values():
+        known.add(t["title"])
+        known.update(t["aliases"])
+        # 괄호 표기 변형("코픽스(COFIX)")의 앞부분도 등재로 간주
+        known.add(t["title"].split("(")[0].strip())
+
+    doc_hits: dict = {}
+    total: dict = {}
+    for md in sorted((content_root / "posts").glob("*.md")):
+        if md.name.startswith("_"):
+            continue
+        _, body = split_front_matter(md.read_text(encoding="utf-8"))
+        seen_here = set()
+        for tok in HANGUL_TOKEN.findall(strip_code_spans(body)):
+            if tok in known or tok in STOPWORDS:
+                continue
+            total[tok] = total.get(tok, 0) + 1
+            seen_here.add(tok)
+        for tok in seen_here:
+            doc_hits[tok] = doc_hits.get(tok, 0) + 1
+
+    out = [
+        {"token": tok, "posts": doc_hits[tok], "count": total[tok]}
+        for tok in total
+        if doc_hits[tok] >= min_posts and total[tok] >= min_count
+    ]
+    out.sort(key=lambda x: (-x["count"], -x["posts"], x["token"]))
+    return out
+
+
 if __name__ == "__main__":
-    pass
+    today = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
+    terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
+    files = sorted((CONTENT_ROOT / "posts").glob("*.md")) + \
+        sorted((CONTENT_ROOT / "dictionary").glob("*.md"))
+    ws = Path(".claude/daily-post/writing-styles.md").read_text(encoding="utf-8")
+    print(json.dumps({
+        "Q1": [
+            {"file": p.name, "issues": front_matter_issues(p)}
+            for p in files
+            if not p.name.startswith("_") and front_matter_issues(p)
+        ],
+        "Q3": term_candidates(CONTENT_ROOT, terms)[:30],
+        "Q4": stale_drafts(CONTENT_ROOT, today),
+        "Q5": self_review_budget(ws),
+        "P2": internal_link_density(CONTENT_ROOT),
+    }, ensure_ascii=False, indent=2))
+
 
