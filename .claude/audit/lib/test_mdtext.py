@@ -44,6 +44,23 @@ check(
     True,
 )
 
+print("mask_code_spans")
+from mdtext import mask_code_spans  # noqa: E402
+
+MASK_SRC = "첫 줄 `코드` 끝\n```\nfenced\n블록\n```\n마지막 줄\n"
+masked = mask_code_spans(MASK_SRC)
+check("줄 수 보존", masked.count("\n"), MASK_SRC.count("\n"))
+check(
+    "각 줄 길이 보존",
+    [len(x) for x in masked.split("\n")],
+    [len(x) for x in MASK_SRC.split("\n")],
+)
+check("인라인 코드 소거", "코드" in masked, False)
+check("펜스 내용 소거", "fenced" in masked, False)
+check("펜스 밖 텍스트 보존", "마지막 줄" in masked, True)
+check("인라인 마스킹 위치 유지", masked.split("\n")[0], "첫 줄      끝")
+
+
 print("extract_links")
 from mdtext import extract_links, extract_front_matter_urls, inventory  # noqa: E402
 

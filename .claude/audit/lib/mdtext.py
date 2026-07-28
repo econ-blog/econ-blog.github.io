@@ -38,6 +38,22 @@ def strip_code_spans(text: str) -> str:
     text = INLINE_CODE.sub("", text)
     return text
 
+
+def mask_code_spans(text: str) -> str:
+    """코드 스팬을 같은 길이의 공백으로 덮는다. 줄바꿈은 그대로 둔다. (AC #5)
+
+    strip_code_spans와 같은 규약이되 제거 대신 마스킹한다 — 소견은 위치를
+    file:line으로 요구하므로(AC #33), 제거하면 이후 줄 번호가 전부 밀린다.
+    펜스를 먼저 덮는 순서도 strip_code_spans와 같다.
+    """
+    def blank(m):
+        return "".join("\n" if ch == "\n" else " " for ch in m.group(0))
+
+    text = FENCED_CODE.sub(blank, text)
+    text = INLINE_CODE.sub(blank, text)
+    return text
+
+
 def _classify(target: str) -> str:
     if target.startswith("/"):
         return "internal"
