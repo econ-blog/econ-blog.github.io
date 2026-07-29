@@ -132,6 +132,50 @@ check("자기참조 목록", r3["self_reference"], ["base-rate"])
 check("헤딩 수(## 이상만)", r3["headings"]["base-rate"], 2)
 check("h1은 세지 않음", r3["headings"]["lonely"], 0)
 
+print("d3_render_side")
+import tempfile  # noqa: E402
+from pathlib import Path as _P  # noqa: E402
+from portfolio import d3_render_side  # noqa: E402
+
+# minify가 인용부호를 벗긴 형태를 그대로 재현한다
+MINIFIED = (
+    "<article><p>본문 <a href=/dictionary/cofix/>코픽스</a></p>"
+    "<div class=related-posts><h3 class=related-posts-title>이 용어가 나온 글</h3>"
+    "<ul class=related-posts-list>"
+    "<li><a href=/posts/aaa/>가</a></li><li><a href=/posts/bbb/>나</a></li>"
+    "</ul></div></article>"
+)
+QUOTED = (
+    '<article><ul class="related-posts-list">'
+    '<li><a href="/posts/ccc/">다</a></li></ul></article>'
+)
+DEADEND = "<article><p>나가는 링크가 없다.</p></article>"
+
+with tempfile.TemporaryDirectory() as tmp:
+    pub = _P(tmp)
+    for slug, html in (("base-rate", MINIFIED), ("cofix", QUOTED), ("gdi", DEADEND)):
+        (pub / "dictionary" / slug).mkdir(parents=True)
+        (pub / "dictionary" / slug / "index.html").write_text(html, encoding="utf-8")
+    # 페이지네이션 디렉터리 — 순회 대상이 아니어야 한다
+    (pub / "dictionary" / "page" / "2").mkdir(parents=True)
+
+    T5 = {s: {"title": s, "aliases": []}
+          for s in ("base-rate", "cofix", "gdi", "notbuilt")}
+    r5 = d3_render_side(pub, T5)
+    check("built", r5["built"], True)
+    check("인용부호 벗겨진 백링크", r5["backlinks"]["base-rate"], 2)
+    check("인용부호 있는 백링크", r5["backlinks"]["cofix"], 1)
+    check("백링크 0", r5["backlinks"]["gdi"], 0)
+    check("페이지 없음은 None", r5["backlinks"]["notbuilt"], None)
+    check("missing_pages", r5["missing_pages"], ["notbuilt"])
+    check("막다름은 나가는 링크 0", r5["dead_ends"], ["gdi"])
+    check("본문 유출만 있어도 막다름 아님", "cofix" in r5["dead_ends"], False)
+    check("상한 기록", r5["backlink_cap"], 8)
+
+    r5b = d3_render_side(_P(tmp) / "does-not-exist", T5)
+    check("빌드 없음", r5b["built"], False)
+    check("빌드 없으면 막다름 비움", r5b["dead_ends"], [])
+
 print()
 if FAILED:
     print("실패:")
@@ -139,5 +183,6 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 
 

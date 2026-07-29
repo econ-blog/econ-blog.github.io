@@ -170,3 +170,68 @@ def d3_source_side(docs: list[dict], terms: dict) -> dict:
     }
 
 
+# --minify가 값에 공백이 없는 속성의 인용부호를 벗긴다: href="/x/" → href=/x/
+# 정규식 하나로 둘 다 잡는다. HTML 파서를 도입하지 않는다(Constraints).
+HTML_HREF = re.compile(r'href=(?:"(?P<q>[^"]*)"|(?P<b>[^\s>"]+))')
+BACKLINK_BLOCK = re.compile(r"related-posts-list(?P<inner>.*?)</ul>", re.S)
+
+
+def _html_hrefs(html: str) -> list[str]:
+    return [
+        m.group("q") if m.group("q") is not None else m.group("b")
+        for m in HTML_HREF.finditer(html)
+    ]
+
+
+def d3_render_side(public_root: Path, terms: dict) -> dict:
+    """D3의 렌더 기준 절반 — 백링크 수와 막다른 항목. (AC #44 D3)
+
+    막다름은 원문이 아니라 빌드 산출물로 판정한다 —
+    layouts/partials/dictionary_backlinks.html이 사전→포스트 간선을 렌더 시점에
+    만들기 때문에, 원문만 세면 partial이 이미 해결한 문제를 오탐으로 낸다.
+
+    순회 대상은 terms의 슬러그다. public/dictionary/를 iterdir()하면
+    page/ 페이지네이션 디렉터리가 섞인다.
+    """
+    backlinks, missing, dead_ends = {}, [], []
+    built = False
+    for slug in terms:
+        page = public_root / "dictionary" / slug / "index.html"
+        if not page.is_file():
+            backlinks[slug] = None
+            missing.append(slug)
+            continue
+        built = True
+        html = page.read_text(encoding="utf-8")
+        block = BACKLINK_BLOCK.search(html)
+        backlinks[slug] = (
+            len([h for h in _html_hrefs(block.group("inner")) if h.startswith("/posts/")])
+            if block
+            else 0
+        )
+        outgoing = [
+            h
+            for h in _html_hrefs(html)
+            if h.startswith(("/posts/", "/dictionary/")) and h != f"/dictionary/{slug}/"
+        ]
+        if not outgoing:
+            dead_ends.append(slug)
+
+    if not built:
+        return {
+            "built": False,
+            "backlinks": {},
+            "dead_ends": [],
+            "missing_pages": sorted(terms),
+            "backlink_cap": 8,
+        }
+    return {
+        "built": True,
+        "backlinks": backlinks,
+        "dead_ends": sorted(dead_ends),
+        "missing_pages": sorted(missing),
+        "backlink_cap": 8,
+    }
+
+
+
