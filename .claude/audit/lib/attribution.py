@@ -6,11 +6,12 @@ scripts/fetch_*.py가 수집해 dict로 넘어온다(AC #23).
 ②의 기본 상태는 "아무것도 쓰지 않음"이다. 이 모듈이 내는 조정치는 상관에
 근거한 결정론적 휴리스틱이며 인과 추정치가 아니다(Constraints).
 
-  .venv/bin/python .claude/audit/lib/attribution.py
+순수 함수만 있고 저장소를 읽지 않는다 — CLI 진입점이 없다.
 """
 import json
 from datetime import date as _date
 from pathlib import Path
+from statistics import median
 
 # 전부 초기값이며 경험적으로 유도되지 않았다 — rank.md의 8/15와 같은 성격이다.
 # 첫 통과 실행의 실제 분포로 재보정한다(Known limits #1). 한 곳에서 고칠 수 있게 모아 둔다.
@@ -86,10 +87,9 @@ def per_post_metric(sizes: dict, totals: dict) -> dict:
 
 
 def _median(values: list[float]) -> float:
-    if not values:
-        return 0.0
-    s = sorted(values)
-    return s[len(s) // 2]
+    """짝수 개면 가운데 두 값의 평균이다 — 신호군은 3~6개라 짝수가 절반이며,
+    위쪽 중앙값을 쓰면 M이 높게 잡혀 모든 r_g가 밴드 하나씩 밀린다."""
+    return median(values) if values else 0.0
 
 
 def ratios(m: dict) -> tuple[dict, float]:
@@ -118,9 +118,12 @@ def demote(adj: int, group_stats: dict, medians: dict) -> tuple[int, str | None]
         return adj, None
     position = float(group_stats["avg_position"])
     clicks = float(group_stats["clicks"])
-    if adj > 0 and position > float(medians.get("avg_position", 0)) and clicks == 0:
+    # 중앙값이 없으면 강등하지 않는다 — 기본값 0이면 어떤 실제 순위도 이를 넘어
+    # 조건이 "클릭 0"으로 무너진다. 음수 분기와 마찬가지로 no-op 쪽으로 실패한다.
+    position_median = float(medians.get("avg_position", float("inf")))
+    if adj > 0 and position > position_median and clicks == 0:
         return 0, (f"양수 조정치 강등 — 평균 게재순위 {position} > 중앙값 "
-                   f"{medians.get('avg_position')}, 클릭 0")
+                   f"{position_median}, 클릭 0")
     if adj < 0 and clicks >= float(medians.get("clicks_top_third", float("inf"))):
         return 0, f"음수 조정치 강등 — 클릭 {clicks}이 전체 상위 1/3"
     return adj, None
@@ -154,18 +157,30 @@ def decay(history: dict, tag: str, adj: int, today: str,
     이 상태를 topic-report.md 밖에 두는 이유: 계약 형식에 필드를 추가하면
     rank.md가 깨진다. README.md의 90일 신선도 규칙은 매주 재생성하면
     생성일이 영원히 최신이라 무력하다.
+
+    최초부여일은 "지금 이어지는 음수 구간"의 시작일이다. 음수가 풀리면 지워지고,
+    다시 음수가 되면 그날부터 새로 센다 — 안 그러면 지난 감점의 경과일이 남아
+    재진입 첫 주에 곧바로 감쇄되어 60일 유지 요건이 무너진다.
     """
     entry = history.get(tag)
     if entry is None:
-        entry = {"조정치": adj, "최초부여일": today, "마지막감쇄일": None}
+        entry = {"조정치": adj, "최초부여일": today if adj < 0 else None,
+                 "마지막감쇄일": None}
         history[tag] = entry
         return adj, entry
 
     entry["조정치"] = adj
     if adj >= 0:
+        entry["최초부여일"] = None
+        entry["마지막감쇄일"] = None
         return adj, entry
 
-    since = entry.get("마지막감쇄일") or entry.get("최초부여일") or today
+    if not entry.get("최초부여일"):
+        entry["최초부여일"] = today
+        entry["마지막감쇄일"] = None
+        return adj, entry
+
+    since = entry.get("마지막감쇄일") or entry["최초부여일"]
     elapsed = (_date.fromisoformat(today) - _date.fromisoformat(since)).days
     if elapsed >= days:
         adj = min(0, adj + 1)
@@ -173,3 +188,19 @@ def decay(history: dict, tag: str, adj: int, today: str,
         entry["마지막감쇄일"] = today
     return adj, entry
 
+
+def patch_cohorts(posts: list[dict], patch_dates: list[str],
+                  min_posts: int = 5) -> list[dict]:
+    """문체 패치 반영 시점 기준 전/후 발행글 코호트. (AC #25)
+
+    accepted-patches.md가 아직 없고 loop도 실행 전이므로 이 함수는 상당 기간
+    빈 목록을 받는다 — 그 상태가 정상이다(Known limits #11). 이 결과로
+    writing-styles.md를 수정하지 않는다. loop이 소유한다.
+    """
+    out = []
+    for patch_date in sorted(patch_dates):
+        before = sorted(p["file"] for p in posts if p.get("date", "") < patch_date)
+        after = sorted(p["file"] for p in posts if p.get("date", "") >= patch_date)
+        out.append({"patch_date": patch_date, "before": before, "after": after,
+                    "ready": len(after) >= min_posts})
+    return out

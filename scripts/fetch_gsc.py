@@ -8,13 +8,16 @@ from googleapiclient.discovery import build
 CREDENTIALS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ga4-credentials.json')
 SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 DEFAULT_DAYS = 90
+# ②는 page 차원 합계로 n_g·m_g를 만든다 — 절삭되면 조용히 틀린 수치가 나온다.
+DEFAULT_LIMIT = 200
 INSPECT_CAP = 5
 
 
 def parse_args(argv):
-    """[--json] [--days N] [--dimensions a,b] [--sitemaps] [--inspect url…]"""
-    opts = {"json": False, "days": DEFAULT_DAYS, "dimensions": ["query", "page"],
-            "sitemaps": False, "inspect": []}
+    """[--json] [--days N] [--limit N] [--dimensions a,b] [--sitemaps] [--inspect url…]"""
+    opts = {"json": False, "days": DEFAULT_DAYS, "limit": DEFAULT_LIMIT,
+            "dimensions": ["query", "page"], "sitemaps": False, "inspect": [],
+            "unknown": []}
     i = 0
     while i < len(argv):
         token = argv[i]
@@ -23,6 +26,9 @@ def parse_args(argv):
             i += 1
         elif token == "--days" and i + 1 < len(argv):
             opts["days"] = max(1, int(argv[i + 1]))
+            i += 2
+        elif token == "--limit" and i + 1 < len(argv):
+            opts["limit"] = max(1, int(argv[i + 1]))
             i += 2
         elif token == "--dimensions" and i + 1 < len(argv):
             opts["dimensions"] = [d.strip() for d in argv[i + 1].split(",") if d.strip()]
@@ -36,7 +42,11 @@ def parse_args(argv):
                 opts["inspect"].append(argv[i])
                 i += 1
         else:
+            # 무인 실행에서 오타 하나가 조용히 기본값을 쓰게 두지 않는다
+            opts["unknown"].append(token)
             i += 1
+    if opts["unknown"]:
+        print(f"경고: 알 수 없는 인자 {opts['unknown']} — 무시한다", file=sys.stderr)
     return opts
 
 
@@ -92,7 +102,7 @@ def list_sites():
     sites = service.sites().list().execute()
     return sites.get('siteEntry', [])
 
-def fetch_search_analytics(site_url, days=90, dimensions=['query']):
+def fetch_search_analytics(site_url, days=90, dimensions=['query'], limit=DEFAULT_LIMIT):
     service = get_search_console_service()
     
     end_date = datetime.now() - timedelta(days=2)
@@ -105,7 +115,7 @@ def fetch_search_analytics(site_url, days=90, dimensions=['query']):
         'startDate': start_date_str,
         'endDate': end_date_str,
         'dimensions': dimensions,
-        'rowLimit': 50,
+        'rowLimit': limit,
     }
     
     try:
@@ -134,6 +144,7 @@ def fetch_search_analytics(site_url, days=90, dimensions=['query']):
             'start_date': start_date_str,
             'end_date': end_date_str,
             'total_rows': len(results),
+            'truncated': len(results) >= limit,
             'data': results
         }
     except Exception as e:
@@ -156,15 +167,23 @@ def main():
                 "property_type": property_type(site_url),
                 "permission_level": sites[0].get("permissionLevel"),
                 "days": opts["days"],
+                "limit": opts["limit"],
                 "analytics": {},
                 "sitemaps": None,
                 "inspections": None,
             }
             for dim in opts["dimensions"]:
                 res = fetch_search_analytics(site_url, days=opts["days"],
-                                             dimensions=[dim]) or {}
+                                             dimensions=[dim], limit=opts["limit"])
+                if res is None:
+                    # 0행과 조회 실패는 다른 판정이다 (AC #26·#29) — 스테이지가
+                    # 구분할 수 있게 페이로드 안에 남긴다. stderr는 읽히지 않는다.
+                    payload["analytics"][dim] = {"ok": False, "error": "조회 실패"}
+                    continue
                 payload["analytics"][dim] = {
+                    "ok": True,
                     "total_rows": res.get("total_rows", 0),
+                    "truncated": res.get("truncated", False),
                     "start_date": res.get("start_date"),
                     "end_date": res.get("end_date"),
                     "data": res.get("data", []),

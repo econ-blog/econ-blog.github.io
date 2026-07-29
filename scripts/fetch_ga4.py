@@ -19,7 +19,7 @@ def parse_args(argv):
 
     주간 감사 ②는 28일 조회와 절삭 없는 페이지 목록이 필요하다(SEED AC #14·#16·#23).
     """
-    positional, days, limit = None, DEFAULT_DAYS, DEFAULT_LIMIT
+    positional, days, limit, unknown = None, DEFAULT_DAYS, DEFAULT_LIMIT, []
     i = 0
     while i < len(argv):
         token = argv[i]
@@ -33,7 +33,11 @@ def parse_args(argv):
             positional = token
             i += 1
         else:
+            # 무인 실행에서 오타 하나가 조용히 기본값을 쓰게 두지 않는다
+            unknown.append(token)
             i += 1
+    if unknown:
+        print(f"경고: 알 수 없는 인자 {unknown} — 무시한다", file=sys.stderr)
     return positional, max(1, days), max(1, limit)
 
 

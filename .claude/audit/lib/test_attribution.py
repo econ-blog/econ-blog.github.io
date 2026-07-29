@@ -86,6 +86,10 @@ r, M = ratios({"a": 90.0, "b": 30.0, "c": 30.0})
 check("중앙값", M, 30.0)
 check("배율 상", r["a"], 3.0)
 check("배율 중앙값 그룹", r["b"], 1.0)
+r_even, M_even = ratios({"a": 10.0, "b": 20.0, "c": 30.0, "d": 40.0})
+check("짝수 개 중앙값은 가운데 두 값의 평균", M_even, 25.0)
+check("짝수 개 배율", r_even["b"], 0.8)
+check("6개 중앙값", ratios({k: v for k, v in zip("abcdef", [1.0, 2.0, 3.0, 5.0, 8.0, 13.0])})[1], 4.0)
 r0, M0 = ratios({"a": 0.0, "b": 0.0})
 check("M=0이면 배율 0", r0["a"], 0.0)
 check("M=0 보고", M0, 0.0)
@@ -113,6 +117,12 @@ check("음수 강등", demote(-2, {"avg_position": 30.0, "clicks": 9}, MED)[0], 
 check("음수 유지", demote(-2, {"avg_position": 30.0, "clicks": 1}, MED)[0], -2)
 check("지표 없으면 강등 안 함", demote(2, {}, MED), (2, None))
 check("0은 그대로", demote(0, {"avg_position": 99.0, "clicks": 0}, MED), (0, None))
+check("중앙값 없으면 양수 강등 안 함",
+      demote(2, {"avg_position": 35.0, "clicks": 0}, {}), (2, None))
+check("중앙값 없으면 음수 강등 안 함",
+      demote(-2, {"avg_position": 30.0, "clicks": 9}, {}), (-2, None))
+check("강등 사유에 실제 비교값이 들어간다",
+      "중앙값 20.0" in demote(2, {"avg_position": 35.0, "clicks": 0}, MED)[1], True)
 
 print("clamp_no_gsc")
 check("+3 → +1", clamp_no_gsc(3), 1)
@@ -140,6 +150,18 @@ adj5, _ = decay({"금리": {"조정치": -1, "최초부여일": "2026-01-01",
                         "마지막감쇄일": None}}, "금리", -1, "2026-07-01")
 check("-1은 0까지 감쇄", adj5, 0)
 
+# 음수 → 양수 → 다시 음수: 시계가 되감기지 않으면 재진입 첫 주에 곧바로 감쇄된다
+RE = {}
+decay(RE, "금리", -2, "2026-01-01")
+decay(RE, "금리", -2, "2026-03-15")            # 73일 → -1
+decay(RE, "금리", 1, "2026-04-01")             # 음수 해제
+check("양수로 풀리면 최초부여일 지워짐", RE["금리"]["최초부여일"], None)
+check("양수로 풀리면 마지막감쇄일 초기화", RE["금리"]["마지막감쇄일"], None)
+check("재진입 첫 회차는 감쇄 없음", decay(RE, "금리", -2, "2026-06-01")[0], -2)
+check("재진입일이 새 최초부여일", RE["금리"]["최초부여일"], "2026-06-01")
+check("재진입 59일째는 유지", decay(RE, "금리", -2, "2026-07-29")[0], -2)
+check("재진입 60일째 감쇄", decay(RE, "금리", -2, "2026-07-31")[0], -1)
+
 with tempfile.TemporaryDirectory() as tmp:
     p = _P(tmp) / "topic-history.json"
     check("부재 시 빈 dict", load_history(p), {})
@@ -147,6 +169,20 @@ with tempfile.TemporaryDirectory() as tmp:
                             "마지막감쇄일": None}})
     check("왕복", load_history(p)["금리"]["조정치"], -1)
     check("끝에 개행", p.read_text(encoding="utf-8").endswith("\n"), True)
+
+print("patch_cohorts")
+from attribution import patch_cohorts  # noqa: E402
+
+CO_POSTS = [{"file": f"p{i}.md", "date": f"2026-07-{10 + i:02d}", "tags": ["금리"]}
+            for i in range(8)]
+co = patch_cohorts(CO_POSTS, ["2026-07-14"])
+check("코호트 1건", len(co), 1)
+check("이전 4건", len(co[0]["before"]), 4)
+check("이후 4건", len(co[0]["after"]), 4)
+check("표본 미달", co[0]["ready"], False)
+co2 = patch_cohorts(CO_POSTS, ["2026-07-13"])
+check("이후 5건이면 준비됨", co2[0]["ready"], True)
+check("패치 없으면 빈 목록", patch_cohorts(CO_POSTS, []), [])
 
 print()
 if FAILED:
