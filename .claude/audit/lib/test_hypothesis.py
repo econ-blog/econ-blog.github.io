@@ -79,6 +79,73 @@ with tempfile.TemporaryDirectory() as tmp:
         record_portfolio(led, {"D1": i}, f"2026-09-{i + 1:02d}")
     check("이력 상한 12", len(led["portfolio_history"]), 12)
 
+print("register / enforce_cap")
+from hypothesis import (  # noqa: E402
+    PROPOSAL_CAP, adopt, current_direction, due, enforce_cap, postpone,
+    register, resolve, stale_warning,
+)
+
+led = {"hypotheses": [], "portfolio_history": []}
+h1 = register(led, GOOD, "2026-07-26")
+check("id 부여", h1["id"], "H001")
+check("초기 상태", h1["상태"], "제안")
+check("제기일", h1["제기일"], "2026-07-26")
+check("채택일 비움", h1["채택일"], None)
+check("연기횟수 0", h1["연기횟수"], 0)
+check("대조이력 빈 목록", h1["대조이력"], [])
+check("원장에 들어감", len(led["hypotheses"]), 1)
+
+try:
+    register(led, {"주장": "그냥 좋아 보인다"}, "2026-07-26")
+    check("미달 등록 거부", "no raise", "ValueError")
+except ValueError:
+    check("미달 등록 거부", "ValueError", "ValueError")
+
+check("상한 3", PROPOSAL_CAP, 3)
+kept, dropped = enforce_cap([{"n": i} for i in range(5)])
+check("상위 3건만", [k["n"] for k in kept], [0, 1, 2])
+check("버린 건수", dropped, 2)
+check("3건 이하면 그대로", enforce_cap([{"n": 0}])[1], 0)
+
+print("adopt / due / resolve / postpone")
+h1 = adopt(h1, "2026-07-27")
+check("채택 후 상태", h1["상태"], "확인대기")
+check("채택일 기록", h1["채택일"], "2026-07-27")
+
+check("발행 미달이면 미도달", due(led, 10, 8), [])
+check("발행 도달", [h["id"] for h in due(led, 20, 8)], ["H001"])
+
+h2 = register(led, dict(GOOD, 확인시점="사이트 연령 D 42일"), "2026-07-26")
+h2 = adopt(h2, "2026-07-26")
+check("연령 미달", [h["id"] for h in due(led, 0, 41)], [])
+check("연령 도달", [h["id"] for h in due(led, 0, 42)], ["H002"])
+
+h3 = register(led, dict(GOOD, 확인시점="분위기가 좋아질 때"), "2026-07-26")
+h3 = adopt(h3, "2026-07-26")
+check("파싱 불가는 미도달", [h["id"] for h in due(led, 999, 999)],
+      ["H001", "H002"])
+
+resolve(h1, "확증", "세션당 페이지뷰 1.31", "2026-08-30")
+check("확증 상태", h1["상태"], "확증")
+check("대조이력 1건", len(h1["대조이력"]), 1)
+check("대조이력 내용", h1["대조이력"][0]["outcome"], "확증")
+
+postpone(h2, "2026-08-30", "GSC 0행")
+check("연기 1", h2["연기횟수"], 1)
+check("연기 중 상태 유지", h2["상태"], "확인대기")
+postpone(h2, "2026-09-06", "GSC 0행")
+postpone(h2, "2026-09-13", "GSC 0행")
+check("연기 3회 → 기각", h2["상태"], "기각")
+check("기각 사유 고정", h2["대조이력"][-1]["evidence"], "측정 불가")
+
+print("current_direction / stale_warning")
+check("현재 방향은 채택·확인대기만",
+      [h["id"] for h in current_direction(led)], ["H003"])
+check("이력 없으면 경고", stale_warning(led, "2026-07-26") is None, False)
+led["portfolio_history"].append({"date": "2026-07-26", "snapshot": {}})
+check("최신 이력이면 경고 없음", stale_warning(led, "2026-07-26"), None)
+check("14일 지나면 경고", stale_warning(led, "2026-08-20") is None, False)
+
 print()
 if FAILED:
     print("실패:")
@@ -86,3 +153,4 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
