@@ -196,11 +196,16 @@ def patch_cohorts(posts: list[dict], patch_dates: list[str],
     accepted-patches.md가 아직 없고 loop도 실행 전이므로 이 함수는 상당 기간
     빈 목록을 받는다 — 그 상태가 정상이다(Known limits #11). 이 결과로
     writing-styles.md를 수정하지 않는다. loop이 소유한다.
+
+    날짜가 없는 발행글은 어느 코호트에도 속할 수 없다.
     """
+    # 날짜가 None이거나 없는 발행글 제외
+    posts = [p for p in posts if p.get("date")]
+
     out = []
     for patch_date in sorted(patch_dates):
-        before = sorted(p["file"] for p in posts if p.get("date", "") < patch_date)
-        after = sorted(p["file"] for p in posts if p.get("date", "") >= patch_date)
+        before = sorted(p["file"] for p in posts if p["date"] < patch_date)
+        after = sorted(p["file"] for p in posts if p["date"] >= patch_date)
         out.append({"patch_date": patch_date, "before": before, "after": after,
                     "ready": len(after) >= min_posts})
     return out
