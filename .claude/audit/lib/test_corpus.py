@@ -86,4 +86,3 @@ if FAILED:
         print("  -", f)
     sys.exit(1)
 print("전부 통과")
-

@@ -160,22 +160,28 @@ def resolve(h: dict, outcome: str, evidence: str, today: str) -> dict:
     if outcome not in ("확증", "반증"):
         raise ValueError(f"outcome은 확증 또는 반증이어야 한다: {outcome!r}")
     h["상태"] = outcome
-    h["대조이력"].append({"date": today, "outcome": outcome, "evidence": evidence})
+    h.setdefault("대조이력", []).append(
+        {"date": today, "outcome": outcome, "evidence": evidence}
+    )
     return h
+
+
+TERMINAL = ("확증", "반증", "기각")
 
 
 def postpone(h: dict, today: str, reason: str) -> dict:
     """대조 자체가 불가능할 때 연기. 3회에 이르면 기각(사유 "측정 불가"). (AC #49)"""
+    if h.get("상태") in TERMINAL:
+        raise ValueError(
+            f"이미 종결된 가설은 연기할 수 없다: {h.get('id')} ({h.get('상태')})"
+        )
     h["연기횟수"] = int(h.get("연기횟수", 0)) + 1
+    history = h.setdefault("대조이력", [])
     if h["연기횟수"] >= POSTPONE_LIMIT:
         h["상태"] = "기각"
-        h["대조이력"].append(
-            {"date": today, "outcome": "기각", "evidence": "측정 불가"}
-        )
+        history.append({"date": today, "outcome": "기각", "evidence": "측정 불가"})
     else:
-        h["대조이력"].append(
-            {"date": today, "outcome": "연기", "evidence": reason}
-        )
+        history.append({"date": today, "outcome": "연기", "evidence": reason})
     return h
 
 
@@ -206,30 +212,162 @@ def stale_warning(ledger: dict, today: str, days: int = 14) -> str | None:
     return None
 
 
-def main(argv: list[str]) -> None:
-    """원장 요약을 JSON으로. 읽기 전용 — 이 진입점은 원장을 쓰지 않는다."""
-    from collections import Counter
-    from datetime import date as _today
+USAGE = """사용:
+  hypothesis.py summary  <원장>
+  hypothesis.py due      <원장> <발행건수> <사이트연령>
+  hypothesis.py record   <원장> <스냅샷.json> [오늘] [n1_count=N] [claims_total=N] [claims_per_post=X]
+  hypothesis.py register <원장> <후보.json> [오늘]
+  hypothesis.py adopt    <원장> <ID…> [오늘]
+  hypothesis.py resolve  <원장> <ID> <확증|반증> <근거> [오늘]
+  hypothesis.py postpone <원장> <ID> <사유> [오늘]
 
-    path = Path(
-        argv[1] if len(argv) > 1 else ".claude/audit/direction-log.json"
-    )
-    ledger = load_ledger(path)
-    today = _today.today().isoformat()
-    print(
-        json.dumps(
-            {
-                "path": str(path),
-                "current_direction": current_direction(ledger),
-                "counts_by_state": dict(
-                    Counter(h.get("상태") for h in ledger["hypotheses"])
-                ),
-                "stale": stale_warning(ledger, today),
-            },
-            ensure_ascii=False,
-            indent=2,
+원장 인자에 `-`를 주면 표준입력에서 읽는다(앞 명령의 출력을 그대로 파이프).
+**어떤 하위 명령도 파일에 쓰지 않는다** — 갱신된 원장을 stdout으로만 낸다.
+파일 쓰기와 git은 시퀀서(§9)가 한다."""
+
+
+def _read_ledger(arg: str) -> dict:
+    """경로 또는 `-`(표준입력). 앞 명령이 낸 봉투({"ledger": …})도 그대로 받는다."""
+    if arg == "-":
+        import sys as _s
+
+        data = json.loads(_s.stdin.read())
+    else:
+        return load_ledger(Path(arg))
+    if isinstance(data, dict) and "ledger" in data:
+        data = data["ledger"]
+    data.setdefault("hypotheses", [])
+    data.setdefault("portfolio_history", [])
+    return data
+
+
+def _find(ledger: dict, hid: str) -> dict:
+    for h in ledger["hypotheses"]:
+        if h.get("id") == hid:
+            return h
+    raise ValueError(f"원장에 없는 가설 id: {hid}")
+
+
+def _emit(ledger: dict, **info) -> None:
+    """갱신된 원장 + 부수 정보를 한 봉투로. 시퀀서는 `ledger`만 파일에 쓴다."""
+    print(json.dumps({"ledger": ledger, **info}, ensure_ascii=False, indent=2))
+
+
+def _today_or(args: list[str], index: int) -> str:
+    if len(args) > index and args[index]:
+        return args[index]
+    return _date.today().isoformat()
+
+
+def _coerce(text: str):
+    for cast in (int, float):
+        try:
+            return cast(text)
+        except ValueError:
+            continue
+    return text
+
+
+def main(argv: list[str]) -> None:
+    """하위 명령 디스패치. summary·due는 읽기 전용, 나머지는 stdout으로만 낸다."""
+    from collections import Counter
+
+    if len(argv) < 3:
+        raise SystemExit(USAGE)
+    cmd, args = argv[1], argv[2:]
+    ledger = _read_ledger(args[0])
+    rest = args[1:]
+
+    if cmd == "summary":
+        today = _today_or(rest, 0)
+        print(
+            json.dumps(
+                {
+                    "current_direction": current_direction(ledger),
+                    "counts_by_state": dict(
+                        Counter(h.get("상태") for h in ledger["hypotheses"])
+                    ),
+                    "stale": stale_warning(ledger, today),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
         )
-    )
+        return
+
+    if cmd == "due":
+        if len(rest) < 2:
+            raise SystemExit(USAGE)
+        print(
+            json.dumps(
+                due(ledger, int(rest[0]), int(rest[1])),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    if cmd == "record":
+        if not rest:
+            raise SystemExit(USAGE)
+        snap = json.loads(Path(rest[0]).read_text(encoding="utf-8"))
+        # portfolio.py의 전체 출력을 그대로 줘도 받는다.
+        snap = snap.get("snapshot", snap)
+        positional = [a for a in rest[1:] if "=" not in a]
+        # ⑥의 세 값은 주어진 것만 얹는다 — 없으면 키를 생략한다(None을 채우지 않는다).
+        for pair in (a for a in rest[1:] if "=" in a):
+            key, _, value = pair.partition("=")
+            if value.strip():
+                snap[key] = _coerce(value)
+        today = _today_or(positional, 0)
+        # 정체 경고는 **적재 전** 원장으로 판정한다 — 오늘 이력을 넣은 뒤에 보면
+        # 최신 이력이 항상 오늘이라 경고가 영원히 null이 된다.
+        stale = stale_warning(ledger, today)
+        previous = record_portfolio(ledger, snap, today)
+        _emit(ledger, previous=previous, stale=stale)
+        return
+
+    if cmd == "register":
+        if not rest:
+            raise SystemExit(USAGE)
+        payload = json.loads(Path(rest[0]).read_text(encoding="utf-8"))
+        candidates = payload if isinstance(payload, list) else [payload]
+        kept, dropped = enforce_cap(candidates)
+        today = _today_or(rest, 1)
+        registered = []
+        for c in kept:
+            source = c.pop("출처", None)
+            if source and source.get("유형") == "외부":
+                registered.append(register_external(ledger, c, today, source))
+            else:
+                registered.append(register(ledger, c, today, source=source))
+        _emit(ledger, registered=registered, dropped=dropped)
+        return
+
+    if cmd == "adopt":
+        if not rest:
+            raise SystemExit(USAGE)
+        ids = [a for a in rest if a.startswith("H")]
+        today = _today_or([a for a in rest if not a.startswith("H")], 0)
+        adopted = [adopt(_find(ledger, i), today) for i in ids]
+        _emit(ledger, adopted=adopted)
+        return
+
+    if cmd == "resolve":
+        if len(rest) < 3:
+            raise SystemExit(USAGE)
+        h = resolve(_find(ledger, rest[0]), rest[1], rest[2], _today_or(rest, 3))
+        _emit(ledger, resolved=h)
+        return
+
+    if cmd == "postpone":
+        if len(rest) < 2:
+            raise SystemExit(USAGE)
+        h = postpone(_find(ledger, rest[0]), _today_or(rest, 2), rest[1])
+        _emit(ledger, postponed=h)
+        return
+
+    raise SystemExit(USAGE)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from mdtext import split_front_matter, strip_code_spans
+
 DRAFT = re.compile(r"^draft:\s*(true|false)\s*$", re.MULTILINE)
 DATE = re.compile(r'^date:\s*"?(\d{4}-\d{2}-\d{2})', re.MULTILINE)
 TAGS = re.compile(r'^tags:\s*\[(.*)\]\s*$', re.MULTILINE)
@@ -60,9 +62,6 @@ def gate_stats(content_root: Path, today: str) -> dict:
         "oldest_age": age,
         "site_age": age,
     }
-
-
-from mdtext import split_front_matter, strip_code_spans  # noqa: E402
 
 
 def documents(content_root: Path) -> list[dict]:
@@ -119,4 +118,3 @@ def is_notice(doc: dict) -> bool:
 if __name__ == "__main__":
     today = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
     print(json.dumps(gate_stats(CONTENT_ROOT, today), ensure_ascii=False, indent=2))
-

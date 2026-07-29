@@ -26,31 +26,52 @@
 .venv/bin/python .claude/audit/lib/portfolio.py
 ```
 
-한 JSON이 나온다: `D1`·`D2`·`D3_source`·`D3_render`·`D4`·`D5`·`D6`.
-**값을 스스로 다시 계산하지 않는다** — 이 JSON이 유일한 산출 주체다.
+한 JSON이 나온다: `D1`·`D2`·`D3_source`·`D3_render`·`D4`·`D5`·`D6`, 그리고 원장에
+넣을 `snapshot`(8개 키). **값을 스스로 다시 계산하지 않고 스냅샷을 손으로 옮겨 적지도
+않는다** — 이 JSON이 유일한 산출 주체다. 출력을 파일로 저장해 두고(예:
+`/tmp/econ-portfolio.json`) §2의 `record`에 그대로 넘긴다.
 
 `D3_render.built`가 false면 그 절반을 생략하고 "빌드 산출물 없음 — 렌더 기준 막다름
 미판정"을 표에 적는다. `hugo`를 여기서 실행하지 않는다(④ E1이 이미 빌드한다).
 
+`D5.corpus_age`는 **사전을 포함한** 코퍼스 연령이라 ②③이 쓰는 `corpus.site_age`
+(포스트만·`welcome.md` 제외)와 분모가 다르다. 두 값을 같은 뜻으로 섞어 쓰지 않는다.
+
+`D4.meta_author`·`D4.jsonld_blogposting`의 불리언은 **발행된 포스트 페이지 전부가
+충족할 때만** true다. 한 장이라도 어긋나면 false이며 `*_pages` 카운트가 몇 장 중
+몇 장인지 보여 준다 — 소견에는 그 카운트를 증거로 적는다.
+
 ## 2. 직전 감사값 대조 (AC #45)
 
 ```
-.venv/bin/python .claude/audit/lib/hypothesis.py .claude/audit/direction-log.json
+.venv/bin/python .claude/audit/lib/hypothesis.py summary .claude/audit/direction-log.json
 ```
 
 `stale`이 null이 아니면 그 문자열을 **리포트 최상단 경고**로 낸다(AC #13을 방향 원장에도
 적용 — Known limits #17).
 
-직전 스냅샷은 `record_portfolio`가 돌려준다. 원장 갱신은 이 스테이지가 **문자열로만**
-만들고 실제 쓰기는 시퀀서가 한다. 스냅샷에 넣을 값은 아래 **11개로 고정**한다.
+스냅샷 적재와 직전값 조회는 **손으로 JSON을 쓰지 않고** `record`로 한다:
 
-**앞의 8개는 ⑤ 자신의 값**이며 D1–D6 표의 행과 1:1이다:
+```
+.venv/bin/python .claude/audit/lib/hypothesis.py record .claude/audit/direction-log.json /tmp/econ-portfolio.json <오늘> [n1_count=N] [claims_total=N] [claims_per_post=X]
+```
 
-`D1.mass.evergreen_ratio` · `D2.used` · `D3_source.links_per_post.median` ·
-`D3_source.self_reference` 개수 · `D3_render.dead_ends` 개수 ·
-`D4.primary_source_links.total` · `D5.ratio` · `D6.all_met`
+`{"ledger": …, "previous": …, "stale": …}`이 나온다. `previous`가 직전 스냅샷이고,
+`ledger`가 시퀀서에 넘길 원장 내용이다. **이 명령은 파일에 쓰지 않는다** — 쓰기는
+시퀀서(§9)가 한다. 원장 인자에 `-`를 주면 표준입력에서 읽으므로 §5·§6의 등록·대조
+명령을 파이프로 이어 붙여 하나의 원장으로 누적할 수 있다.
 
-**뒤의 3개는 ⑥이 산출해 시퀀서가 넘겨 준 값**이다(Plan 5 판단 라, 2026-07-27 승인):
+스냅샷에 넣을 값은 **11개로 고정**한다. **앞의 8개는 ⑤ 자신의 값**이며 D1–D6 표의
+행과 1:1이고, `portfolio.py`의 `snapshot`이 이미 만들어 준다:
+
+`d1_evergreen_mass_ratio` · `d2_vocab_used` · `d3_links_per_post_median` ·
+`d3_self_reference` · `d3_dead_ends` · `d4_primary_source_links` ·
+`d5_aged_ratio` · `d6_all_met`
+
+(`d3_dead_ends`는 `D3_render.built`가 false면 `null`이다 — "0건"과 "미측정"은 다르다.)
+
+**뒤의 3개는 ⑥이 산출해 시퀀서가 넘겨 준 값**이다(Plan 5 판단 라, 2026-07-27 승인).
+`record`의 `key=value` 인자로 넘긴다:
 
 `n1_count`(⑥의 `counts.N1`) · `claims_total` · `claims_per_post`
 
@@ -65,7 +86,7 @@
 >
 > **시퀀서가 세 값을 넘겨 주지 않으면**(⑥ 측정 실패, 또는 Plan 3 미병합) 세 키를 **생략한
 > 채로** 기록한다. `None`을 채워 넣지 않는다 — 다음 감사가 "값이 0이었다"와 "값이 없었다"를
-> 구분해야 한다.
+> 구분해야 한다. `record`에 해당 `key=value` 인자를 **주지 않으면** 그렇게 된다.
 
 ## 3. 소견 승격 판정 (닫힌 조건 — 목록 밖은 승격하지 않는다)
 
@@ -78,7 +99,7 @@
 | D2 | 없음 — **미사용 태그는 관측치다** (Known limits #14) | 항상 |
 | D3 | 고아 항목 ≥1건 · **렌더 기준** 막다름 ≥1건 · 자기참조 ≥1건 | 본문 유출 0건은 승격하지 않는다(인접 개념이 없는 용어는 링크할 곳이 실제로 없다) |
 | D4 | `hugo_author` false · `meta_author.value_nonempty` false · JSON-LD `author_key` false · 정책 페이지 누락 · 포스트당 1차 출처 링크 0건 | — |
-| D5 | 없음 — `D < 90`이면 항상 0이며 그 상태가 정상 | `site_age < 90` |
+| D5 | 없음 — `D < 90`이면 항상 0이며 그 상태가 정상 | `D5.corpus_age < 90` |
 | D6 | 어느 슬롯이든 충족률 **100% 미만** → 미충족 파일 목록을 소견으로 | 100%면 침묵 |
 
 D4의 1차 출처 호스트 목록은 SEED D4의 다섯 개(`ecos.bok.or.kr`·`fred.stlouisfed.org`·
@@ -111,8 +132,9 @@ D4의 1차 출처 호스트 목록은 SEED D4의 다섯 개(`ecos.bok.or.kr`·`f
 3. **관문 3 — 5필드 변환**: `hypothesis.validate`가 빈 목록을 돌려주지 않으면 기각한다.
    일반론은 가설이 아니다.
 
-통과한 것은 `register_external`로 등록하고, 출처에 제시자·검증일·통과URL·**기각된 형제
-주장 수**를 남긴다.
+통과한 것은 후보 JSON에 `출처` 키(`external_source`가 만드는 모양 — 유형·제시자·검증일·
+통과URL·**기각된 형제 주장 수**)를 붙여 §5의 `register` 명령에 넘긴다. `출처.유형`이
+`외부`면 CLI가 `register_external` 경로로 보낸다.
 
 ## 5. 새 가설 제안 (AC #46·#47)
 
@@ -132,29 +154,47 @@ D4의 1차 출처 호스트 목록은 SEED D4의 다섯 개(`ecos.bok.or.kr`·`f
 200자와 패딩된 2,000자를 구분하지 못하고, 그 패딩은 `.claude/loop/`가 탐지하려는 AI
 아티팩트 그 자체다.
 
-후보가 4건 이상이면 스스로 순위를 매겨 `enforce_cap`에 순서대로 넘긴다. 상위 3건만
-등록되고 **나머지는 기록하지 않는다**.
+후보가 4건 이상이면 스스로 **순위를 매겨 그 순서대로** 후보 JSON 배열에 담는다. 상위
+3건만 등록되고 **나머지는 기록하지 않는다**(`enforce_cap`이 CLI 안에서 강제한다).
+
+후보 배열을 파일로 쓰고(예: `/tmp/econ-candidates.json`) 앞 단계의 원장에 이어 붙인다:
+
+```
+.venv/bin/python .claude/audit/lib/hypothesis.py register - /tmp/econ-candidates.json <오늘>
+```
+
+`{"ledger": …, "registered": […], "dropped": N}`이 나온다. **5필드 검증·id 부여·상한은
+전부 이 명령이 한다** — 원장 JSON을 손으로 만들지 않는다. 손으로 만들면 `validate`·
+`next_id`·`enforce_cap`을 전부 우회하게 되고, 사전등록 절차 자체가 무의미해진다.
 
 ## 6. 대조·연기·기각 (AC #49)
 
-`due(ledger, published_count, site_age)`로 확인 시점에 도달한 `확인대기` 가설을 얻는다.
-`published_count`·`site_age`는 ②③ 단계가 이미 계산한 값을 시퀀서에서 받는다 — ⑤가
-`corpus.py`를 다시 부르지 않는다.
+확인 시점에 도달한 `확인대기` 가설을 얻는다. `<발행건수>`·`<사이트연령>`은 ②③ 단계가
+이미 계산한 값을 시퀀서에서 받는다 — ⑤가 `corpus.py`를 다시 부르지 않는다(D5의
+`corpus_age`도 쓰지 않는다 — 분모가 다르다).
 
-- 예측 충족 → `resolve(h, "확증", 근거수치, 오늘)`
-- 기각 기준 충족 → `resolve(h, "반증", 근거수치, 오늘)`
-- 둘 다 아니면 `확인대기` 유지
-- **데이터가 없어 대조 자체가 불가능하면** `postpone(h, 오늘, 사유)`. 3회에 이르면
+```
+.venv/bin/python .claude/audit/lib/hypothesis.py due - <발행건수> <사이트연령>
+```
+
+도달한 각 가설을 판정해 원장에 이어 붙인다. 명령마다 갱신된 원장이 stdout으로 나오므로
+`-`로 다음 명령에 넘긴다.
+
+- 예측 충족 → `resolve - <ID> 확증 <근거수치> <오늘>`
+- 기각 기준 충족 → `resolve - <ID> 반증 <근거수치> <오늘>`
+- 둘 다 아니면 `확인대기` 유지 (아무 명령도 부르지 않는다)
+- **데이터가 없어 대조 자체가 불가능하면** `postpone - <ID> <사유> <오늘>`. 3회에 이르면
   자동으로 `기각`("측정 불가")이 된다.
 
-`확증`·`반증`·`기각` 항목은 삭제하지 않는다.
+`확증`·`반증`·`기각` 항목은 삭제하지 않는다. 이미 종결된 가설에 `postpone`을 부르면
+CLI가 거부한다.
 
 ## 7. 채택 게이트 (AC #48)
 
 - **무인 모드**: `adopt`를 호출하지 않는다. `제안` 상태까지만 기록한다.
 - **수동 모드**: 각 `제안` 가설의 5필드를 그대로 보여주고 **"이 가설을 채택해
   `direction-log.json`에 확인대기로 올릴까요?"** 로 승인을 구한다. 명확한 긍정만 승인으로
-  인정한다. 승인된 것만 `adopt`한다.
+  인정한다. 승인된 것만 `adopt - <ID…> <오늘>`로 올린다.
 
 ## 리포트 조립 (시퀀서가 소비)
 
@@ -183,10 +223,13 @@ D4의 1차 출처 호스트 목록은 SEED D4의 다섯 개(`ecos.bok.or.kr`·`f
 | D3 유입 중앙값 / 고아 | 2 / 0건 | … | … |
 | D3 렌더 막다름 / 자기참조 | 0건 / 0건 | … | … |
 | D4 1차 출처 링크(포스트) | 0건 | … | … |
-| D5 90일 경과 | 0/9 (D=8) | … | … |
+| D4 meta author / JSON-LD author | 값 빔 (0/11장) / 키 없음 (0/11장) | … | … |
+| D5 90일 경과 | 0/9 (코퍼스 연령 8일) | … | … |
 | D6 슬롯 충족 | 포스트 9/9·9/9, 사전 10/10·10/10 | … | … |
 
 분모: content/posts + content/dictionary (공지·초안 제외). 질량은 공백·코드스팬 제외 글자 수.
+D4의 `n/m장`은 발행된 포스트 페이지 **전부**에 대한 카운트다(표본 한 장이 아니다).
+"코퍼스 연령"은 사전을 포함한 값이며 ②③의 사이트 연령과 분모가 다르다.
 
 ### 소견
 (§3의 승격 조건을 만족한 것만. 없으면 "- 없음")

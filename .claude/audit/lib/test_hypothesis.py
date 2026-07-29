@@ -168,6 +168,104 @@ try:
 except ValueError:
     check("내부 출처 거부", "ValueError", "ValueError")
 
+print("종결 가설 방어")
+h_done = register(led, GOOD, "2026-07-26")
+resolve(h_done, "확증", "근거", "2026-07-27")
+try:
+    postpone(h_done, "2026-08-03", "GSC 0행")
+    check("종결 가설 연기 거부", "no raise", "ValueError")
+except ValueError:
+    check("종결 가설 연기 거부", "ValueError", "ValueError")
+check("연기횟수 안 늘어남", h_done["연기횟수"], 0)
+
+# 손으로 만든 원장 항목에 대조이력 키가 없어도 KeyError를 내지 않는다
+bare = {"id": "H900", "상태": "확인대기", "연기횟수": 0}
+resolve(bare, "반증", "근거", "2026-08-03")
+check("대조이력 자동 생성", len(bare["대조이력"]), 1)
+
+print("CLI — 원장을 stdout으로만 낸다")
+import subprocess  # noqa: E402
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PY = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(HERE))),
+                  ".venv", "bin", "python")
+CLI = os.path.join(HERE, "hypothesis.py")
+
+
+def run(*args, stdin=None):
+    r = subprocess.run([PY, CLI, *args], capture_output=True, text=True,
+                       input=stdin)
+    if r.returncode != 0:
+        raise AssertionError(f"{args} → exit {r.returncode}\n{r.stderr}")
+    return json.loads(r.stdout)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    lp = Path(tmp) / "direction-log.json"
+    save_ledger(lp, {"hypotheses": [], "portfolio_history": []})
+    snap_path = Path(tmp) / "snap.json"
+    # portfolio.py 전체 출력을 그대로 줘도 snapshot 키를 꺼내 쓴다
+    snap_path.write_text(json.dumps(
+        {"generated": "2026-07-26", "snapshot": {"d2_vocab_used": 11}}),
+        encoding="utf-8")
+
+    out = run("record", str(lp), str(snap_path), "2026-07-26",
+              "n1_count=4", "claims_total=87", "claims_per_post=7.9")
+    snap = out["ledger"]["portfolio_history"][-1]["snapshot"]
+    check("전체 출력에서 snapshot 추출", snap["d2_vocab_used"], 11)
+    check("⑥ 정수값", snap["n1_count"], 4)
+    check("⑥ 실수값", snap["claims_per_post"], 7.9)
+    check("첫 실행 직전값 없음", out["previous"], None)
+    # 적재 후에 판정하면 최신 이력이 늘 오늘이라 경고가 영원히 null이 된다
+    check("정체 경고는 적재 전 기준", out["stale"] is None, False)
+    check("원장 파일은 그대로", json.loads(lp.read_text())["portfolio_history"], [])
+
+    # ⑥ 값을 안 넘기면 키 자체가 없다 — None을 채우지 않는다
+    save_ledger(lp, out["ledger"])
+    fresh = run("record", str(lp), str(snap_path), "2026-07-27")
+    check("직전 이력이 최신이면 경고 없음", fresh["stale"], None)
+    check("직전 스냅샷 반환", fresh["previous"]["snapshot"]["n1_count"], 4)
+    save_ledger(lp, {"hypotheses": [], "portfolio_history": []})
+
+    out2 = run("record", str(lp), str(snap_path), "2026-07-26")
+    snap2 = out2["ledger"]["portfolio_history"][-1]["snapshot"]
+    check("⑥ 미제공이면 키 생략", "n1_count" in snap2, False)
+
+    # 파이프: record 출력을 register가 그대로 받는다
+    cand = Path(tmp) / "cand.json"
+    cand.write_text(json.dumps([GOOD, dict(GOOD, 주장="둘"), dict(GOOD, 주장="셋"),
+                                dict(GOOD, 주장="넷")], ensure_ascii=False),
+                    encoding="utf-8")
+    piped = run("register", "-", str(cand), "2026-07-26",
+                stdin=json.dumps(out))
+    check("상한 3건", len(piped["registered"]), 3)
+    check("버린 건수", piped["dropped"], 1)
+    check("이전 단계 이력 보존",
+          len(piped["ledger"]["portfolio_history"]), 1)
+
+    led_path = Path(tmp) / "l2.json"
+    save_ledger(led_path, piped["ledger"])
+    adopted = run("adopt", str(led_path), "H001", "2026-07-27")
+    check("CLI 채택", adopted["adopted"][0]["상태"], "확인대기")
+    save_ledger(led_path, adopted["ledger"])
+    check("CLI due", [h["id"] for h in run("due", str(led_path), "20", "8")],
+          ["H001"])
+    resolved = run("resolve", str(led_path), "H001", "확증", "1.31",
+                   "2026-08-30")
+    check("CLI 확증", resolved["resolved"]["상태"], "확증")
+    summary = run("summary", str(led_path), "2026-07-27")
+    check("CLI summary 상태 집계", summary["counts_by_state"]["제안"], 2)
+
+    # 외부 출처가 붙은 후보는 register_external 경로로 간다
+    ext = Path(tmp) / "ext.json"
+    ext.write_text(json.dumps(
+        dict(GOOD, 출처=external_source("사용자", "2026-07-26", ["https://x/y"], 2)),
+        ensure_ascii=False), encoding="utf-8")
+    e2 = run("register", str(led_path), str(ext), "2026-07-26")
+    check("CLI 외부 등록", e2["registered"][0]["출처"]["유형"], "외부")
+    check("출처가 5필드에 섞이지 않음",
+          "출처" in validate(e2["registered"][0]), False)
+
 print()
 if FAILED:
     print("실패:")
@@ -175,5 +273,3 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
-
-

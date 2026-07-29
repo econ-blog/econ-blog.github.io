@@ -23,11 +23,19 @@ EVERGREEN_RULE = (
 )
 
 
-def _median(values: list[int]) -> int:
+def _median(values: list[int]) -> int | float:
+    """진짜 중앙값 — 짝수 개면 가운데 두 값의 평균. 정수로 떨어지면 int로 돌려준다.
+
+    상위 원소를 그대로 쓰면(s[n // 2]) 짝수 코퍼스에서 값이 위로 치우치고 문서
+    한 건이 늘 때마다 계단식으로 뛴다. D1 중앙값과 D3 유입 중앙값은 감사 간
+    대조 대상(스냅샷 키)이므로 그 편향을 남겨 두지 않는다.
+    """
     if not values:
         return 0
     s = sorted(values)
-    return s[len(s) // 2]
+    n = len(s)
+    mid = s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+    return int(mid) if float(mid).is_integer() else mid
 
 
 def _ratio(part: int, whole: int) -> float:
@@ -44,7 +52,8 @@ def d1_composition(docs: list[dict]) -> dict:
         for d in live
         if d["section"] == "dictionary" or not d["has_source_url"]
     ]
-    timely = [d for d in live if d not in evergreen]
+    evergreen_files = {d["file"] for d in evergreen}
+    timely = [d for d in live if d["file"] not in evergreen_files]
 
     mass_e = sum(d["chars"] for d in evergreen)
     mass_t = sum(d["chars"] for d in timely)
@@ -73,17 +82,23 @@ def d1_composition(docs: list[dict]) -> dict:
     }
 
 
+TRAILING_COMMENT = re.compile(r"\s+#.*$")
+
+
 def load_vocab(text: str) -> list[str]:
     """topics.yaml의 최상위 태그를 파일 순서대로. (AC #44 D2)
 
     PyYAML을 쓰지 않는다 — internal_links.load_terms와 같은 규약(정규식 파싱)이다.
     최상위 키는 들여쓰기가 없고 콜론으로 끝나는 줄이다.
+
+    줄 끝 주석(`금리:  # 설명`)을 먼저 떼어 낸다 — 떼지 않으면 그 줄이 콜론으로
+    끝나지 않아 어휘에서 **조용히** 빠지고, D2의 분모가 소리 없이 줄어든다.
     """
     out = []
     for line in text.splitlines():
         if not line or line.startswith(("#", " ", "\t")):
             continue
-        stripped = line.rstrip()
+        stripped = TRAILING_COMMENT.sub("", line).rstrip()
         if stripped.endswith(":"):
             out.append(stripped[:-1].strip())
     return out
@@ -174,19 +189,30 @@ def d3_source_side(docs: list[dict], terms: dict) -> dict:
 
 # --minify가 값에 공백이 없는 속성의 인용부호를 벗긴다: href="/x/" → href=/x/
 # 정규식 하나로 둘 다 잡는다 (쌍따옴표·홑따옴표·따옴표없음). HTML 파서를 도입하지 않는다(Constraints).
+# (?<![-\w])는 data-href= 같은 접미 속성이 href로 잡히는 것을 막는다.
 HTML_HREF = re.compile(
-    r'href=(?:"(?P<q>[^"]*)"|\'(?P<s>[^\']*)\'|(?P<b>[^\s>"]+))'
+    r'(?<![-\w])href=(?:"(?P<q>[^"]*)"|\'(?P<s>[^\']*)\'|(?P<b>[^\s>"]+))'
 )
 BACKLINK_BLOCK = re.compile(r"related-posts-list(?P<inner>.*?)</ul>", re.S)
 
+# 슬러그 한 칸을 반드시 요구한다. `/dictionary/`·`/posts/`(섹션 목록)는 제외 —
+# 그 둘은 PaperMod 상단 내비게이션이 **모든 페이지에** 넣는 링크다.
+POST_PAGE_HREF = re.compile(r"\A/posts/[^/]+/\Z")
+CONTENT_PAGE_HREF = re.compile(r"\A/(?:posts|dictionary)/[^/]+/\Z")
+
+
+def _pick(m: re.Match | None) -> str:
+    """따옴표 세 형태(쌍·홑·없음) 중 실제로 매치된 그룹의 값."""
+    if m is None:
+        return ""
+    for g in m.groups():
+        if g is not None:
+            return g
+    return ""
+
 
 def _html_hrefs(html: str) -> list[str]:
-    return [
-        m.group("q")
-        if m.group("q") is not None
-        else (m.group("s") if m.group("s") is not None else m.group("b"))
-        for m in HTML_HREF.finditer(html)
-    ]
+    return [_pick(m) for m in HTML_HREF.finditer(html)]
 
 
 def d3_render_side(public_root: Path, terms: dict) -> dict:
@@ -198,6 +224,11 @@ def d3_render_side(public_root: Path, terms: dict) -> dict:
 
     순회 대상은 terms의 슬러그다. public/dictionary/를 iterdir()하면
     page/ 페이지네이션 디렉터리가 섞인다.
+
+    **나가는 링크는 슬러그가 있는 개별 페이지만 센다.** PaperMod 상단
+    내비게이션이 모든 페이지에 `/dictionary/`(섹션 목록)를 넣으므로, 접두사만
+    보면 outgoing이 절대 비지 않고 dead_ends가 영원히 빈 목록이 된다 —
+    값이 0인 것과 판정이 죽은 것을 구분할 수 없게 되는 AC #28 I1 계열의 함정이다.
     """
     backlinks, missing, dead_ends = {}, [], []
     built = False
@@ -211,14 +242,15 @@ def d3_render_side(public_root: Path, terms: dict) -> dict:
         html = page.read_text(encoding="utf-8")
         block = BACKLINK_BLOCK.search(html)
         backlinks[slug] = (
-            len([h for h in _html_hrefs(block.group("inner")) if h.startswith("/posts/")])
+            len([h for h in _html_hrefs(block.group("inner"))
+                 if POST_PAGE_HREF.match(h)])
             if block
             else 0
         )
         outgoing = [
             h
             for h in _html_hrefs(html)
-            if h.startswith(("/posts/", "/dictionary/")) and h != f"/dictionary/{slug}/"
+            if CONTENT_PAGE_HREF.match(h) and h != f"/dictionary/{slug}/"
         ]
         if not outgoing:
             dead_ends.append(slug)
@@ -248,11 +280,13 @@ PRIMARY_SOURCE_HOSTS = (
     "bok.or.kr",
 )
 
+# 속성 순서를 가정하지 않는다 — <meta> 태그를 먼저 잡고 그 안에서 속성을 읽는다.
 # minify는 content=""를 content로 줄인다: <meta name=author content>
-META_AUTHOR = re.compile(
-    r'<meta\s+name=(?:"author"|author)(?P<rest>[^>]*)>', re.I
+META_TAG = re.compile(r"<meta\s(?P<attrs>[^>]*)>", re.I)
+ATTR_NAME = re.compile(r"""(?<![-\w])name=(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""", re.I)
+ATTR_CONTENT = re.compile(
+    r"""(?<![-\w])content=(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""", re.I
 )
-META_AUTHOR_VALUE = re.compile(r'content=(?:"(?P<q>[^"]*)"|(?P<b>[^\s>"]+))')
 LDJSON = re.compile(
     r"<script[^>]*application/ld\+json[^>]*>(?P<body>.*?)</script>",
     re.S | re.I,
@@ -260,15 +294,34 @@ LDJSON = re.compile(
 URL_HOST = re.compile(r"https?://(?P<host>[^/\s)\"']+)")
 
 
+def _is_primary_source(host: str) -> bool:
+    """호스트 일치는 접미 일치다 — www.kosis.kr·서브도메인을 놓치지 않는다.
+
+    정확 일치만 보면 정당한 1차 출처 링크가 0건으로 집계되고, "포스트당 1차
+    출처 링크 0건"이 승격 조건이므로 글쓴이가 해소할 수 없는 소견이 매주 뜬다.
+    포트는 떼고 비교한다.
+    """
+    h = host.split(":")[0].lower()
+    return any(h == p or h.endswith("." + p) for p in PRIMARY_SOURCE_HOSTS)
+
+
 def _hugo_author_set(hugo_toml: str) -> bool:
     return bool(re.search(r"^\s*author\s*=", hugo_toml, re.M))
 
 
-def _sample_post_html(public_root: Path) -> tuple[Path | None, str]:
-    pages = sorted((public_root / "posts").glob("*/index.html"))
-    if not pages:
-        return None, ""
-    return pages[0], pages[0].read_text(encoding="utf-8")
+def _meta_author(html: str) -> tuple[bool, bool]:
+    """(태그 존재, 값이 비어 있지 않음). AC #44 D4(b)는 존재가 아니라 값을 묻는다."""
+    for m in META_TAG.finditer(html):
+        attrs = m.group("attrs")
+        nm = ATTR_NAME.search(attrs)
+        if not nm or _pick(nm).strip().lower() != "author":
+            continue
+        return True, bool(_pick(ATTR_CONTENT.search(attrs)).strip())
+    return False, False
+
+
+def _post_pages(public_root: Path) -> list[Path]:
+    return sorted((public_root / "posts").glob("*/index.html"))
 
 
 def d4_eeat(
@@ -279,13 +332,19 @@ def d4_eeat(
     (b)는 빌드 산출물에서 본다 — 테마가 무엇을 방출하는지는 템플릿을 읽어서가
     아니라 public/을 봐야 알 수 있다. PaperMod는 BlogPosting을 이미 방출하며
     실제 공백은 author 하나다.
+
+    **표본 한 장이 아니라 발행된 포스트 페이지 전부를 본다.** 축은 템플릿
+    속성이라 보통 전 페이지가 같지만, 레이아웃 override로 한 장만 어긋나는
+    경우를 표본 추출로는 영영 볼 수 없다. 불리언 키는 **전 페이지가 충족할
+    때만** True이며(한 장이라도 어긋나면 소견으로 승격된다), 몇 장 중 몇 장인지는
+    `*_pages` 카운트로 함께 낸다.
     """
     per_file, by_section = {}, {"posts": 0, "dictionary": 0}
     for d in docs:
         if d["draft"] or is_notice(d):
             continue
         hosts = URL_HOST.findall(strip_code_spans(d["body"]))
-        n = sum(1 for h in hosts if h in PRIMARY_SOURCE_HOSTS)
+        n = sum(1 for h in hosts if _is_primary_source(h))
         per_file[d["file"]] = n
         by_section[d["section"]] += n
 
@@ -303,37 +362,47 @@ def d4_eeat(
         },
     }
 
-    sample, html = _sample_post_html(public_root)
-    if sample is None:
+    pages = _post_pages(public_root)
+    if not pages:
         result.update(
             {"built": False, "meta_author": None, "jsonld_blogposting": None}
         )
         return result
 
-    tag = META_AUTHOR.search(html)
-    value = ""
-    if tag:
-        vm = META_AUTHOR_VALUE.search(tag.group("rest"))
-        if vm:
-            value = (
-                vm.group("q") if vm.group("q") is not None else vm.group("b")
-            ) or ""
+    tag_pages = value_pages = present_pages = author_pages = 0
+    blocks_on_sample = 0
+    for i, page in enumerate(pages):
+        html = page.read_text(encoding="utf-8")
+        has_tag, has_value = _meta_author(html)
+        tag_pages += has_tag
+        value_pages += has_value
 
-    blocks = [m.group("body") for m in LDJSON.finditer(html)]
-    blogposting = next((b for b in blocks if '"BlogPosting"' in b), None)
+        blocks = [m.group("body") for m in LDJSON.finditer(html)]
+        if i == 0:
+            blocks_on_sample = len(blocks)
+        blogposting = next((b for b in blocks if '"BlogPosting"' in b), None)
+        present_pages += blogposting is not None
+        author_pages += blogposting is not None and '"author"' in blogposting
 
+    n = len(pages)
     result.update(
         {
             "built": True,
             "meta_author": {
-                "tag": bool(tag),
-                "value_nonempty": bool(value.strip()),
-                "sample": str(sample),
+                "tag": tag_pages == n,
+                "value_nonempty": value_pages == n,
+                "pages": n,
+                "tag_pages": tag_pages,
+                "value_nonempty_pages": value_pages,
+                "sample": str(pages[0]),
             },
             "jsonld_blogposting": {
-                "present": blogposting is not None,
-                "author_key": bool(blogposting) and '"author"' in blogposting,
-                "blocks": len(blocks),
+                "present": present_pages == n,
+                "author_key": author_pages == n,
+                "pages": n,
+                "present_pages": present_pages,
+                "author_key_pages": author_pages,
+                "blocks": blocks_on_sample,
             },
         }
     )
@@ -352,7 +421,12 @@ def _days_between(start: str, end: str) -> int:
 
 
 def d5_decay(docs: list[dict], today: str) -> dict:
-    """D5 감쇄 노출 — 시의성 글 중 90일 경과 비율. D < 90이면 항상 0이 정상. (AC #44 D5)"""
+    """D5 감쇄 노출 — 시의성 글 중 90일 경과 비율. D < 90이면 항상 0이 정상. (AC #44 D5)
+
+    `corpus_age`는 **사전을 포함한** 코퍼스 전체의 최고령 문서 기준이며,
+    ②③ 게이트가 쓰는 `corpus.site_age`(포스트만, welcome.md 제외)와 분모가
+    다르다. 두 값이 같은 리포트에 다른 뜻으로 실리지 않도록 이름을 분리한다.
+    """
     live = [d for d in docs if not d["draft"] and not is_notice(d)]
     timely = [
         d
@@ -362,7 +436,7 @@ def d5_decay(docs: list[dict], today: str) -> dict:
     aged = [d for d in timely if _days_between(d["date"], today) >= 90]
     dates = [d["date"] for d in live if d["date"]]
     return {
-        "site_age": _days_between(min(dates), today) if dates else 0,
+        "corpus_age": _days_between(min(dates), today) if dates else 0,
         "timely_total": len(timely),
         "aged_90": len(aged),
         "ratio": _ratio(len(aged), len(timely)),
@@ -395,6 +469,42 @@ def d6_slots(docs: list[dict]) -> dict:
     return out
 
 
+SNAPSHOT_KEYS = (
+    "d1_evergreen_mass_ratio",
+    "d2_vocab_used",
+    "d3_links_per_post_median",
+    "d3_self_reference",
+    "d3_dead_ends",
+    "d4_primary_source_links",
+    "d5_aged_ratio",
+    "d6_all_met",
+)
+
+
+def snapshot(axes: dict) -> dict:
+    """D1–D6 결과에서 원장 스냅샷 8개 키를 뽑는다. (AC #45)
+
+    스테이지가 손으로 옮겨 적지 않게 하려는 함수다 — 손으로 적으면 표의 행과
+    스냅샷 키가 조용히 어긋나고, 다음 감사의 "변화" 열이 엉뚱한 것을 비교한다.
+    ⑥의 세 값(n1_count·claims_total·claims_per_post)은 여기서 만들지 않는다.
+    시퀀서가 hypothesis.py record에 넘기며, 없으면 **키 자체를 생략**한다.
+    """
+    return {
+        "d1_evergreen_mass_ratio": axes["D1"]["mass"]["evergreen_ratio"],
+        "d2_vocab_used": axes["D2"]["used"],
+        "d3_links_per_post_median": axes["D3_source"]["links_per_post"]["median"],
+        "d3_self_reference": len(axes["D3_source"]["self_reference"]),
+        "d3_dead_ends": (
+            len(axes["D3_render"]["dead_ends"])
+            if axes["D3_render"]["built"]
+            else None
+        ),
+        "d4_primary_source_links": axes["D4"]["primary_source_links"]["total"],
+        "d5_aged_ratio": axes["D5"]["ratio"],
+        "d6_all_met": axes["D6"]["all_met"],
+    }
+
+
 def main() -> None:
     """D1–D6을 한 JSON으로. 스테이지는 이 출력만 소비한다. (AC #45)"""
     import json
@@ -410,23 +520,28 @@ def main() -> None:
     )
     public = Path("public")
 
+    today = _today.today().isoformat()
+    axes = {
+        "D1": d1_composition(docs),
+        "D2": d2_vocabulary(docs, vocab),
+        "D3_source": d3_source_side(docs, terms),
+        "D3_render": d3_render_side(public, terms),
+        "D4": d4_eeat(
+            docs,
+            content,
+            Path("hugo.toml").read_text(encoding="utf-8"),
+            public,
+        ),
+        "D5": d5_decay(docs, today),
+        "D6": d6_slots(docs),
+    }
     print(
         json.dumps(
             {
-                "generated": _today.today().isoformat(),
+                "generated": today,
                 "evergreen_rule": EVERGREEN_RULE,
-                "D1": d1_composition(docs),
-                "D2": d2_vocabulary(docs, vocab),
-                "D3_source": d3_source_side(docs, terms),
-                "D3_render": d3_render_side(public, terms),
-                "D4": d4_eeat(
-                    docs,
-                    content,
-                    Path("hugo.toml").read_text(encoding="utf-8"),
-                    public,
-                ),
-                "D5": d5_decay(docs, _today.today().isoformat()),
-                "D6": d6_slots(docs),
+                **axes,
+                "snapshot": snapshot(axes),
             },
             ensure_ascii=False,
             indent=2,
@@ -436,8 +551,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
