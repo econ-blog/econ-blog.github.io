@@ -247,6 +247,13 @@ check("비율", r5d["ratio"], 0.5)
 check("경과 파일", r5d["aged_files"], ["content/posts/old.md"])
 
 check("빈 코퍼스 0 나눗셈", d5_decay([], "2026-07-26")["ratio"], 0.0)
+check(
+    "잘못된 날짜 예외 회피",
+    d5_decay([dated("invalid", "posts", "TBD", source=True)], "2026-07-26")[
+        "site_age"
+    ],
+    0,
+)
 
 print("d6_slots")
 check("포스트 슬롯 문자열", POST_SLOTS,

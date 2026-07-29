@@ -173,14 +173,18 @@ def d3_source_side(docs: list[dict], terms: dict) -> dict:
 
 
 # --minify가 값에 공백이 없는 속성의 인용부호를 벗긴다: href="/x/" → href=/x/
-# 정규식 하나로 둘 다 잡는다. HTML 파서를 도입하지 않는다(Constraints).
-HTML_HREF = re.compile(r'href=(?:"(?P<q>[^"]*)"|(?P<b>[^\s>"]+))')
+# 정규식 하나로 둘 다 잡는다 (쌍따옴표·홑따옴표·따옴표없음). HTML 파서를 도입하지 않는다(Constraints).
+HTML_HREF = re.compile(
+    r'href=(?:"(?P<q>[^"]*)"|\'(?P<s>[^\']*)\'|(?P<b>[^\s>"]+))'
+)
 BACKLINK_BLOCK = re.compile(r"related-posts-list(?P<inner>.*?)</ul>", re.S)
 
 
 def _html_hrefs(html: str) -> list[str]:
     return [
-        m.group("q") if m.group("q") is not None else m.group("b")
+        m.group("q")
+        if m.group("q") is not None
+        else (m.group("s") if m.group("s") is not None else m.group("b"))
         for m in HTML_HREF.finditer(html)
     ]
 
@@ -341,7 +345,10 @@ DICT_SLOTS = ("## 실생활에서는", "## 투자에서는")
 
 
 def _days_between(start: str, end: str) -> int:
-    return (_date.fromisoformat(end) - _date.fromisoformat(start)).days
+    try:
+        return (_date.fromisoformat(end) - _date.fromisoformat(start)).days
+    except (ValueError, TypeError):
+        return 0
 
 
 def d5_decay(docs: list[dict], today: str) -> dict:
