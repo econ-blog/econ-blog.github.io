@@ -187,7 +187,7 @@ check("패치 없으면 빈 목록", patch_cohorts(CO_POSTS, []), [])
 # 날짜 None인 발행글 처리
 CO_POSTS_WITH_NONE = [
     {"file": "p0.md", "date": "2026-07-10", "tags": ["금리"]},
-    {"file": "p_nodatе.md", "date": None, "tags": ["금리"]},
+    {"file": "p_nodate.md", "date": None, "tags": ["금리"]},
     {"file": "p1.md", "date": "2026-07-11", "tags": ["금리"]},
     {"file": "p2.md", "date": "2026-07-12", "tags": ["금리"]},
     {"file": "p3.md", "date": "2026-07-13", "tags": ["금리"]},
@@ -199,7 +199,7 @@ CO_POSTS_WITH_NONE = [
 co3 = patch_cohorts(CO_POSTS_WITH_NONE, ["2026-07-14"])
 check("날짜 None 제외 후 이전 4건", len(co3[0]["before"]), 4)
 check("날짜 None 제외 후 이후 4건", len(co3[0]["after"]), 4)
-check("날짜 None은 코호트에 포함 안 됨", "p_nodatе.md" in co3[0]["before"] + co3[0]["after"], False)
+check("날짜 None은 코호트에 포함 안 됨", "p_nodate.md" in co3[0]["before"] + co3[0]["after"], False)
 check("날짜 None이 ready 판정 안 함", co3[0]["ready"], False)
 
 print()

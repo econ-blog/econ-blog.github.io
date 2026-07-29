@@ -199,7 +199,6 @@ def patch_cohorts(posts: list[dict], patch_dates: list[str],
 
     날짜가 없는 발행글은 어느 코호트에도 속할 수 없다.
     """
-    # 날짜가 None이거나 없는 발행글 제외
     posts = [p for p in posts if p.get("date")]
 
     out = []
