@@ -10,6 +10,32 @@ import json
 from datetime import datetime
 
 DEFAULT_PROPERTY_ID = "546174128"
+DEFAULT_DAYS = 7
+DEFAULT_LIMIT = 200
+
+
+def parse_args(argv):
+    """[property_id] [--days N] [--limit N]. 기존 위치 인자를 보존한다.
+
+    주간 감사 ②는 28일 조회와 절삭 없는 페이지 목록이 필요하다(SEED AC #14·#16·#23).
+    """
+    positional, days, limit = None, DEFAULT_DAYS, DEFAULT_LIMIT
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token == "--days" and i + 1 < len(argv):
+            days = int(argv[i + 1])
+            i += 2
+        elif token == "--limit" and i + 1 < len(argv):
+            limit = int(argv[i + 1])
+            i += 2
+        elif token.isdigit() and positional is None:
+            positional = token
+            i += 1
+        else:
+            i += 1
+    return positional, max(1, days), max(1, limit)
+
 
 def main():
     credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -26,12 +52,9 @@ def main():
         }, ensure_ascii=False, indent=2))
         sys.exit(1)
 
-    property_id = os.environ.get("GA4_PROPERTY_ID")
-    if not property_id:
-        if len(sys.argv) > 1 and sys.argv[1].isdigit():
-            property_id = sys.argv[1]
-        else:
-            property_id = DEFAULT_PROPERTY_ID
+    positional_id, days, limit = parse_args(sys.argv[1:])
+    property_id = os.environ.get("GA4_PROPERTY_ID") or positional_id or DEFAULT_PROPERTY_ID
+    window = f"{days}daysAgo"
 
     try:
         from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -67,10 +90,10 @@ def main():
             "activeUsers": count
         })
 
-    # 1. Overall Traffic Summary (Last 7 Days)
+    # 1. Overall Traffic Summary
     summary_request = RunReportRequest(
         property=f"properties/{property_id}",
-        date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date=window, end_date="today")],
         metrics=[
             Metric(name="activeUsers"),
             Metric(name="screenPageViews"),
@@ -80,23 +103,23 @@ def main():
     )
     summary_response = client.run_report(summary_request)
 
-    # 2. Top Pages (Last 7 Days)
+    # 2. Top Pages
     pages_request = RunReportRequest(
         property=f"properties/{property_id}",
-        date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date=window, end_date="today")],
         dimensions=[Dimension(name="pagePath"), Dimension(name="pageTitle")],
         metrics=[Metric(name="screenPageViews"), Metric(name="activeUsers")],
-        limit=10
+        limit=limit
     )
     pages_response = client.run_report(pages_request)
 
-    # 3. Traffic Sources (Last 7 Days)
+    # 3. Traffic Sources
     sources_request = RunReportRequest(
         property=f"properties/{property_id}",
-        date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date=window, end_date="today")],
         dimensions=[Dimension(name="sessionSource")],
         metrics=[Metric(name="activeUsers"), Metric(name="sessions")],
-        limit=10
+        limit=limit
     )
     sources_response = client.run_report(sources_request)
 
@@ -139,7 +162,9 @@ def main():
         "propertyId": property_id,
         "realtimeActiveUsers": total_realtime_users,
         "realtimeBreakdown": realtime_details,
-        "dateRange": "Last 7 Days",
+        "dateRange": f"Last {days} Days",
+        "days": days,
+        "limit": limit,
         "summary": summary_data,
         "topPages": top_pages,
         "trafficSources": traffic_sources
