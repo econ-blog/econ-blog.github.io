@@ -105,18 +105,19 @@ def check_property_type(gsc_site_url: str | None, hugo_host: str) -> dict:
 def sitemap_submission(sitemaps: list[dict] | None) -> dict:
     """I4 — 미제출이면 단계와 무관하게 즉시 소견. (AC #28 I4)
 
-    lastDownloaded는 아직 읽히지 않은 sitemap의 응답에 아예 없다(2026-07-26 실측).
+    lastDownloaded와 lastSubmitted는 아직 읽히지 않은 sitemap의 응답에 아예 없을 수 있다(2026-07-26 실측).
     없는 것이 곧 실패는 아니다 — 제출은 됐다.
     """
     if sitemaps is None:
         return {"submitted": False, "pending": None, "last_downloaded": None,
-                "errors": None, "met": None, "immediate": True}
+                "last_submitted": None, "errors": None, "met": None, "immediate": True}
     if not sitemaps:
         return {"submitted": False, "pending": None, "last_downloaded": None,
-                "errors": None, "met": False, "immediate": True}
+                "last_submitted": None, "errors": None, "met": False, "immediate": True}
     first = sitemaps[0]
     return {"submitted": True, "pending": first.get("isPending"),
             "last_downloaded": first.get("lastDownloaded"),
+            "last_submitted": first.get("lastSubmitted"),
             "errors": first.get("errors"), "met": True, "immediate": True}
 
 
