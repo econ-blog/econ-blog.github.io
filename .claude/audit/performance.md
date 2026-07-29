@@ -67,7 +67,7 @@ PY
 ## 4. 게이트 판정 (AC #14·#15·#21)
 
 ```
-corpus_gate(published_count, site_age, sum(signal_groups.values()))
+corpus_gate(published_count, oldest_age, sum(signal_groups.values()))
 ```
 
 **미충족이면 여기서 멈춘다.** 리포트에 각 조건의 현재값/목표값 표와
@@ -85,9 +85,22 @@ corpus_gate(published_count, site_age, sum(signal_groups.values()))
    `medians`는 전체 주제군의 `avg_position` 중앙값과 클릭 **상위 1/3 경계값**이다.
    강등 사실과 근거 수치를 리포트에 남긴다.
 3. `has_gsc_data`가 거짓이면 `clamp_no_gsc(adj)`로 `[-1, +1]`로 자른다.
-4. `decay(history, tag, adj, today)`로 감쇄를 적용한다. 갱신된 `history`를 시퀀서에
-   돌려준다(`topic-history.json`).
-5. `M`을 만든 주제군 수를 리포트에 함께 적는다 — **3개면 중앙값 자체가 한 그룹이라
+4. 감쇄 적용 전에 기존 감쇄 기록을 불러온다:
+   ```
+   .venv/bin/python - <<'PY'
+   from pathlib import Path
+   import sys
+   sys.path.insert(0, ".claude/audit/lib")
+   from attribution import load_history
+   history = load_history(Path(".claude/audit/topic-history.json"))
+   # history는 {} (파일 부재 시 정상)이거나 기존 JSON 파일의 dict 형태
+   PY
+   ```
+   `load_history`는 파일이 없으면 `{}`를 돌려주며, 이는 첫 실행의 정상 상태다.
+   파일이 있으면 JSON을 파싱한다. 갱신된 `history` 레지를 다음 단계로 넘긴다.
+5. `decay(history, tag, adj, today)`로 감쇄를 적용한다. 갱신된 `history`를 문자열로
+   변환해 시퀀서에 돌려준다: `json.dumps(history, ensure_ascii=False, indent=2) + "\n"`.
+6. `M`을 만든 주제군 수를 리포트에 함께 적는다 — **3개면 중앙값 자체가 한 그룹이라
    사실상 두 그룹 비교다**(Known limits #2).
 
 ## 6. topic-report.md 조립 — 게이트 통과 시에만 (AC #22)
@@ -127,7 +140,7 @@ AdSense는 미신청이다. **수익 섹션을 통째로 생략한다.** "데이
 > 우연이 교란한다. r_g 기반 조정치는 상관에 근거한 결정론적 휴리스틱이며 **인과 추정치가
 > 아니다.** (Constraints)
 
-- GSC: 연동됨 O / 데이터 {있음|없음(0행)|조회 실패}. GA4: 연동됨 O / 데이터 {…}.
+- GSC: 연동됨 O / 데이터 {있음|없음(0행)|조회 실패} {(잘림 — 상위 N행만 집계)|없음}. GA4: 연동됨 O / 데이터 {…}.
 - URL 대응 실패로 버린 행: N개
 
 ### 데이터 충분성
