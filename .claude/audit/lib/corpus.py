@@ -62,6 +62,61 @@ def gate_stats(content_root: Path, today: str) -> dict:
     }
 
 
+from mdtext import split_front_matter, strip_code_spans  # noqa: E402
+
+
+def documents(content_root: Path) -> list[dict]:
+    """content/posts + content/dictionary의 모든 문서. D1·D3·D6의 공통 입력. (AC #44)
+
+    published()와 나란히 둔다 — published()는 posts만 보고 공지를 파일명으로
+    제외하지만, D1·D6의 분모는 사전을 포함하고 공지를 태그로 제외한다.
+    """
+    out = []
+    for section in ("posts", "dictionary"):
+        section_dir = content_root / section
+        if not section_dir.exists():
+            continue
+        for path in sorted(section_dir.glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            raw = path.read_text(encoding="utf-8")
+            front, body = split_front_matter(raw)
+            date_m = re.search(r"^date:\s*(\S+)", front, re.M)
+            tags_m = re.search(r"^tags:\s*\[(.*)\]\s*$", front, re.M)
+            draft_m = re.search(r"^draft:\s*(\S+)", front, re.M)
+            tags = []
+            if tags_m:
+                tags = [
+                    t.strip().strip('"').strip("'")
+                    for t in tags_m.group(1).split(",")
+                    if t.strip()
+                ]
+            out.append(
+                {
+                    "file": f"content/{section}/{path.name}",
+                    "slug": path.stem,
+                    "section": section,
+                    "date": date_m.group(1)[:10] if date_m else "",
+                    "tags": tags,
+                    "draft": bool(draft_m) and draft_m.group(1).strip() == "true",
+                    "has_source_url": bool(re.search(r"^source_url:", front, re.M)),
+                    "chars": len(re.sub(r"\s", "", strip_code_spans(body))),
+                    "body": body,
+                }
+            )
+    return out
+
+
+def is_notice(doc: dict) -> bool:
+    """공지 판정은 태그 기준이다 — 파일명이 아니다. (AC #44 D1·D6)
+
+    리스트 원소의 정확 일치로 판정한다. 부분 문자열 검사는 안 된다 —
+    "인공지능"이 "공지"를 포함한다.
+    """
+    return "공지" in doc.get("tags", [])
+
+
 if __name__ == "__main__":
     today = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
     print(json.dumps(gate_stats(CONTENT_ROOT, today), ensure_ascii=False, indent=2))
+
