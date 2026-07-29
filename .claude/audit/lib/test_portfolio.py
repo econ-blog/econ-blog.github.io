@@ -176,6 +176,53 @@ with tempfile.TemporaryDirectory() as tmp:
     check("빌드 없음", r5b["built"], False)
     check("빌드 없으면 막다름 비움", r5b["dead_ends"], [])
 
+print("d4_eeat")
+from portfolio import d4_eeat, PRIMARY_SOURCE_HOSTS  # noqa: E402
+
+check("1차 출처 호스트 다섯", len(PRIMARY_SOURCE_HOSTS), 5)
+check("bok.or.kr 포함", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+
+MINI_POST = (
+    '<head><meta name=author content><script type=application/ld+json>'
+    '{"@type":"BreadcrumbList","itemListElement":[]}</script>'
+    '<script type=application/ld+json>'
+    '{"@type":"BlogPosting","headline":"가","publisher":{"name":"나"}}</script></head>'
+)
+D4DOCS = [
+    doc("p1", "posts", 100, source=True,
+        body="근거는 [ECOS](https://ecos.bok.or.kr/x)와 [한경](https://hankyung.com/y).\n"),
+    doc("p2", "posts", 100, source=True, body="링크 없음.\n"),
+    doc("t1", "dictionary", 100, tags=["용어사전"],
+        body="[FRED](https://fred.stlouisfed.org/z) 참고. `https://kosis.kr/q`\n"),
+]
+with tempfile.TemporaryDirectory() as tmp:
+    root, pub = _P(tmp) / "content", _P(tmp) / "public"
+    root.mkdir()
+    (root / "about.md").write_text("---\ntitle: a\n---\n", encoding="utf-8")
+    (root / "privacy.md").write_text("---\ntitle: p\n---\n", encoding="utf-8")
+    (pub / "posts" / "p1").mkdir(parents=True)
+    (pub / "posts" / "p1" / "index.html").write_text(MINI_POST, encoding="utf-8")
+
+    r4 = d4_eeat(D4DOCS, root, 'baseURL = "https://x/"\ntitle = "t"\n', pub)
+    check("hugo author 미설정", r4["hugo_author"], False)
+    check("meta author 태그 존재", r4["meta_author"]["tag"], True)
+    check("meta author 값 비어 있음", r4["meta_author"]["value_nonempty"], False)
+    check("BlogPosting 발견(2번째 블록)", r4["jsonld_blogposting"]["present"], True)
+    check("author 키 없음", r4["jsonld_blogposting"]["author_key"], False)
+    check("ld+json 블록 수", r4["jsonld_blogposting"]["blocks"], 2)
+    check("about 있음", r4["policy_pages"]["about"], True)
+    check("contact 없음", r4["policy_pages"]["contact"], False)
+    check("1차 출처 총합", r4["primary_source_links"]["total"], 2)
+    check("포스트 쪽", r4["primary_source_links"]["posts"], 1)
+    check("사전 쪽", r4["primary_source_links"]["dictionary"], 1)
+    check("코드스팬 URL 미집계",
+          r4["primary_source_links"]["per_file"]["content/dictionary/t1.md"], 1)
+
+    r4b = d4_eeat(D4DOCS, root, 'author = "홍길동"\n', _P(tmp) / "nope")
+    check("hugo author 설정됨", r4b["hugo_author"], True)
+    check("빌드 없음", r4b["built"], False)
+    check("빌드 없으면 meta None", r4b["meta_author"], None)
+
 print()
 if FAILED:
     print("실패:")
@@ -183,6 +230,7 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 
 
 

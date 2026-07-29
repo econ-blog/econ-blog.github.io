@@ -234,4 +234,105 @@ def d3_render_side(public_root: Path, terms: dict) -> dict:
     }
 
 
+PRIMARY_SOURCE_HOSTS = (
+    "ecos.bok.or.kr",
+    "fred.stlouisfed.org",
+    "dart.fss.or.kr",
+    "kosis.kr",
+    "bok.or.kr",
+)
+
+# minify는 content=""를 content로 줄인다: <meta name=author content>
+META_AUTHOR = re.compile(
+    r'<meta\s+name=(?:"author"|author)(?P<rest>[^>]*)>', re.I
+)
+META_AUTHOR_VALUE = re.compile(r'content=(?:"(?P<q>[^"]*)"|(?P<b>[^\s>"]+))')
+LDJSON = re.compile(
+    r"<script[^>]*application/ld\+json[^>]*>(?P<body>.*?)</script>",
+    re.S | re.I,
+)
+URL_HOST = re.compile(r"https?://(?P<host>[^/\s)\"']+)")
+
+
+def _hugo_author_set(hugo_toml: str) -> bool:
+    return bool(re.search(r"^\s*author\s*=", hugo_toml, re.M))
+
+
+def _sample_post_html(public_root: Path) -> tuple[Path | None, str]:
+    pages = sorted((public_root / "posts").glob("*/index.html"))
+    if not pages:
+        return None, ""
+    return pages[0], pages[0].read_text(encoding="utf-8")
+
+
+def d4_eeat(
+    docs: list[dict], content_root: Path, hugo_toml: str, public_root: Path
+) -> dict:
+    """D4 E-E-A-T 표면. 경제·금융은 YMYL이라 별도 축으로 둔다. (AC #44 D4)
+
+    (b)는 빌드 산출물에서 본다 — 테마가 무엇을 방출하는지는 템플릿을 읽어서가
+    아니라 public/을 봐야 알 수 있다. PaperMod는 BlogPosting을 이미 방출하며
+    실제 공백은 author 하나다.
+    """
+    per_file, by_section = {}, {"posts": 0, "dictionary": 0}
+    for d in docs:
+        if d["draft"] or is_notice(d):
+            continue
+        hosts = URL_HOST.findall(strip_code_spans(d["body"]))
+        n = sum(1 for h in hosts if h in PRIMARY_SOURCE_HOSTS)
+        per_file[d["file"]] = n
+        by_section[d["section"]] += n
+
+    result = {
+        "hugo_author": _hugo_author_set(hugo_toml),
+        "policy_pages": {
+            name: (content_root / f"{name}.md").is_file()
+            for name in ("about", "contact", "privacy")
+        },
+        "primary_source_links": {
+            "total": by_section["posts"] + by_section["dictionary"],
+            "posts": by_section["posts"],
+            "dictionary": by_section["dictionary"],
+            "per_file": per_file,
+        },
+    }
+
+    sample, html = _sample_post_html(public_root)
+    if sample is None:
+        result.update(
+            {"built": False, "meta_author": None, "jsonld_blogposting": None}
+        )
+        return result
+
+    tag = META_AUTHOR.search(html)
+    value = ""
+    if tag:
+        vm = META_AUTHOR_VALUE.search(tag.group("rest"))
+        if vm:
+            value = (
+                vm.group("q") if vm.group("q") is not None else vm.group("b")
+            ) or ""
+
+    blocks = [m.group("body") for m in LDJSON.finditer(html)]
+    blogposting = next((b for b in blocks if '"BlogPosting"' in b), None)
+
+    result.update(
+        {
+            "built": True,
+            "meta_author": {
+                "tag": bool(tag),
+                "value_nonempty": bool(value.strip()),
+                "sample": str(sample),
+            },
+            "jsonld_blogposting": {
+                "present": blogposting is not None,
+                "author_key": bool(blogposting) and '"author"' in blogposting,
+                "blocks": len(blocks),
+            },
+        }
+    )
+    return result
+
+
+
 
