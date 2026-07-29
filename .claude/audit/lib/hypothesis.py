@@ -97,6 +97,37 @@ def register(
     return entry
 
 
+def external_source(
+    presenter: str,
+    verified_on: str,
+    passed_urls: list[str],
+    rejected_siblings: int,
+    unverified: bool = False,
+) -> dict:
+    """외부 가설의 출처 기록. 어디서 왔고 형제 몇 건이 걸러졌는지 추적한다. (AC #51)"""
+    return {
+        "유형": "외부",
+        "제시자": presenter,
+        "검증일": verified_on,
+        "통과URL": list(passed_urls),
+        "기각된형제주장수": int(rejected_siblings),
+        "근거미확인": bool(unverified),
+    }
+
+
+def register_external(
+    ledger: dict, candidate: dict, today: str, source: dict
+) -> dict:
+    """3관문을 통과한 외부 주장을 `제안`으로 등록. (AC #50·#51)
+
+    관문 1(인용 검증)·관문 2(저장소 대조)는 스테이지가 진행하고 결과를 source로
+    넘긴다. 관문 3(5필드 변환)은 register의 validate가 그대로 강제한다.
+    """
+    if source.get("유형") != "외부":
+        raise ValueError("register_external은 유형이 '외부'인 출처만 받는다")
+    return register(ledger, candidate, today, source=source)
+
+
 def enforce_cap(candidates: list[dict]) -> tuple[list[dict], int]:
     """상위 PROPOSAL_CAP건과 버린 건수. 버린 것은 기록하지 않는다. (AC #47)"""
     return candidates[:PROPOSAL_CAP], max(0, len(candidates) - PROPOSAL_CAP)

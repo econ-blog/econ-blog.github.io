@@ -146,6 +146,28 @@ led["portfolio_history"].append({"date": "2026-07-26", "snapshot": {}})
 check("최신 이력이면 경고 없음", stale_warning(led, "2026-07-26"), None)
 check("14일 지나면 경고", stale_warning(led, "2026-08-20") is None, False)
 
+print("external_source / register_external")
+from hypothesis import external_source, register_external  # noqa: E402
+
+src = external_source("사용자", "2026-07-26",
+                      ["https://developers.google.com/search/docs"], 4)
+check("유형 외부", src["유형"], "외부")
+check("통과 URL", src["통과URL"], ["https://developers.google.com/search/docs"])
+check("기각된 형제 수", src["기각된형제주장수"], 4)
+check("근거미확인 기본 False", src["근거미확인"], False)
+check("연성 실패 표시", external_source("사용자", "2026-07-26", [], 0,
+                                    unverified=True)["근거미확인"], True)
+
+led2 = {"hypotheses": [], "portfolio_history": []}
+e = register_external(led2, GOOD, "2026-07-26", src)
+check("외부 가설도 제안 상태", e["상태"], "제안")
+check("출처 보존", e["출처"]["제시자"], "사용자")
+try:
+    register_external(led2, GOOD, "2026-07-26", {"유형": "내부"})
+    check("내부 출처 거부", "no raise", "ValueError")
+except ValueError:
+    check("내부 출처 거부", "ValueError", "ValueError")
+
 print()
 if FAILED:
     print("실패:")
@@ -153,4 +175,5 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 
