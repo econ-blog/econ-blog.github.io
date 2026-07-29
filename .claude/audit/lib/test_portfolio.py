@@ -59,6 +59,44 @@ empty = d1_composition([])
 check("0 나눗셈 없음", empty["mass"]["evergreen_ratio"], 0.0)
 check("빈 중앙값", empty["median_chars"]["posts"], 0)
 
+print("load_vocab / d2_vocabulary")
+from portfolio import load_vocab, d2_vocabulary  # noqa: E402
+
+VOCAB_SRC = """# 주석 줄
+# 또 주석
+
+금리:
+  aliases: ["기준금리", "정책금리"]
+부동산:
+  aliases: ["주택"]
+고용:
+  aliases: ["실업률"]
+"""
+check("load_vocab 순서 유지", load_vocab(VOCAB_SRC), ["금리", "부동산", "고용"])
+check("aliases 줄 무시", "aliases" in load_vocab(VOCAB_SRC), False)
+
+D2DOCS = [
+    doc("p1", "posts", 100, source=True, tags=["금리", "부동산"]),
+    doc("p2", "posts", 100, source=True, tags=["금리"]),
+    doc("p3", "posts", 100, source=True, tags=["금리", "우주항공"]),
+    doc("notice", "posts", 100, tags=["공지"]),
+    doc("t1", "dictionary", 100, tags=["용어사전"]),
+]
+r2 = d2_vocabulary(D2DOCS, ["금리", "부동산", "고용"])
+check("counts vocab 순서", list(r2["counts"].keys()), ["금리", "부동산", "고용"])
+check("금리 3회", r2["counts"]["금리"], 3)
+check("부동산 1회", r2["counts"]["부동산"], 1)
+check("고용 0회 유지", r2["counts"]["고용"], 0)
+check("used", r2["used"], 2)
+check("unused", r2["unused"], ["고용"])
+check("어휘 밖 태그", r2["outside"], ["우주항공"])
+check("사전 용어사전 태그 미포함", "용어사전" in r2["outside"], False)
+check("공지 제외", r2["total_tag_uses"], 5)
+check("최다/최소 배율", r2["max_min_ratio"], 3.0)
+
+r2b = d2_vocabulary([], ["금리"])
+check("빈 코퍼스 배율 None", r2b["max_min_ratio"], None)
+
 print()
 if FAILED:
     print("실패:")
@@ -66,3 +104,4 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+

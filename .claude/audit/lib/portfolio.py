@@ -68,3 +68,45 @@ def d1_composition(docs: list[dict]) -> dict:
         },
         "denominator": "content/posts + content/dictionary (공지·초안 제외)",
     }
+
+
+def load_vocab(text: str) -> list[str]:
+    """topics.yaml의 최상위 태그를 파일 순서대로. (AC #44 D2)
+
+    PyYAML을 쓰지 않는다 — internal_links.load_terms와 같은 규약(정규식 파싱)이다.
+    최상위 키는 들여쓰기가 없고 콜론으로 끝나는 줄이다.
+    """
+    out = []
+    for line in text.splitlines():
+        if not line or line.startswith(("#", " ", "\t")):
+            continue
+        stripped = line.rstrip()
+        if stripped.endswith(":"):
+            out.append(stripped[:-1].strip())
+    return out
+
+
+def d2_vocabulary(docs: list[dict], vocab: list[str]) -> dict:
+    """D2 통제 어휘 소진. 미사용 태그는 관측치이며 소견이 아니다. (AC #44 D2)"""
+    counts = {tag: 0 for tag in vocab}
+    outside = set()
+    total = 0
+    for d in docs:
+        if d["section"] != "posts" or d["draft"] or is_notice(d):
+            continue
+        for tag in d["tags"]:
+            total += 1
+            if tag in counts:
+                counts[tag] += 1
+            else:
+                outside.add(tag)
+    used = [v for v in counts.values() if v]
+    return {
+        "counts": counts,
+        "used": len(used),
+        "unused": [t for t, v in counts.items() if not v],
+        "outside": sorted(outside),
+        "max_min_ratio": round(max(used) / min(used), 2) if used else None,
+        "total_tag_uses": total,
+    }
+
