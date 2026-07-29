@@ -97,6 +97,41 @@ check("최다/최소 배율", r2["max_min_ratio"], 3.0)
 r2b = d2_vocabulary([], ["금리"])
 check("빈 코퍼스 배율 None", r2b["max_min_ratio"], None)
 
+print("d3_source_side")
+from portfolio import d3_source_side  # noqa: E402
+
+TERMS3 = {
+    "base-rate": {"title": "기준금리", "aliases": []},
+    "cofix": {"title": "코픽스", "aliases": []},
+    "lonely": {"title": "외톨이", "aliases": []},
+}
+D3DOCS = [
+    doc("p1", "posts", 100, source=True,
+        body="[기준금리](/dictionary/base-rate/)가 올랐고 "
+             "다시 [기준금리](/dictionary/base-rate/)를 본다.\n"),
+    doc("p2", "posts", 100, source=True,
+        body="[코픽스](/dictionary/cofix/) 이야기. `[가짜](/dictionary/base-rate/)`\n"),
+    doc("notice", "posts", 100, tags=["공지"],
+        body="[기준금리](/dictionary/base-rate/)\n"),
+    doc("base-rate", "dictionary", 100, tags=["용어사전"],
+        body="## 실생활에서는\n[코픽스](/dictionary/cofix/) 참고.\n"
+             "## 투자에서는\n[자기](/dictionary/base-rate/)\n"),
+    doc("cofix", "dictionary", 100, tags=["용어사전"], body="설명만 있다.\n"),
+    doc("lonely", "dictionary", 100, tags=["용어사전"], body="# 큰제목\n외톨이.\n"),
+]
+r3 = d3_source_side(D3DOCS, TERMS3)
+check("유입은 출현 횟수", r3["inbound"]["base-rate"], 3)   # p1 2회 + 공지 1회
+check("코드스팬 링크 제외", r3["inbound"]["cofix"], 1)      # p2의 백틱 링크는 미집계
+check("유입 0 슬러그도 키 유지", r3["inbound"]["lonely"], 0)
+check("고아 목록", r3["orphans"], ["lonely"])
+check("포스트당 링크 값", r3["links_per_post"]["values"], [1, 2])
+check("포스트당 링크 중앙값", r3["links_per_post"]["median"], 2)
+check("본문 유출에서 자기참조 제외", r3["body_outbound"]["base-rate"], 1)
+check("유출 0 항목", sorted(r3["body_outbound_zero"]), ["cofix", "lonely"])
+check("자기참조 목록", r3["self_reference"], ["base-rate"])
+check("헤딩 수(## 이상만)", r3["headings"]["base-rate"], 2)
+check("h1은 세지 않음", r3["headings"]["lonely"], 0)
+
 print()
 if FAILED:
     print("실패:")
@@ -104,4 +139,5 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 
