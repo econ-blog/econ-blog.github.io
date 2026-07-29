@@ -223,6 +223,53 @@ with tempfile.TemporaryDirectory() as tmp:
     check("빌드 없음", r4b["built"], False)
     check("빌드 없으면 meta None", r4b["meta_author"], None)
 
+print("d5_decay")
+from portfolio import d5_decay, d6_slots, POST_SLOTS, DICT_SLOTS  # noqa: E402
+
+
+def dated(slug, section, date, source=False, body="", tags=None):
+    d = doc(slug, section, 100, source=source, body=body, tags=tags)
+    d["date"] = date
+    return d
+
+
+D5DOCS = [
+    dated("old", "posts", "2026-01-01", source=True),   # 206일 경과
+    dated("new", "posts", "2026-07-20", source=True),    # 6일
+    dated("ever", "posts", "2026-02-01"),                # source_url 없음 → 시의성 아님
+    dated("term", "dictionary", "2026-01-01", tags=["용어사전"]),
+]
+r5d = d5_decay(D5DOCS, "2026-07-26")
+check("사이트 연령", r5d["site_age"], 206)
+check("시의성 총수", r5d["timely_total"], 2)
+check("90일 경과", r5d["aged_90"], 1)
+check("비율", r5d["ratio"], 0.5)
+check("경과 파일", r5d["aged_files"], ["content/posts/old.md"])
+
+check("빈 코퍼스 0 나눗셈", d5_decay([], "2026-07-26")["ratio"], 0.0)
+
+print("d6_slots")
+check("포스트 슬롯 문자열", POST_SLOTS,
+      ("## 나에게 무슨 의미인가", "## 투자 관점에서 보면"))
+check("사전 슬롯 문자열", DICT_SLOTS, ("## 실생활에서는", "## 투자에서는"))
+
+D6DOCS = [
+    doc("ok", "posts", 100, source=True,
+        body="## 나에게 무슨 의미인가\n가\n## 투자 관점에서 보면\n나\n"),
+    doc("half", "posts", 100, source=True, body="## 나에게 무슨 의미인가\n가\n"),
+    doc("notice", "posts", 100, tags=["공지"], body="아무 슬롯 없음\n"),
+    doc("term", "dictionary", 100, tags=["용어사전"],
+        body="## 실생활에서는\n가\n## 투자에서는\n나\n"),
+]
+r6 = d6_slots(D6DOCS)
+check("포스트 슬롯1 충족", r6["posts"]["## 나에게 무슨 의미인가"]["met"], 2)
+check("포스트 슬롯2 충족", r6["posts"]["## 투자 관점에서 보면"]["met"], 1)
+check("포스트 분모(공지 제외)", r6["posts"]["## 투자 관점에서 보면"]["total"], 2)
+check("미충족 목록", r6["posts"]["## 투자 관점에서 보면"]["missing"],
+      ["content/posts/half.md"])
+check("사전 슬롯 충족", r6["dictionary"]["## 실생활에서는"]["met"], 1)
+check("전부 충족 아님", r6["all_met"], False)
+
 print()
 if FAILED:
     print("실패:")
@@ -230,6 +277,7 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 
 
 

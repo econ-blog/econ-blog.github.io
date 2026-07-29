@@ -8,10 +8,12 @@
 import os
 import re
 import sys
+from datetime import date as _date
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from corpus import documents, is_notice  # noqa: E402
+from internal_links import load_terms  # noqa: E402
 from mdtext import MD_LINK, strip_code_spans  # noqa: E402
 
 EVERGREEN_RULE = (
@@ -332,6 +334,102 @@ def d4_eeat(
         }
     )
     return result
+
+
+POST_SLOTS = ("## 나에게 무슨 의미인가", "## 투자 관점에서 보면")
+DICT_SLOTS = ("## 실생활에서는", "## 투자에서는")
+
+
+def _days_between(start: str, end: str) -> int:
+    return (_date.fromisoformat(end) - _date.fromisoformat(start)).days
+
+
+def d5_decay(docs: list[dict], today: str) -> dict:
+    """D5 감쇄 노출 — 시의성 글 중 90일 경과 비율. D < 90이면 항상 0이 정상. (AC #44 D5)"""
+    live = [d for d in docs if not d["draft"] and not is_notice(d)]
+    timely = [
+        d
+        for d in live
+        if d["section"] == "posts" and d["has_source_url"] and d["date"]
+    ]
+    aged = [d for d in timely if _days_between(d["date"], today) >= 90]
+    dates = [d["date"] for d in live if d["date"]]
+    return {
+        "site_age": _days_between(min(dates), today) if dates else 0,
+        "timely_total": len(timely),
+        "aged_90": len(aged),
+        "ratio": _ratio(len(aged), len(timely)),
+        "aged_files": sorted(d["file"] for d in aged),
+    }
+
+
+def d6_slots(docs: list[dict]) -> dict:
+    """D6 차별점 슬롯 충족률. 문자열 존재만 본다 — 내용의 품질은 판정하지 않는다. (AC #44 D6)"""
+    out = {}
+    for section, slots in (("posts", POST_SLOTS), ("dictionary", DICT_SLOTS)):
+        group = [
+            d
+            for d in docs
+            if d["section"] == section and not d["draft"] and not is_notice(d)
+        ]
+        out[section] = {}
+        for slot in slots:
+            missing = sorted(d["file"] for d in group if slot not in d["body"])
+            out[section][slot] = {
+                "met": len(group) - len(missing),
+                "total": len(group),
+                "missing": missing,
+            }
+    out["all_met"] = all(
+        not s["missing"]
+        for section in ("posts", "dictionary")
+        for s in out[section].values()
+    )
+    return out
+
+
+def main() -> None:
+    """D1–D6을 한 JSON으로. 스테이지는 이 출력만 소비한다. (AC #45)"""
+    import json
+    from datetime import date as _today
+
+    content = Path("content")
+    docs = documents(content)
+    vocab = load_vocab(
+        Path(".claude/daily-post/topics.yaml").read_text(encoding="utf-8")
+    )
+    terms = load_terms(
+        Path("content/dictionary/_terms.yaml").read_text(encoding="utf-8")
+    )
+    public = Path("public")
+
+    print(
+        json.dumps(
+            {
+                "generated": _today.today().isoformat(),
+                "evergreen_rule": EVERGREEN_RULE,
+                "D1": d1_composition(docs),
+                "D2": d2_vocabulary(docs, vocab),
+                "D3_source": d3_source_side(docs, terms),
+                "D3_render": d3_render_side(public, terms),
+                "D4": d4_eeat(
+                    docs,
+                    content,
+                    Path("hugo.toml").read_text(encoding="utf-8"),
+                    public,
+                ),
+                "D5": d5_decay(docs, _today.today().isoformat()),
+                "D6": d6_slots(docs),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()
+
 
 
 
