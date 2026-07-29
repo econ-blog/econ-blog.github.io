@@ -1,0 +1,167 @@
+# ③ 색인 건전성 스테이지 지침
+
+검색 노출이 0이거나 정체될 때 **무엇을 점검해야 하는지** 알려준다. 사이트 연령에 따라
+경보 수위를 달리한다. 결과를 문자열로 weekly-audit.md에 넘긴다 — 파일 쓰기·git은 시퀀서가
+한다. 모든 Python은 `.venv/bin/python`으로 호출한다.
+
+이 스테이지의 불변조건(시퀀서와 이중 진술 — AC #39 규약):
+
+- **③은 무엇도 고치지 않는다.** sitemap 제출·GSC 속성 재등록·색인 요청은 사용자가
+  Search Console에서 직접 한다(Out of scope). 파일을 쓰지 않는다.
+- **API를 직접 호출하지 않는다.** GSC는 `scripts/fetch_gsc.py` 경유로만. (AC #23)
+- **정상 상태에서는 침묵한다.** 통과 항목을 나열하지 않는다. (AC #29)
+- **③은 Google만 본다.** 네이버·다음 색인 상태는 확인하지 않는다(Known limits #7).
+
+## 1. 전제조건 2단계 판정 (AC #26)
+
+1. `ls scripts/fetch_gsc.py` — 파일이 없으면 **③ 전체를 생략한다.**
+2. ```
+   .venv/bin/python scripts/fetch_gsc.py --json --days 28 --dimensions page --sitemaps
+   ```
+   출력 JSON의 `analytics.page.ok == true && analytics.page.total_rows > 0` = **데이터 있음**.
+
+**둘을 별도로 판정하고 리포트에 각각 기록한다.** "연동됨"과 "데이터 있음"은 다르다 —
+v1.0은 이 둘을 구분하지 않아 스크립트만 있으면 데이터가 있다고 가정했고, 실제로는
+연동 완료 상태에서 90일 0행이었다.
+
+종료 코드가 1이거나 JSON의 `"error"` 필드가 있으면 **"조회 실패"**로 기록하고
+I4·I6·I7을 `미조회`로 둔다. `total_rows: 0`과 다르게 취급한다.
+
+## 2. 경보 단계 결정 (AC #27)
+
+```
+.venv/bin/python .claude/audit/lib/indexation.py
+```
+
+`site_age`는 ②가 이미 계산해 시퀀서에서 넘어온다 — 값이 다르면 ②의 값을 쓴다.
+
+| `D` | 단계 | 동작 |
+|---|---|---|
+| `< 14` | 정상 | **노출 0을 보고하지 않는다.** I3·I4·I6은 **조회하되**(판단 가) 출력은 리포트 한 줄뿐이다. I1·I2·I5는 즉시 소견이 아니므로 조회 결과를 출력하지 않는다 |
+| `14 ≤ D < 42` | 관찰 | 점검 결과를 **표로만** 출력. 소견으로 승격하지 않는다 |
+| `≥ 42` | 소견 | 실패 항목을 4필드 소견으로 출력 |
+
+**단, I3(baseURL 3자 정합)과 I4(sitemap 미제출)는 단계와 무관하게 즉시 소견이다.**
+baseURL이 어긋나면 색인이 원천 차단되고, 미제출은 대기해도 해결되지 않는다.
+
+## 3. 점검 항목 순회 (닫힌 목록 — AC #28)
+
+노출이 0이거나 **직전 감사 대비 증가하지 않았을 때** 순회한다. 직전 노출은
+`topic-history.json`이 아니라 직전 감사 리포트에 있다 — 없으면 "직전값 없음"으로 두고
+순회한다(첫 실행은 항상 순회한다).
+
+**단계가 "정상"(`D < 14`)이어도 I4와 I6은 조회한다.** 확정된 판단 (가)가 그 한 줄에
+`색인 표본 N건 중 M건 · sitemap 제출 후 K일` 을 요구하기 때문이다. 조회는 하되 **출력은
+여전히 한 줄이며**, 표도 소견도 만들지 않는다. 조회에 실패하면 그 조각을 한 줄에서
+빼고 `색인 건전성: 이상 없음 (사이트 연령 8일 · 색인 상태 조회 실패)` 로 낸다 —
+**"조회 실패"와 "이상 없음"을 같은 문장에 담되 구분되게 적는다.**
+
+| 항목 | 판정 주체 | 즉시 소견 |
+|---|---|---|
+| I1 sitemap 생성 | `check_sitemap(public_root, published_count)` — `<loc>` **개수** ≥ 발행글 수 | 아니오 |
+| I2 robots.txt | `check_robots(public_root)` — 빌드 산출물 `public/robots.txt` | 아니오 |
+| I3 baseURL 3자 정합 | `check_baseurl(hugo_toml, git_remote, gsc_site_url)` | **예** |
+| I4 sitemap 제출 상태 | `sitemap_submission(payload["sitemaps"])` | **예**(미제출 시) |
+| I5 noindex 유출 | `check_noindex(public_root)` | 아니오 |
+| I6 색인 커버리지 표본 | `fetch_gsc.py --inspect <url…>` (최대 5건) | 아니오 |
+| I7 GSC 속성 유형 | `check_property_type(gsc_site_url, hugo_host)` | 아니오 |
+
+**I1은 `<loc>` 태그 개수를 센다.** Hugo가 sitemap XML을 한 줄로 minify하므로 줄 수를 세면
+항상 1이 나온다. `check_sitemap`이 이미 그렇게 구현돼 있으니 **손으로 다시 세지 않는다.**
+
+**I4의 `lastDownloaded`는 없을 수 있다.** 아직 읽히지 않은 sitemap의 응답에는 그 키가
+아예 없다(2026-07-26 실측: 제출 후 7일, `isPending: true`). **없는 것을 실패로 보고하지
+않는다** — 제출은 됐다. `isPending`과 `errors`를 그대로 옮긴다.
+
+**I6은 표본이다.** 일일 할당량 때문에 발행글 중 최대 5건만 조회한다(Known limits #8 —
+색인 안 된 글이 표본 밖이면 놓친다). 표본은 **최신 발행글 우선**으로 고른다.
+
+## 4. I3의 `git_remote` 얻는 법
+
+```
+git remote get-url origin
+```
+
+읽기 전용이다. `gsc_site_url`은 §1의 `payload["site_url"]`을 쓴다. **GSC를 조회하지
+못했으면 `None`을 넘긴다** — `check_baseurl`이 2자만 비교하고 그 사실을 리포트에 적는다.
+
+## 5. I6 표본 선택과 조회
+
+발행글 목록을 가져오되, 가장 최신 포스트부터 최대 5개까지만 선택한다:
+
+```
+.venv/bin/python - <<'PY'
+import json, sys
+from pathlib import Path
+sys.path.insert(0, ".claude/audit/lib")
+from corpus import published
+
+posts = published(Path("content"))
+post_slugs = [p["file"].replace(".md", "") for p in posts][:5]
+urls = ["https://econ-blog.github.io/"] + [
+    f"https://econ-blog.github.io/posts/{s}/" for s in post_slugs
+]
+print(json.dumps(urls))
+PY
+```
+
+이 URL 목록을 `scripts/fetch_gsc.py --inspect <url1> <url2> ...` 에 넘긴다.
+
+색인되지 않은 URL의 `coverage_state`를 **가공 없이 그대로** 리포트에 옮긴다. 번역하거나
+요약하지 않는다 — 그 문자열이 Search Console UI와 같아야 사람이 대조할 수 있다.
+
+## 6. 리포트 조립 (시퀀서가 소비)
+
+### 경우 1: 단계가 "정상"(`D < 14`)이고 I3·I4 모두 통과
+
+**한 줄만 낸다:**
+
+```
+색인 건전성: 이상 없음 (사이트 연령 {D}일 · 색인 표본 {N}건 중 {M}건 · sitemap 제출 후 {K}일{, 아직 미read})
+```
+
+2026-07-26 실측이면: `색인 건전성: 이상 없음 (사이트 연령 8일 · 색인 표본 3건 중 1건 · sitemap 제출 후 7일, 아직 미read)`
+
+- `{N}`/`{M}`은 I6 표본 수와 그중 `verdict == "PASS"`인 수.
+- `{K}`는 I4의 `lastSubmitted`로부터 오늘까지의 일수.
+- `lastDownloaded`가 없으면 `, 아직 미read`를 붙이고, 있으면 그 자리에 `, 최근 read {날짜}`를 넣는다.
+- I4나 I6 조회에 실패하면 그 조각을 빼고 `· 색인 상태 조회 실패`로 대체한다.
+- **통과 항목을 나열하지 않는다. 표도 만들지 않는다. 문장을 덧붙이지 않는다**(AC #29 + 확정된 판단 가).
+
+### 경우 2: 단계가 "정상"이고 I3 또는 I4 실패, 또는 조회 실패
+
+**즉시 소견으로 낸다.** 한 줄이 아니라 소견 섹션이다:
+
+```
+### 소견
+- 위치: … / 증거: … / 제안: … / 비용: S|M|L
+```
+
+### 경우 3: 단계가 "관찰"(`14 ≤ D < 42`)
+
+**표만:**
+
+```
+## ③ 색인 건전성 (관찰 — 사이트 연령 {D}일)
+| 항목 | 결과 | 값 |
+| I1 sitemap | 통과 | loc 39 ≥ 발행 9 |
+…
+```
+
+(소견으로 승격하지 않는다)
+
+### 경우 4: 단계가 "소견"(`D ≥ 42`)
+
+**실패 항목만 4필드 소견으로:**
+
+```
+## ③ 색인 건전성
+### 소견
+- 위치: … / 증거: … / 제안: … / 비용: S|M|L
+```
+
+**即시 소견(I3·I4)은 단계와 무관하게 위 소견 형식으로 낸다.** 단계가 "정상"이어도
+낸다 — 그 경우 한 줄 대신 소견 섹션이 나온다.
+
+자격증명·서비스 계정 이메일을 리포트에 쓰지 않는다. `permission_level` 같은 필드는
+판정에만 쓰고 옮기지 않는다(AC #41).
