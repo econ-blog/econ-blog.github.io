@@ -35,6 +35,10 @@ circular-financing:
   title: "순환금융"
   aliases: ["AI 순환금융", "순환 금융"]
 
+circuit-breaker:
+  title: "서킷브레이커"
+  aliases: ["circuit breaker", "매매 중단", "거래 정지", "시장 안정 장치"]
+
 
 
 
