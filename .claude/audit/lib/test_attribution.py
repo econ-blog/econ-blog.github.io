@@ -70,6 +70,84 @@ check("경계 통과", corpus_gate(20, 28, 3)["passed"], True)
 check("하나만 미달이면 실패", corpus_gate(20, 27, 3)["passed"], False)
 check("초과는 통과", corpus_gate(50, 90, 6)["passed"], True)
 
+print("per_post_metric / ratios / adjustment")
+from attribution import (  # noqa: E402
+    ADJUSTMENT_TABLE, adjustment, clamp_no_gsc, decay, demote, load_history,
+    per_post_metric, ratios, save_history,
+)
+
+SZ = {"a": {"c": 6, "n": 2.0}, "b": {"c": 6, "n": 4.0}, "c": {"c": 6, "n": 0.0}}
+m = per_post_metric(SZ, {"a": 100.0, "b": 100.0, "c": 50.0})
+check("m_g = X_g / n_g", m["a"], 50.0)
+check("n_g가 크면 m_g 작다", m["b"], 25.0)
+check("n_g 0이면 0", m["c"], 0.0)
+
+r, M = ratios({"a": 90.0, "b": 30.0, "c": 30.0})
+check("중앙값", M, 30.0)
+check("배율 상", r["a"], 3.0)
+check("배율 중앙값 그룹", r["b"], 1.0)
+r0, M0 = ratios({"a": 0.0, "b": 0.0})
+check("M=0이면 배율 0", r0["a"], 0.0)
+check("M=0 보고", M0, 0.0)
+
+check("표 다섯 구간", len(ADJUSTMENT_TABLE), 5)
+check("r=3.0 → +3", adjustment(3.0), 3)
+check("r=2.9 → +2", adjustment(2.9), 2)
+check("r=2.0 → +2", adjustment(2.0), 2)
+check("r=1.3 → +1", adjustment(1.3), 1)
+check("r=1.0 → 0", adjustment(1.0), 0)
+check("r=0.7 → 0", adjustment(0.7), 0)
+check("r=0.69 → -1", adjustment(0.69), -1)
+check("r=0.4 → -1", adjustment(0.4), -1)
+check("r=0.39 → -2", adjustment(0.39), -2)
+check("r=0.0 → -2", adjustment(0.0), -2)
+
+print("demote")
+MED = {"avg_position": 20.0, "clicks_top_third": 5.0}
+adj, why = demote(2, {"avg_position": 35.0, "clicks": 0}, MED)
+check("양수 강등", adj, 0)
+check("강등 사유 있음", why is None, False)
+check("클릭 있으면 유지", demote(2, {"avg_position": 35.0, "clicks": 3}, MED)[0], 2)
+check("순위 좋으면 유지", demote(2, {"avg_position": 8.0, "clicks": 0}, MED)[0], 2)
+check("음수 강등", demote(-2, {"avg_position": 30.0, "clicks": 9}, MED)[0], 0)
+check("음수 유지", demote(-2, {"avg_position": 30.0, "clicks": 1}, MED)[0], -2)
+check("지표 없으면 강등 안 함", demote(2, {}, MED), (2, None))
+check("0은 그대로", demote(0, {"avg_position": 99.0, "clicks": 0}, MED), (0, None))
+
+print("clamp_no_gsc")
+check("+3 → +1", clamp_no_gsc(3), 1)
+check("-2 → -1", clamp_no_gsc(-2), -1)
+check("0 유지", clamp_no_gsc(0), 0)
+
+print("decay / load_history / save_history")
+import tempfile  # noqa: E402
+from pathlib import Path as _P  # noqa: E402
+
+HIST = {"금리": {"조정치": -2, "최초부여일": "2026-01-01", "마지막감쇄일": None}}
+adj, entry = decay(HIST, "금리", -2, "2026-03-15")   # 73일 경과
+check("60일 넘으면 절대값 -1", adj, -1)
+check("마지막감쇄일 기록", entry["마지막감쇄일"], "2026-03-15")
+adj2, _ = decay({"금리": {"조정치": -2, "최초부여일": "2026-03-01",
+                        "마지막감쇄일": None}}, "금리", -2, "2026-03-15")
+check("60일 이내면 유지", adj2, -2)
+adj3, _ = decay({"금리": {"조정치": 3, "최초부여일": "2026-01-01",
+                        "마지막감쇄일": None}}, "금리", 3, "2026-07-01")
+check("양수는 감쇄하지 않는다", adj3, 3)
+adj4, entry4 = decay({}, "신규", -1, "2026-07-26")
+check("이력 없으면 최초부여", entry4["최초부여일"], "2026-07-26")
+check("최초부여 회차는 감쇄 없음", adj4, -1)
+adj5, _ = decay({"금리": {"조정치": -1, "최초부여일": "2026-01-01",
+                        "마지막감쇄일": None}}, "금리", -1, "2026-07-01")
+check("-1은 0까지 감쇄", adj5, 0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    p = _P(tmp) / "topic-history.json"
+    check("부재 시 빈 dict", load_history(p), {})
+    save_history(p, {"금리": {"조정치": -1, "최초부여일": "2026-07-26",
+                            "마지막감쇄일": None}})
+    check("왕복", load_history(p)["금리"]["조정치"], -1)
+    check("끝에 개행", p.read_text(encoding="utf-8").endswith("\n"), True)
+
 print()
 if FAILED:
     print("실패:")
@@ -77,3 +155,4 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+

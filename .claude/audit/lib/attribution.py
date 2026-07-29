@@ -69,3 +69,107 @@ def corpus_gate(published_count: int, oldest_age: int,
          "target": CORPUS_MIN_GROUPS, "met": signal_group_count >= CORPUS_MIN_GROUPS},
     ]
     return {"passed": all(c["met"] for c in conditions), "conditions": conditions}
+
+
+# AC #17. LLM이 점수를 재량으로 매기지 않는다 — 이 표가 유일한 산출 경로다.
+ADJUSTMENT_TABLE = ((3.0, 3), (2.0, 2), (1.3, 1), (0.7, 0), (0.4, -1))
+DECAY_DAYS = 60
+
+
+def per_post_metric(sizes: dict, totals: dict) -> dict:
+    """m_g = X_g / n_g. 주제군 크기 차이를 제거한다. (AC #16)"""
+    out = {}
+    for tag, size in sizes.items():
+        n = float(size.get("n", 0.0))
+        out[tag] = round(float(totals.get(tag, 0.0)) / n, 4) if n else 0.0
+    return out
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    return s[len(s) // 2]
+
+
+def ratios(m: dict) -> tuple[dict, float]:
+    """r_g = m_g / median(m). z-score를 쓰지 않는다 — 주제군이 3~6개뿐이라
+    평균·표준편차는 이상치 하나에 무너진다. (Ontology, Known limits #2)"""
+    M = _median(list(m.values()))
+    if not M:
+        return {tag: 0.0 for tag in m}, 0.0
+    return {tag: round(v / M, 4) for tag, v in m.items()}, M
+
+
+def adjustment(r: float) -> int:
+    """r_g → 조정치. 표 밖(하한 미달)은 -2. (AC #17)"""
+    for threshold, value in ADJUSTMENT_TABLE:
+        if r >= threshold:
+            return value
+    return -2
+
+
+def demote(adj: int, group_stats: dict, medians: dict) -> tuple[int, str | None]:
+    """방향 확인 — GSC 데이터가 있을 때만 의미가 있다. (AC #18)
+
+    클릭·평균 게재순위는 방향 확인용이며 조정치를 직접 산출하지 않는다.
+    """
+    if "avg_position" not in group_stats or "clicks" not in group_stats:
+        return adj, None
+    position = float(group_stats["avg_position"])
+    clicks = float(group_stats["clicks"])
+    if adj > 0 and position > float(medians.get("avg_position", 0)) and clicks == 0:
+        return 0, (f"양수 조정치 강등 — 평균 게재순위 {position} > 중앙값 "
+                   f"{medians.get('avg_position')}, 클릭 0")
+    if adj < 0 and clicks >= float(medians.get("clicks_top_third", float("inf"))):
+        return 0, f"음수 조정치 강등 — 클릭 {clicks}이 전체 상위 1/3"
+    return adj, None
+
+
+def clamp_no_gsc(adj: int) -> int:
+    """GSC 무데이터 시 [-1, +1]로 clamp. 후행 지표만으로는 신호량이 한 자릿수
+    적다. (AC #19)"""
+    return max(-1, min(1, adj))
+
+
+def load_history(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"topic-history.json 파싱 실패: {exc}") from exc
+
+
+def save_history(path: Path, history: dict) -> None:
+    path.write_text(json.dumps(history, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+
+
+def decay(history: dict, tag: str, adj: int, today: str,
+          days: int = DECAY_DAYS) -> tuple[int, dict]:
+    """음수 조정치가 최초부여일로부터 days일 이상 유지되면 절대값을 1 줄인다.
+    양수는 감쇄하지 않는다 — 래칫을 만드는 것은 감점뿐이다. (AC #20)
+
+    이 상태를 topic-report.md 밖에 두는 이유: 계약 형식에 필드를 추가하면
+    rank.md가 깨진다. README.md의 90일 신선도 규칙은 매주 재생성하면
+    생성일이 영원히 최신이라 무력하다.
+    """
+    entry = history.get(tag)
+    if entry is None:
+        entry = {"조정치": adj, "최초부여일": today, "마지막감쇄일": None}
+        history[tag] = entry
+        return adj, entry
+
+    entry["조정치"] = adj
+    if adj >= 0:
+        return adj, entry
+
+    since = entry.get("마지막감쇄일") or entry.get("최초부여일") or today
+    elapsed = (_date.fromisoformat(today) - _date.fromisoformat(since)).days
+    if elapsed >= days:
+        adj = min(0, adj + 1)
+        entry["조정치"] = adj
+        entry["마지막감쇄일"] = today
+    return adj, entry
+
