@@ -83,6 +83,13 @@ def update_telegram_offset(repo: str, pat: str, offset: int):
     else:
         resp.raise_for_status()
 
+def flip_front_matter_draft(content: str) -> str:
+    def replace_draft(match):
+        fm = match.group(1)
+        fm_updated = re.sub(r'(?m)^draft:\s*true\b', 'draft: false', fm)
+        return f"---{fm_updated}---"
+    return re.sub(r'^---\s*\n(.*?)\n---', replace_draft, content, count=1, flags=re.DOTALL)
+
 def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
@@ -90,18 +97,19 @@ def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     
-    # 1. Fetch files modified by PR
+    # 1. Fetch files modified by PR under content/posts/ or content/dictionary/
     files_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/files"
     f_resp = requests.get(files_url, headers=headers, timeout=10)
     f_resp.raise_for_status()
     
-    post_files = [
+    target_files = [
         f for f in f_resp.json()
-        if f["filename"].startswith("content/posts/") and f.get("status") != "removed"
+        if (f["filename"].startswith("content/posts/") or f["filename"].startswith("content/dictionary/"))
+        and f.get("status") != "removed"
     ]
     
-    # 2. Flip draft: true -> draft: false on modified post files
-    for pf in post_files:
+    # 2. Flip draft: true -> draft: false in front matter for modified post & dictionary files
+    for pf in target_files:
         fn = pf["filename"]
         contents_url = f"https://api.github.com/repos/{repo}/contents/{fn}?ref={pr['head']['ref']}"
         c_resp = requests.get(contents_url, headers=headers, timeout=10)
@@ -109,11 +117,11 @@ def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
         c_json = c_resp.json()
         
         file_content = base64.b64decode(c_json["content"]).decode("utf-8")
-        updated_content = file_content.replace("draft: true", "draft: false")
+        updated_content = flip_front_matter_draft(file_content)
         
         put_url = f"https://api.github.com/repos/{repo}/contents/{fn}"
         put_payload = {
-            "message": f"chore: publish post {fn}",
+            "message": f"chore: publish {fn}",
             "content": base64.b64encode(updated_content.encode("utf-8")).decode("utf-8"),
             "sha": c_json["sha"],
             "branch": pr["head"]["ref"]

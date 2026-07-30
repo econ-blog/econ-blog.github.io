@@ -25,13 +25,20 @@ class TestTelegramNotify(unittest.TestCase):
         self.assertEqual(extract_verdict_token("auto/audit-2026-07-30", "audit"), "#A0730")
 
     def test_format_post_notification(self):
-        from telegram_notify import format_post_notification
+        from telegram_notify import format_post_notification, extract_inspection_line
         title = "Test Title"
-        body = "First sentence. Second sentence.\n\n발행 전 검사: 통과"
+        body = "First sentence. Second sentence.\n\n## 발행 전 검사\n통과"
         url = "https://github.com/org/repo/pull/1"
         msg = format_post_notification(title, body, "auto/post-2026-07-30", url)
         self.assertIn("#P0730 오늘의 포스트", msg)
-        self.assertIn("발행 전 검사: 통과", msg)
+        self.assertIn("발행 전 검사", msg)
+
+    def test_flip_front_matter_draft(self):
+        from process_inbox import flip_front_matter_draft
+        content = "---\ntitle: Sample\ndraft: true\n---\nHere is draft: true in body."
+        updated = flip_front_matter_draft(content)
+        self.assertIn("draft: false", updated.split("---")[1])
+        self.assertIn("Here is draft: true in body.", updated.split("---")[2])
 
     def test_format_audit_notification(self):
         from telegram_notify import format_audit_notification

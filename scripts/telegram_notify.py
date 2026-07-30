@@ -11,9 +11,14 @@ def extract_verdict_token(branch_name: str, pr_type: str) -> str:
     return f"#{prefix}{mmdd}"
 
 def extract_inspection_line(body: str) -> str:
-    for line in body.splitlines():
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
         if "발행 전 검사:" in line:
             return line.strip()
+        if re.search(r'#+\s*발행\s*전\s*검사', line):
+            if i + 1 < len(lines) and lines[i + 1].strip():
+                return f"발행 전 검사: {lines[i + 1].strip()}"
+            return "발행 전 검사: 진행됨"
     return "발행 전 검사: 검사 불가"
 
 def format_post_notification(title: str, body: str, branch: str, url: str) -> str:
@@ -38,14 +43,18 @@ def format_audit_notification(title: str, body: str, branch: str, url: str) -> s
     
     lines = body.splitlines()
     filtered_lines = []
+    keywords = ["계약 위반", "확정 사망 링크", "데이터 충분성", "색인 건전성", "소견", "새 가설 제안", "결정 필요", "주간 감사", "Audit Summary"]
     for l in lines:
-        if any(k in l for k in ["계약 위반:", "확정 사망 링크:", "데이터 충분성:", "색인 건전성:", "소견:", "새 가설 제안:", "─ 결정 필요 ─"]):
-            filtered_lines.append(l)
+        l_str = l.strip()
+        if not l_str or l_str.startswith("PR:"):
+            continue
+        if any(k in l_str for k in keywords) or l_str.startswith("*") or l_str.startswith("-"):
+            filtered_lines.append(l_str)
             
-    summary_block = "\n".join(filtered_lines) if filtered_lines else "요약 정보 없음"
+    summary_block = "\n".join(filtered_lines[:10]) if filtered_lines else (lines[0] if lines else "요약 정보 없음")
     return (
         f"{token} 주간 감사\n\n"
-        f"{summary_block}\n"
+        f"{summary_block}\n\n"
         f"PR: {url}\n\n"
         f"승인 / 반려 로 답장."
     )
