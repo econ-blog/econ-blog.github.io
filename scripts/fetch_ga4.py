@@ -112,7 +112,10 @@ def main():
         property=f"properties/{property_id}",
         date_ranges=[DateRange(start_date=window, end_date="today")],
         dimensions=[Dimension(name="pagePath"), Dimension(name="pageTitle")],
-        metrics=[Metric(name="screenPageViews"), Metric(name="activeUsers")],
+        # sessions는 주간 감사 ②의 후행 지표다 — 사이트 전체 summary에만 있으면
+        # 주제군별 합계를 만들 수 없다(SEED AC #15의 세션 대체 경로).
+        metrics=[Metric(name="screenPageViews"), Metric(name="activeUsers"),
+                 Metric(name="sessions")],
         limit=limit
     )
     pages_response = client.run_report(pages_request)
@@ -150,7 +153,8 @@ def main():
             "path": row.dimension_values[0].value,
             "title": row.dimension_values[1].value,
             "pageViews": int(row.metric_values[0].value),
-            "activeUsers": int(row.metric_values[1].value)
+            "activeUsers": int(row.metric_values[1].value),
+            "sessions": int(row.metric_values[2].value)
         })
 
     traffic_sources = []

@@ -52,6 +52,9 @@ GA4·GSC 데이터로 어떤 주제가 먹히는지 판정하고, **데이터 �
   기여한다. 표본 크기 판정은 원시 개수 `c_g`로 한다(AC #16 후단).
 - 선행 지표는 GSC **노출**, 후행 지표는 GA4 **세션**이다. 클릭·평균 게재순위는
   §5의 방향 확인에만 쓰고 조정치를 직접 산출하지 않는다(Ontology).
+- 주제군별 세션은 `topPages[].sessions`에서 온다 — `summary.sessions`는 사이트 전체
+  합계라 주제군으로 쪼갤 수 없다. `topPages` 행에 `sessions` 키가 없으면 그건 조회
+  실패이므로 세션을 0으로 채우지 말고 `metrics`에서 그 키를 생략한다.
 
 ```
 .venv/bin/python - <<'PY'
@@ -67,7 +70,7 @@ PY
 ## 4. 게이트 판정 (AC #14·#15·#21)
 
 ```
-corpus_gate(published_count, oldest_age, sum(signal_groups.values()))
+corpus_gate(published_count, site_age, sum(signal_groups.values()))
 ```
 
 **미충족이면 여기서 멈춘다.** 리포트에 각 조건의 현재값/목표값 표와
