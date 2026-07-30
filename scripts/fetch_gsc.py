@@ -180,33 +180,32 @@ def main():
                 print(json.dumps({"error": "GSC에 접근 가능한 사이트가 없다",
                                   "stage": "list_sites"}, ensure_ascii=False))
                 sys.exit(1)
-            site_url = os.environ.get("GSC_SITE_URL") or (sites[0].get("siteUrl") if sites else DEFAULT_SITE_URL)
+            site_url = os.environ.get("GSC_SITE_URL") or (sites[0].get("siteUrl") if sites else get_site_url())
             payload = {
                 "site_url": site_url,
                 "property_type": property_type(site_url),
-                "permission_level": sites[0].get("permissionLevel"),
+                "permission_level": sites[0].get("permissionLevel") if sites else "UNKNOWN",
                 "days": opts["days"],
                 "limit": opts["limit"],
                 "analytics": {},
                 "sitemaps": None,
                 "inspections": None,
             }
-            for dim in opts["dimensions"]:
-                res = fetch_search_analytics(site_url, days=opts["days"],
-                                             dimensions=[dim], limit=opts["limit"])
-                if res is None:
-                    # 0행과 조회 실패는 다른 판정이다 (AC #26·#29) — 스테이지가
-                    # 구분할 수 있게 페이로드 안에 남긴다. stderr는 읽히지 않는다.
-                    payload["analytics"][dim] = {"ok": False, "error": "조회 실패"}
-                    continue
-                payload["analytics"][dim] = {
-                    "ok": True,
-                    "total_rows": res.get("total_rows", 0),
-                    "truncated": res.get("truncated", False),
-                    "start_date": res.get("start_date"),
-                    "end_date": res.get("end_date"),
-                    "data": res.get("data", []),
-                }
+            if not ((opts["sitemaps"] or opts["inspect"]) and not opts["explicit_dimensions"]):
+                for dim in opts["dimensions"]:
+                    res = fetch_search_analytics(site_url, days=opts["days"],
+                                                 dimensions=[dim], limit=opts["limit"])
+                    if res is None:
+                        payload["analytics"][dim] = {"ok": False, "error": "조회 실패"}
+                        continue
+                    payload["analytics"][dim] = {
+                        "ok": True,
+                        "total_rows": res.get("total_rows", 0),
+                        "truncated": res.get("truncated", False),
+                        "start_date": res.get("start_date"),
+                        "end_date": res.get("end_date"),
+                        "data": res.get("data", []),
+                    }
             if opts["sitemaps"]:
                 payload["sitemaps"] = fetch_sitemaps(site_url)
             if opts["inspect"]:
