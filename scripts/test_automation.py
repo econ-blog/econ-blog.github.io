@@ -49,5 +49,19 @@ PR: https://github.com/org/repo/pull/2"""
         self.assertIn("계약 위반: 1건", msg)
 
 
+class TestSelectInspectUrls(unittest.TestCase):
+    def test_select_top_published_urls(self):
+        from select_inspect_urls import parse_post_metadata
+        content_draft = "---\ntitle: Post 1\ndate: 2026-07-28T10:00:00Z\ndraft: true\n---\nBody"
+        content_published = "---\ntitle: Post 2\ndate: 2026-07-29T10:00:00Z\ndraft: false\n---\nBody"
+        
+        meta1 = parse_post_metadata(content_draft)
+        meta2 = parse_post_metadata(content_published)
+        
+        self.assertTrue(meta1["draft"])
+        self.assertFalse(meta2["draft"])
+        self.assertEqual(meta2["date"], "2026-07-29T10:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

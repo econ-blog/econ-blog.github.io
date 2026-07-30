@@ -1,0 +1,61 @@
+name: Weekly Analytics Snapshot
+
+on:
+  schedule:
+    - cron: '30 22 * * 6' # UTC 22:30 Sat = KST 07:30 Sun
+  workflow_dispatch:
+
+concurrency:
+  group: analytics-snapshot
+  cancel-in-progress: true
+
+jobs:
+  fetch-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare credentials
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          echo "$CREDENTIALS_JSON" > "$RUNNER_TEMP/credentials.json"
+          python3 -c "import os, json; creds=json.loads(os.environ['CREDENTIALS_JSON']); open(f\"{os.environ['RUNNER_TEMP']}/ga4_sa.json\", 'w').write(json.dumps(creds['ga4']['service_account']))"
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Fetch GA4 & GSC Snapshots
+        env:
+          GA4_CREDENTIALS: ${{ runner.temp }}/ga4_sa.json
+          GSC_CREDENTIALS: ${{ runner.temp }}/ga4_sa.json
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/ga4_sa.json
+        run: |
+          mkdir -p snapshot_output
+          python scripts/fetch_ga4.py --days 28 > snapshot_output/ga4_28d.json
+          python scripts/fetch_gsc.py --json --days 28 > snapshot_output/gsc_28d.json
+          python scripts/fetch_gsc.py --json --sitemaps > snapshot_output/gsc_sitemaps.json
+          
+          INSPECT_URLS=$(python scripts/select_inspect_urls.py content/posts)
+          if [ -n "$INSPECT_URLS" ]; then
+            python scripts/fetch_gsc.py --json --inspect $INSPECT_URLS > snapshot_output/gsc_inspect.json
+          fi
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/credentials.json" "$RUNNER_TEMP/ga4_sa.json"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: analytics-snapshot
+          path: snapshot_output/
+          retention-days: 7
