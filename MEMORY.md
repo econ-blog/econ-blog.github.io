@@ -201,6 +201,20 @@ To satisfy Spec Known Limit #6, the following 4 environment items must be execut
 
 **루틴 등록 파라미터**(계획 Task 6이 지워질 문서에 두려던 것): 데일리 = 매일 KST 07:00 `/daily-post`, 인박스(KST 06:00)보다 뒤. 위클리 = 일요일 KST 08:00 `/weekly-audit`, 데일리 작성보다 뒤(감사 AC #4가 더티 트리에서 중단한다). 둘 다 부트스트랩으로 `python -m venv .venv && .venv/bin/pip install -r requirements.txt` + `git submodule update --init --recursive`, 자격증명은 fine-grained PAT(`contents: write` · `pull_requests: write`) 하나.
 
+### Claude Routine Parameters
+
+1. **Daily Post Routine**
+   - **Schedule**: Every day KST 07:00
+   - **Command**: `/daily-post`
+   - **Bootstrap**: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && git submodule update --init --recursive`
+   - **Credentials**: GitHub PAT (`contents: write`, `pull_requests: write`)
+
+2. **Weekly Audit Routine**
+   - **Schedule**: Every Sunday KST 08:00
+   - **Command**: `/weekly-audit`
+   - **Bootstrap**: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && gh run download --name analytics-snapshot --dir snapshot_output || true`
+   - **Credentials**: GitHub PAT (`contents: write`, `pull_requests: write`)
+
 ### 미해결·미착수
 
 - **8/15 임계값 재보정** — 초기값이다. 실제 실행 2주치 점수 분포로 다시 정해야 한다. ②의 게이트 임계값(20건·28일·3군·노출 300·60일 감쇄)도 같은 성격이다.
