@@ -41,13 +41,18 @@ def parse_args(argv):
     return positional, max(1, days), max(1, limit)
 
 
-def main():
-    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+def get_credentials_path():
+    credentials_path = os.environ.get("GA4_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if not credentials_path:
         for possible_name in ["ga4-credentials.json", "ga4-credentials.json.json"]:
             if os.path.exists(possible_name):
                 credentials_path = possible_name
                 break
+    return credentials_path
+
+
+def main():
+    credentials_path = get_credentials_path()
 
     if not credentials_path or not os.path.exists(credentials_path):
         print(json.dumps({

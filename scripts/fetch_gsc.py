@@ -5,7 +5,25 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-CREDENTIALS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ga4-credentials.json')
+DEFAULT_SITE_URL = 'https://econ-blog.github.io/'
+
+def get_credentials_path():
+    credentials_path = (
+        os.environ.get("GSC_CREDENTIALS")
+        or os.environ.get("GA4_CREDENTIALS")
+        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    )
+    if not credentials_path:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        default_path = os.path.join(base_dir, 'ga4-credentials.json')
+        if os.path.exists(default_path):
+            credentials_path = default_path
+    return credentials_path
+
+def get_site_url():
+    return os.environ.get("GSC_SITE_URL") or DEFAULT_SITE_URL
+
+CREDENTIALS_FILE = get_credentials_path()
 SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 DEFAULT_DAYS = 90
 # ②는 page 차원 합계로 n_g·m_g를 만든다 — 절삭되면 조용히 틀린 수치가 나온다.
@@ -88,12 +106,13 @@ def inspect_urls(site_url, urls):
 
 
 def get_search_console_service():
-    if not os.path.exists(CREDENTIALS_FILE):
-        print(f"Error: Credentials file not found at {CREDENTIALS_FILE}")
+    cred_file = get_credentials_path()
+    if not cred_file or not os.path.exists(cred_file):
+        print(f"Error: Credentials file not found at {cred_file}")
         sys.exit(1)
     
     credentials = service_account.Credentials.from_service_account_file(
-        CREDENTIALS_FILE, scopes=SCOPES
+        cred_file, scopes=SCOPES
     )
     return build('searchconsole', 'v1', credentials=credentials)
 
