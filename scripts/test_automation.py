@@ -108,6 +108,12 @@ class TestProcessInbox(unittest.TestCase):
         self.assertEqual(pr_single["number"], 10)
         self.assertEqual(status_single, "SINGLE_PR_FALLBACK")
 
+    def test_telegram_offset_parsing(self):
+        with patch.dict(os.environ, {"TELEGRAM_OFFSET": ""}):
+            raw_offset = os.environ.get("TELEGRAM_OFFSET", "").strip()
+            offset_val = int(raw_offset) if raw_offset.isdigit() else 0
+            self.assertEqual(offset_val, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

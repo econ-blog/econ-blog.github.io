@@ -158,7 +158,8 @@ def main():
     creds_json = os.environ.get("CREDENTIALS_JSON")
     pat = os.environ.get("PAT")
     repo = os.environ.get("REPO")
-    offset_val = int(os.environ.get("TELEGRAM_OFFSET", "0"))
+    raw_offset = os.environ.get("TELEGRAM_OFFSET", "").strip()
+    offset_val = int(raw_offset) if raw_offset.isdigit() else 0
     
     if not creds_json or not pat or not repo:
         print("Missing required environment variables", file=sys.stderr)
