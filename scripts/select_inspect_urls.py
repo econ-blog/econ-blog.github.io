@@ -23,6 +23,8 @@ def parse_post_metadata(content: str) -> Dict[str, Any]:
 def select_top_published_urls(posts_dir: str, base_url: str = None, limit: int = 5) -> List[str]:
     if not base_url:
         base_url = os.environ.get("GSC_SITE_URL") or "https://econ-blog.github.io"
+    if base_url.startswith("sc-domain:"):
+        base_url = "https://" + base_url.removeprefix("sc-domain:")
     pattern = os.path.join(posts_dir, "**", "*.md")
     files = glob.glob(pattern, recursive=True)
     published = []

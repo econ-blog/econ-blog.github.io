@@ -64,7 +64,7 @@ PR: https://github.com/org/repo/pull/2"""
 
 class TestSelectInspectUrls(unittest.TestCase):
     def test_select_top_published_urls(self):
-        from select_inspect_urls import parse_post_metadata
+        from select_inspect_urls import parse_post_metadata, select_top_published_urls
         content_draft = "---\ntitle: Post 1\ndate: 2026-07-28T10:00:00Z\ndraft: true\n---\nBody"
         content_published = "---\ntitle: Post 2\ndate: 2026-07-29T10:00:00Z\ndraft: false\n---\nBody"
         
@@ -74,6 +74,18 @@ class TestSelectInspectUrls(unittest.TestCase):
         self.assertTrue(meta1["draft"])
         self.assertFalse(meta2["draft"])
         self.assertEqual(meta2["date"], "2026-07-29T10:00:00Z")
+
+        with patch.dict(os.environ, {"GSC_SITE_URL": "sc-domain:example.com"}):
+            urls = select_top_published_urls("content/posts")
+            if urls:
+                self.assertTrue(urls[0].startswith("https://example.com/"))
+
+    def test_fetch_gsc_parse_args(self):
+        from fetch_gsc import parse_args
+        opts = parse_args(["--json", "--sitemaps"])
+        self.assertFalse(opts["explicit_dimensions"])
+        opts_dim = parse_args(["--json", "--dimensions", "query"])
+        self.assertTrue(opts_dim["explicit_dimensions"])
 
 
 class TestProcessInbox(unittest.TestCase):

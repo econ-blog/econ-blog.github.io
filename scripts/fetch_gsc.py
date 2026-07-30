@@ -34,8 +34,8 @@ INSPECT_CAP = 5
 def parse_args(argv):
     """[--json] [--days N] [--limit N] [--dimensions a,b] [--sitemaps] [--inspect url…]"""
     opts = {"json": False, "days": DEFAULT_DAYS, "limit": DEFAULT_LIMIT,
-            "dimensions": ["query", "page"], "sitemaps": False, "inspect": [],
-            "unknown": []}
+            "dimensions": ["query", "page"], "explicit_dimensions": False,
+            "sitemaps": False, "inspect": [], "unknown": []}
     i = 0
     while i < len(argv):
         token = argv[i]
@@ -50,6 +50,7 @@ def parse_args(argv):
             i += 2
         elif token == "--dimensions" and i + 1 < len(argv):
             opts["dimensions"] = [d.strip() for d in argv[i + 1].split(",") if d.strip()]
+            opts["explicit_dimensions"] = True
             i += 2
         elif token == "--sitemaps":
             opts["sitemaps"] = True
