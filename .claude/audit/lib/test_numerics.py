@@ -281,6 +281,59 @@ with tempfile.TemporaryDirectory() as tmp:
           sorted(k for k in r if k != "file" and k != "total"),
           ["N1", "N2", "N4", "N5"])
 
+print("check_file — 사전 분기 (N5)")
+import numerics as _n  # noqa: E402
+
+DICT_BODY = FM + "\n2026년 7월 16일 기준금리는 2.75%입니다.\n"
+
+
+def with_content_root(tmp):
+    """CONTENT_ROOT를 임시 코퍼스로 바꾼다. _md가 그것을 읽는다."""
+    root = Path(tmp)
+    (root / "posts").mkdir()
+    (root / "dictionary").mkdir()
+    _n.CONTENT_ROOT = root
+    return root
+
+
+_REAL_ROOT = _n.CONTENT_ROOT
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = with_content_root(tmp)
+        (root / "posts" / "pub.md").write_text(
+            FM + "\n2026년 7월 16일 기준금리는 2.75%입니다.\n", encoding="utf-8")
+        d = root / "dictionary" / "base-rate.md"
+        d.write_text(DICT_BODY, encoding="utf-8")
+        r = check_file(d)
+        check("사전은 N5를 계산한다", [x["value"] for x in r["N5"]], ["2.75"])
+        check("N5도 total에 합산", r["total"], 1)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = with_content_root(tmp)
+        # 같은 실행이 방금 쓴 초안. 아직 발행된 글이 아니므로 대조 대상이 아니다.
+        (root / "posts" / "today.md").write_text(
+            '---\ntitle: "오늘"\ndraft: true\n---\n'
+            "\n2026년 7월 16일 기준금리는 2.75%입니다.\n", encoding="utf-8")
+        d = root / "dictionary" / "base-rate.md"
+        d.write_text(DICT_BODY, encoding="utf-8")
+        check("draft 포스트와의 일치는 N5가 아니다", check_file(d)["N5"], [])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = with_content_root(tmp)
+        (root / "posts" / "_index.md").write_text(DICT_BODY, encoding="utf-8")
+        d = root / "dictionary" / "self.md"
+        d.write_text(DICT_BODY, encoding="utf-8")
+        check("EXCLUDE 파일도 대조 대상이 아니다", check_file(d)["N5"], [])
+finally:
+    _n.CONTENT_ROOT = _REAL_ROOT
+
+print("is_draft")
+check("front matter의 draft: true", _n.is_draft('---\ndraft: true\n---\n본문\n'), True)
+check("draft: false", _n.is_draft('---\ndraft: false\n---\n본문\n'), False)
+check("front matter 없음", _n.is_draft("본문만 있다\n"), False)
+check("본문의 draft: true 는 세지 않는다",
+      _n.is_draft('---\ntitle: "t"\n---\n\ndraft: true 라고 적었다\n'), False)
+
 print()
 if FAILED:
     print("실패:")
@@ -288,5 +341,3 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
-
-

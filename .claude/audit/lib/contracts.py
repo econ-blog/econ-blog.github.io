@@ -170,16 +170,25 @@ def all_checks() -> list[dict]:
     return violations
 
 
+USAGE = "usage: contracts.py [--check terms]"
+
+
 def main() -> None:
-    terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
-    if sys.argv[1:3] == ["--check", "terms"]:
+    argv = sys.argv[1:]
+    if argv[:1] == ["--check"]:
         # §J AC #69 — 포스트 실행이 깨뜨릴 수 있는 유일한 계약.
+        # 오타난 검사 이름을 조용히 전수 검사로 흘리면 draft.md가 `all_checks()`
+        # 출력을 `--check terms` 결과로 오독한다(둘 다 리스트다). 실패로 낸다.
+        if argv[1:] != ["terms"]:
+            sys.exit(f"{USAGE}\n--check 는 terms 만 받는다: {' '.join(argv[1:]) or '(없음)'}")
+        terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
         print(json.dumps(check_terms_sync(terms, DICT_DIR),
                          ensure_ascii=False, indent=2))
         return
+    if argv:
+        sys.exit(f"{USAGE}\n알 수 없는 인자: {' '.join(argv)}")
     print(json.dumps(all_checks(), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     main()
-

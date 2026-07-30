@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
 from mdtext import MD_LINK, mask_code_spans, split_front_matter  # noqa: E402
 
+# front matter 안에서만 본다 — 본문의 "draft: true"는 설명 텍스트일 수 있다.
+DRAFT_TRUE = re.compile(r"^draft:\s*true\s*$", re.MULTILINE)
+
 # AC #54 — 단위는 닫힌 목록. 긴 것을 먼저 둬야 '%포인트'가 '%'에, '배럴'이
 # '배'에 먹히지 않는다. 정규식 대안(|)은 왼쪽부터 시도하기 때문이다.
 UNITS = ("%포인트", "%p", "%", "원", "달러", "배럴", "배", "bp")
@@ -312,6 +315,23 @@ def _md(sub: str) -> list[Path]:
                   if p.name not in EXCLUDE)
 
 
+def is_draft(raw: str) -> bool:
+    """front matter에 `draft: true`가 있는가."""
+    fm, _ = split_front_matter(raw)
+    return DRAFT_TRUE.search(fm) is not None
+
+
+def published_posts() -> list[Path]:
+    """N5의 대조 대상 — `draft: true`를 뺀 포스트. (AC #59)
+
+    N5가 집행하는 규칙은 "이미 **발행된** 글의 수치를 사전으로 옮겨 적지
+    않는다"이다. 쓰기시점(§J)과 감사시점이 같은 목록을 봐야 판정이 갈리지
+    않으므로 양쪽 모두 이 함수를 쓴다.
+    """
+    return [p for p in _md("posts")
+            if not is_draft(p.read_text(encoding="utf-8"))]
+
+
 def claims_summary(files: list[Path]) -> dict:
     """수치 주장의 총량. N1 건수의 분모이며 회피 탐지의 유일한 신호다.
 
@@ -346,17 +366,30 @@ def check_file(path: Path) -> dict:
         "N5": [],
     }
     if path.parent.name == "dictionary":
-        others = [p for p in _md("posts") if p.resolve() != path.resolve()]
+        # 같은 /daily-post 실행이 방금 쓴 포스트는 draft: true라 아직 발행된
+        # 글이 아니다. 빼지 않으면 오늘 포스트와 오늘 사전 항목이 같은 수치를
+        # 공유한다는 이유만으로 게이트가 정상 산출물을 막는다 — 감사 시점은
+        # 계수기라 무해했지만 §J는 게이트다.
+        others = [p for p in published_posts() if p.resolve() != path.resolve()]
         out["N5"] = n5_reprint([path], others)
     out["total"] = sum(len(out[k]) for k in ("N1", "N2", "N4", "N5"))
     return out
 
 
+USAGE = "usage: numerics.py [--file <경로>]"
+
+
 def main() -> None:
     argv = sys.argv[1:]
     if argv[:1] == ["--file"]:
+        # 인자를 조용히 흘리면 draft.md가 전수 스캔 출력을 단일 파일 결과로
+        # 오독한다. 알아듣지 못한 호출은 통과가 아니라 실패로 낸다.
+        if len(argv) != 2:
+            sys.exit(f"{USAGE}\n--file 은 경로 인자 하나를 요구한다.")
         print(json.dumps(check_file(Path(argv[1])), ensure_ascii=False, indent=2))
         return
+    if argv:
+        sys.exit(f"{USAGE}\n알 수 없는 인자: {' '.join(argv)}")
     posts, dicts = _md("posts"), _md("dictionary")
 
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
@@ -384,7 +417,8 @@ def main() -> None:
                      "why": f"{c['indicator']} {c['asof']} 값 불일치 — "
                             + " / ".join(loc for v in c["values"]
                                          for loc in v["at"])})
-    for c in n5_reprint(dicts, posts):
+    # 쓰기시점 `--file`과 같은 목록을 본다 — 갈리면 §J의 전제가 깨진다.
+    for c in n5_reprint(dicts, published_posts()):
         rows.append({"check": "N5", "at": c["at"],
                      "quote": f"{c['value']}{c['unit']}",
                      "why": ", ".join(c["also_in"]) + " 와 값·단위 동일 — 전재 확인 요청"})
