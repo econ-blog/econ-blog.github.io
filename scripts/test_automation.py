@@ -63,5 +63,49 @@ class TestSelectInspectUrls(unittest.TestCase):
         self.assertEqual(meta2["date"], "2026-07-29T10:00:00Z")
 
 
+class TestProcessInbox(unittest.TestCase):
+    def test_parse_verdict_strict(self):
+        from process_inbox import parse_verdict
+        self.assertEqual(parse_verdict("승인"), "APPROVED")
+        self.assertEqual(parse_verdict("발행"), "APPROVED")
+        self.assertEqual(parse_verdict("ok"), "APPROVED")
+        self.assertEqual(parse_verdict("반려"), "REJECTED")
+        
+        # Must NOT approve loose words or negations
+        self.assertEqual(parse_verdict("발행 안 함"), "AMBIGUOUS")
+        self.assertEqual(parse_verdict("좋아요"), "AMBIGUOUS")
+        self.assertEqual(parse_verdict("괜찮네요"), "AMBIGUOUS")
+
+    def test_match_target_pr_sequence(self):
+        from process_inbox import match_target_pr
+        open_prs = [
+            {"number": 10, "head": {"ref": "auto/post-2026-07-30"}},
+            {"number": 11, "head": {"ref": "auto/audit-2026-07-30"}}
+        ]
+        
+        # 1. Reply to message with token
+        up_reply = {"message": {"reply_to_message": {"text": "#P0730 오늘의 포스트"}, "text": "승인"}}
+        pr, status = match_target_pr(up_reply, open_prs)
+        self.assertEqual(pr["number"], 10)
+        self.assertEqual(status, "TOKEN_MATCH")
+
+        # 2. Text token
+        up_text = {"message": {"text": "승인 #A0730"}}
+        pr, status = match_target_pr(up_text, open_prs)
+        self.assertEqual(pr["number"], 11)
+        self.assertEqual(status, "TOKEN_MATCH")
+
+        # 3. 2+ open PRs without token
+        up_notoken = {"message": {"text": "승인"}}
+        pr, status = match_target_pr(up_notoken, open_prs)
+        self.assertIsNone(pr)
+        self.assertEqual(status, "MULTIPLE_PRS_NEED_TOKEN")
+
+        # 4. 1 open PR fallback
+        pr_single, status_single = match_target_pr(up_notoken, [open_prs[0]])
+        self.assertEqual(pr_single["number"], 10)
+        self.assertEqual(status_single, "SINGLE_PR_FALLBACK")
+
+
 if __name__ == "__main__":
     unittest.main()
