@@ -253,6 +253,34 @@ with tempfile.TemporaryDirectory() as tmp:
     check("0건 문서도 분모에 포함", claims_summary(files[2:])["claims_per_post"], 0.0)
     check("빈 목록 0 나눗셈", claims_summary([])["claims_per_post"], 0.0)
 
+print("check_file (쓰기시점 진입점)")
+from numerics import check_file  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = Path(tmp) / "posts"
+    d.mkdir()
+    p = d / "x.md"
+    p.write_text(FM + "\n단가를 10% 올렸습니다.\n사상 최대를 기록했습니다.\n",
+                 encoding="utf-8")
+    r = check_file(p)
+    check("N1 잡힘", [x["value"] for x in r["N1"]], ["10"])
+    check("N4 잡힘", [x["words"] for x in r["N4"]], [["사상 최대"]])
+    check("N2 없음", r["N2"], [])
+    check("포스트는 N5 계산 안 함", r["N5"], [])
+    check("total 합산", r["total"], 2)
+    check("file 경로 기록", r["file"], p.as_posix())
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = Path(tmp) / "posts"
+    d.mkdir()
+    p = d / "clean.md"
+    p.write_text(FM + "\n2026년 7월 16일 기준금리는 2.75%입니다.\n", encoding="utf-8")
+    r = check_file(p)
+    check("깨끗하면 total 0", r["total"], 0)
+    check("깨끗해도 키는 모두 있다",
+          sorted(k for k in r if k != "file" and k != "total"),
+          ["N1", "N2", "N4", "N5"])
+
 print()
 if FAILED:
     print("실패:")
@@ -260,4 +288,5 @@ if FAILED:
         print(" -", f)
     sys.exit(1)
 print("전부 통과")
+
 

@@ -330,8 +330,35 @@ def claims_summary(files: list[Path]) -> dict:
     }
 
 
+def check_file(path: Path) -> dict:
+    """작성 시점 단일 파일 검사. (§J AC #69)
+
+    N1·N2·N4는 파일 하나로 판정된다. N5는 사전 ↔ 포스트 대조이므로 검사
+    대상이 사전일 때만 계산한다. N3은 코퍼스 전체 버킷이 필요해 제외한다 —
+    주간 감사가 누적 관점에서 본다.
+    """
+    raw = path.read_text(encoding="utf-8")
+    out = {
+        "file": path.as_posix(),
+        "N1": n1_missing_asof(raw),
+        "N2": n2_nonprimary(raw),
+        "N4": n4_unbounded_superlative(raw),
+        "N5": [],
+    }
+    if path.parent.name == "dictionary":
+        others = [p for p in _md("posts") if p.resolve() != path.resolve()]
+        out["N5"] = n5_reprint([path], others)
+    out["total"] = sum(len(out[k]) for k in ("N1", "N2", "N4", "N5"))
+    return out
+
+
 def main() -> None:
+    argv = sys.argv[1:]
+    if argv[:1] == ["--file"]:
+        print(json.dumps(check_file(Path(argv[1])), ensure_ascii=False, indent=2))
+        return
     posts, dicts = _md("posts"), _md("dictionary")
+
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
 
     rows = []
