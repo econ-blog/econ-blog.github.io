@@ -32,7 +32,7 @@ def select_top_published_urls(posts_dir: str, base_url: str = "https://econ-blog
             content = f.read()
         meta = parse_post_metadata(content)
         if not meta["draft"] and meta["date"]:
-            slug = os.path.basename(fpath).replace(".md", "")
+            slug = os.path.basename(fpath).removesuffix(".md")
             url = f"{base_url.rstrip('/')}/posts/{slug}/"
             published.append((meta["date"], url))
             
