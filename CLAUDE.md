@@ -6,7 +6,7 @@
 
 한국 경제뉴스를 비전문가에게 설명하는 Hugo 정적 사이트(테마: PaperMod, `themes/PaperMod` 서브모듈), GitHub Pages 배포. 산출물은 (a) Hugo 콘텐츠·설정과 (b) 그것을 만드는 `/daily-post`·`/weekly-audit` 슬래시 명령이다.
 
-**렌더 경로에 우리가 쓴 코드는 없다.** Python(`.claude/audit/lib/`, `.claude/loop/`, `scripts/`)은 전부 오프라인 도구이며 `hugo` 빌드나 CI에서 돌지 않는다.
+**렌더 경로에 우리가 쓴 코드는 없다.** Python(`.claude/audit/lib/`, `.claude/loop/`, `scripts/`)은 통지·감사·인박스 자동화 및 오프라인 도구로 GitHub Actions Workflows(`.github/workflows/`)에서 실행된다.
 
 ## 명령
 
@@ -17,7 +17,7 @@ hugo --gc --minify       # 프로덕션 빌드 (CI가 돌리는 것) → ./publi
 
 CI(`.github/workflows/hugo.yml`)는 `main` push 시 Hugo **0.164.0**으로 빌드해 `actions/deploy-pages`로 배포한다. `gh-pages` 브랜치는 없다. 로컬 Hugo를 그 버전에 맞춘다.
 
-**모든 Python 호출은 `.venv/bin/python`이다.** 시스템 인터프리터에는 Google API 패키지가 없어 `python`·`python3`로는 import가 실패한다. **`requirements.txt`는 없다** — `.venv`는 손으로 구성됐다. 재현이 필요하면 설치 버전을 `MEMORY.md` §3에서 읽는다.
+**모든 Python 호출은 `.venv/bin/python`이다.** 의존성은 `requirements.txt`에 핀 조치되어 있다(`google-analytics-data==0.23.0`, `google-api-python-client==2.198.0`, `google-auth==2.56.2`, `requests==2.34.2`). GitHub Actions 및 로컬 execution 시 가상환경(`.venv`)을 사용한다.
 
 ## 검증
 
@@ -107,11 +107,11 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 - **포스트·사전 초안을 사용자 승인 없이 커밋·푸시하지 않는다.** 이미 작성된 콘텐츠의 사소해 보이는 수정에도 적용된다.
 - `.claude/loop/reference-corpus/`는 제3자 저작물이다. 로컬 전용, gitignored, **발행·재배포 금지.**
 - **`/docs/`는 통째로 gitignored다.** `docs/superpowers/` 아래 스펙·계획은 커밋되지 않고 git 이력에도 없다 — `git add docs/...`는 무효다. 그 안에만 있는 운영 지식은 파일을 지우면 유실되므로, 남길 것은 `CLAUDE.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)로 옮긴다.
-- `ga4-credentials.json`(저장소 루트, gitignored)은 **Google 서비스 계정 키 원본**이다 — 래퍼 JSON이 아니다. `scripts/fetch_gsc.py:8`이 이 경로를 모듈 상수로 하드코딩하고 `fetch_ga4.py`는 `main()`에서 `GOOGLE_APPLICATION_CREDENTIALS`를 먼저 본다.
+- `ga4-credentials.json`(저장소 루트, gitignored)은 Google 서비스 계정 키 원본이다. `scripts/fetch_gsc.py`와 `scripts/fetch_ga4.py`는 `get_credentials_path()` 헬퍼를 통해 `GA4_CREDENTIALS`, `GSC_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS` 환경변수 또는 로컬 파일 경로를 통합 관리한다.
 
 ## 로드맵
 
 상세와 근거는 `MEMORY.md` §6. 여기서는 범위 판정에 쓰이는 두 줄만 고정한다.
 
 - **Agent3 (주간 감사, `/weekly-audit`)는 구현 완료다.** 범위는 여섯 축 — ① 링크 무결성 ② 성과 분석(GA4/GSC, 데이터 충분성 게이트 뒤) ③ 색인 건전성 ④ 시스템 스캔 ⑤ 방향성 점검 ⑥ 수치 무결성. **디자인·Lighthouse·성능 측정은 의도적으로 범위 밖이다** — 헤드리스 브라우저가 필요하다. 그것이 포함된다고 적은 문서는 낡은 초안을 기술하고 있다. **이 줄이 범위에 관한 최종 권위이며**, SEED AC #35는 이 줄과 실제 범위가 어긋나면 소견을 내게 한다. 에이전트는 이 파일을 직접 수정하지 못한다(AC #34·#38).
-- **스케줄 실행은 아직 없다.** `/daily-post`·`/weekly-audit`의 무인 경로는 구현·검증됐지만 아무것도 그것을 호출하지 않는다. 스펙: `docs/superpowers/specs/2026-07-30-automation-telegram-loop.md`(Claude routine + GitHub Actions + Telegram 승인 루프).
+- **Telegram 승인 루프 기반 자동화 스케줄이 구성되어 있다.** GitHub Actions(`.github/workflows/notify.yml`, `analytics.yml`, `inbox.yml`) 및 Telegram Bot을 통해 PR 통지, 주간 스냅샷 수집, 무인 승인/반려 판정을 처리한다.

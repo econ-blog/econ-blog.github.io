@@ -21,7 +21,9 @@
 *.pdf
 /SEED.md
 /tudul.md
-/docs/
+/docs/*
+!/docs/superpowers/
+/docs/superpowers/*
 !/docs/superpowers/plans/
 .superpowers/
 
