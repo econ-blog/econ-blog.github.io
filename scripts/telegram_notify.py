@@ -14,14 +14,16 @@ def extract_inspection_line(body: str) -> str:
     lines = body.splitlines()
     for i, line in enumerate(lines):
         clean = line.strip()
+        m = re.search(r'(?:#+\s*)?발행\s*전\s*검사:\s*(.+)', clean)
+        if m and m.group(1).strip():
+            return f"발행 전 검사: {m.group(1).strip()}"
+        
         if re.search(r'#+\s*발행\s*전\s*검사', clean):
             for next_line in lines[i+1:]:
                 nl = next_line.strip()
                 if nl:
                     return f"발행 전 검사: {re.sub(r'^[-*\s]+', '', nl)}"
             return "발행 전 검사: 진행됨"
-        elif "발행 전 검사:" in clean:
-            return re.sub(r'^#+\s*', '', clean)
     return "발행 전 검사: 검사 불가"
 
 def format_post_notification(title: str, body: str, branch: str, url: str) -> str:

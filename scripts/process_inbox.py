@@ -105,6 +105,7 @@ def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
     target_files = [
         f for f in f_resp.json()
         if (f["filename"].startswith("content/posts/") or f["filename"].startswith("content/dictionary/"))
+        and f["filename"].endswith(".md")
         and f.get("status") != "removed"
     ]
     
