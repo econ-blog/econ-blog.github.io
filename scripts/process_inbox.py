@@ -88,10 +88,10 @@ def update_telegram_offset(repo: str, pat: str, offset: int):
     else:
         resp.raise_for_status()
 
-def execute_approved_post(pr: dict, repo: str, pat: str):
+def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
-        return
+        return False
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     
@@ -134,26 +134,29 @@ def execute_approved_post(pr: dict, repo: str, pat: str):
     # 4. Delete branch
     ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}"
     requests.delete(ref_url, headers=headers)
+    return True
 
-def execute_approved_audit(pr: dict, repo: str, pat: str):
+def execute_approved_audit(pr: dict, repo: str, pat: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
-        return
+        return False
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/merge"
     m_resp = requests.put(merge_url, headers=headers, json={"merge_method": "squash"})
     m_resp.raise_for_status()
+    return True
 
-def execute_rejected(pr: dict, repo: str, pat: str):
+def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
-        return
+        return False
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     close_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
     c_resp = requests.patch(close_url, headers=headers, json={"state": "closed"})
     c_resp.raise_for_status()
+    return True
 
 def main():
     creds_json = os.environ.get("CREDENTIALS_JSON")
@@ -202,16 +205,23 @@ def main():
         # Execute verdict
         try:
             is_post = target_pr["head"]["ref"].startswith("auto/post-")
+            success = False
             if verdict == "APPROVED":
                 if is_post:
-                    execute_approved_post(target_pr, repo, pat)
-                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
+                    success = execute_approved_post(target_pr, repo, pat)
+                    if success:
+                        send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
                 else:
-                    execute_approved_audit(target_pr, repo, pat)
-                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 감사 승인 병합 완료.")
+                    success = execute_approved_audit(target_pr, repo, pat)
+                    if success:
+                        send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 감사 승인 병합 완료.")
             elif verdict == "REJECTED":
-                execute_rejected(target_pr, repo, pat)
-                send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
+                success = execute_rejected(target_pr, repo, pat)
+                if success:
+                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
+            
+            if success:
+                open_prs = [p for p in open_prs if p["number"] != target_pr["number"]]
         except Exception as err:
             send_telegram(bot_token, chat_id, f"❌ PR #{target_pr['number']} 처리 중 오류 발생: {err}")
             sys.exit(1)
