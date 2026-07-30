@@ -1,0 +1,50 @@
+name: Telegram PR Notification
+
+on:
+  pull_request:
+    types: [opened]
+
+concurrency:
+  group: notify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: startsWith(github.head_ref, 'auto/post-') || startsWith(github.head_ref, 'auto/audit-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Mask Sensitive Tokens
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Send Notification
+        id: send_notify
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: python scripts/telegram_notify.py
+
+      - name: Comment PR on Failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "⚠️ 텔레그램 알림 전송에 실패했습니다. 로그를 확인하세요."
