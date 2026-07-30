@@ -37,8 +37,10 @@ class TestTelegramNotify(unittest.TestCase):
         from process_inbox import flip_front_matter_draft
         content = "---\ntitle: Sample\ndraft: true\n---\nHere is draft: true in body."
         updated = flip_front_matter_draft(content)
+        self.assertTrue(updated.startswith("---\n"))
+        self.assertIn("\n---\n", updated)
         self.assertIn("draft: false", updated.split("---")[1])
-        self.assertIn("Here is draft: true in body.", updated.split("---")[2])
+        self.assertIn("Here is draft: true in body.", updated)
 
     def test_format_audit_notification(self):
         from telegram_notify import format_audit_notification

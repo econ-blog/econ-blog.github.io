@@ -87,7 +87,7 @@ def flip_front_matter_draft(content: str) -> str:
     def replace_draft(match):
         fm = match.group(1)
         fm_updated = re.sub(r'(?m)^draft:\s*true\b', 'draft: false', fm)
-        return f"---{fm_updated}---"
+        return f"---\n{fm_updated}\n---"
     return re.sub(r'^---\s*\n(.*?)\n---', replace_draft, content, count=1, flags=re.DOTALL)
 
 def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
