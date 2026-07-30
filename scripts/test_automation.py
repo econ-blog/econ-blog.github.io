@@ -37,6 +37,29 @@ class TestTelegramNotify(unittest.TestCase):
         msg_inline = format_post_notification(title, body_inline, "auto/post-2026-07-30", url)
         self.assertIn("발행 전 검사: 통과", msg_inline)
 
+    def test_strip_front_matter_and_chunking(self):
+        from telegram_notify import strip_front_matter, chunk_text, TELEGRAM_TEXT_LIMIT
+        raw = '---\ntitle: "T"\ndraft: true\n---\n\n첫 문단.\n\n둘째 문단.\n'
+        body = strip_front_matter(raw).strip()
+        self.assertFalse(body.startswith("---"))
+        self.assertNotIn("draft: true", body)
+        self.assertTrue(body.startswith("첫 문단."))
+
+        # 상한 이하는 한 덩어리로 남는다
+        self.assertEqual(chunk_text(body), [body])
+
+        # 문단 경계에서 나뉘고, 어떤 덩어리도 상한을 넘지 않는다
+        paras = "\n\n".join(["가" * 1200 for _ in range(5)])
+        chunks = chunk_text(paras)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(c) <= TELEGRAM_TEXT_LIMIT for c in chunks))
+
+        # 단일 문단이 상한을 넘으면 그 문단만 강제로 잘린다 — 통째 실패보다 낫다
+        giant = chunk_text("나" * (TELEGRAM_TEXT_LIMIT * 2 + 7))
+        self.assertEqual(len(giant), 3)
+        self.assertTrue(all(len(c) <= TELEGRAM_TEXT_LIMIT for c in giant))
+        self.assertEqual("".join(giant), "나" * (TELEGRAM_TEXT_LIMIT * 2 + 7))
+
     def test_flip_front_matter_draft(self):
         from process_inbox import flip_front_matter_draft
         content = "---\ntitle: Sample\ndraft: true\n---\nHere is draft: true in body."
