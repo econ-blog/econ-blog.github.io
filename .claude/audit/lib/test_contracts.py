@@ -107,6 +107,19 @@ v4 = check_topic_report_format(NOT_TOP)
 check("생성일 위치 이탈 → 위반 1건", len(v4), 1)
 check("위치 위반 문구", "최상단이 아니다" in v4[0]["detail"], True)
 
+print("--check terms CLI")
+import json as _json  # noqa: E402
+import subprocess  # noqa: E402
+
+LIB = os.path.dirname(os.path.abspath(__file__))
+proc = subprocess.run(
+    [".venv/bin/python", os.path.join(LIB, "contracts.py"), "--check", "terms"],
+    capture_output=True, text=True)
+check("종료 코드 0", proc.returncode, 0)
+parsed = _json.loads(proc.stdout)
+check("리스트를 낸다", isinstance(parsed, list), True)
+check("현재 저장소는 정합 (9↔9)", parsed, [])
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

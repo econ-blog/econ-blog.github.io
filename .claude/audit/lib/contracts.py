@@ -170,6 +170,16 @@ def all_checks() -> list[dict]:
     return violations
 
 
-if __name__ == "__main__":
+def main() -> None:
+    terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
+    if sys.argv[1:3] == ["--check", "terms"]:
+        # §J AC #69 — 포스트 실행이 깨뜨릴 수 있는 유일한 계약.
+        print(json.dumps(check_terms_sync(terms, DICT_DIR),
+                         ensure_ascii=False, indent=2))
+        return
     print(json.dumps(all_checks(), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
 
