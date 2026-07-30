@@ -107,6 +107,40 @@ v4 = check_topic_report_format(NOT_TOP)
 check("생성일 위치 이탈 → 위반 1건", len(v4), 1)
 check("위치 위반 문구", "최상단이 아니다" in v4[0]["detail"], True)
 
+print("--check terms CLI")
+import json as _json  # noqa: E402
+import subprocess  # noqa: E402
+
+from contracts import REPO_ROOT  # noqa: E402
+
+LIB = os.path.dirname(os.path.abspath(__file__))
+# 상대경로 ".venv/bin/python"은 CWD 의존이라 저장소 루트 밖에서 돌리면 죽는다.
+# contracts.py 자신이 REPO_ROOT로 앵커된 이유와 같은 함정이다.
+PY = str(REPO_ROOT / ".venv/bin/python")
+
+
+def run_cli(*args):
+    return subprocess.run([PY, os.path.join(LIB, "contracts.py"), *args],
+                          capture_output=True, text=True, cwd=str(REPO_ROOT.parent))
+
+
+proc = run_cli("--check", "terms")
+check("종료 코드 0", proc.returncode, 0)
+parsed = _json.loads(proc.stdout)
+check("리스트를 낸다", isinstance(parsed, list), True)
+check("현재 저장소는 정합", parsed, [])
+
+# 알 수 없는 인자를 통과로 오독하지 않는다 — all_checks()도 리스트라 조용히
+# 흘리면 draft.md가 "[] 이면 통과"를 잘못된 출력에 적용한다.
+bad_name = run_cli("--check", "term")
+check("오타난 검사 이름 → 실패", bad_name.returncode != 0, True)
+check("오타 시 표준출력 없음", bad_name.stdout, "")
+no_target = run_cli("--check")
+check("--check 인자 누락 → 실패", no_target.returncode != 0, True)
+unknown = run_cli("--terms")
+check("모르는 플래그 → 실패", unknown.returncode != 0, True)
+check("인자 없으면 전수 검사", _json.loads(run_cli().stdout), [])
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

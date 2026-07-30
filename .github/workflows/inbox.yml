@@ -1,0 +1,45 @@
+name: Daily Telegram Inbox Verdict Processing
+
+on:
+  schedule:
+    - cron: '0 21 * * *' # KST 06:00 (UTC 21:00 previous day)
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-inbox
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  process-inbox:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Mask Sensitive Tokens
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Process Inbox Updates
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          PAT: ${{ secrets.PAT }}
+          TELEGRAM_OFFSET: ${{ vars.TELEGRAM_OFFSET }}
+          REPO: ${{ github.repository }}
+        run: python scripts/process_inbox.py

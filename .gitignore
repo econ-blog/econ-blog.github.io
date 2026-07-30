@@ -21,11 +21,20 @@
 *.pdf
 /SEED.md
 /tudul.md
-/docs/
+/docs/*
+!/docs/superpowers/
+/docs/superpowers/*
+!/docs/superpowers/plans/
 .superpowers/
 
 # GA4 Credentials & Venv
 ga4-credentials.json
+# CREDENTIALS_JSON 시크릿을 채운 사본과 그 재료. 템플릿(credentials.example.json)만 커밋한다.
+credentials.json
+creds.json
+*.credentials.json
+*-credentials.json
+telegram-credentials.json
 .venv/
 # Python cache
 __pycache__/
