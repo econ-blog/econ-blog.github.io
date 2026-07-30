@@ -20,7 +20,7 @@ def format_post_notification(title: str, body: str, branch: str, url: str) -> st
     token = extract_verdict_token(branch, "post")
     inspection = extract_inspection_line(body)
     
-    clean_body = re.sub(r'#.*?\n', '', body)
+    clean_body = re.sub(r'#.*?(?:\n|$)', '', body)
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', clean_body) if s.strip()]
     summary = " ".join(sentences[:2]) if len(sentences) >= 2 else (sentences[0] if sentences else "")
     
@@ -57,8 +57,10 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str):
         resp = requests.post(url, json=payload, timeout=10)
         resp.raise_for_status()
     except Exception as e:
-        sanitized = str(e).replace(bot_token, "[MASKED_BOT_TOKEN]")
-        print(f"Telegram API send failed: {sanitized}", file=sys.stderr)
+        err_msg = str(e)
+        if bot_token:
+            err_msg = err_msg.replace(bot_token, "[MASKED_BOT_TOKEN]")
+        print(f"Telegram API send failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
 
 def main():
