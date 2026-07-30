@@ -8,6 +8,10 @@ concurrency:
   group: notify-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   notify:
     if: startsWith(github.head_ref, 'auto/post-') || startsWith(github.head_ref, 'auto/audit-')

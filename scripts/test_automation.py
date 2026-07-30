@@ -86,24 +86,30 @@ class TestProcessInbox(unittest.TestCase):
         ]
         
         # 1. Reply to message with token
-        up_reply = {"message": {"reply_to_message": {"text": "#P0730 오늘의 포스트"}, "text": "승인"}}
+        up_reply = {"message": {"reply_to_message": {"text": "#P0730 오늘의 포스트"}, "text": "승인", "chat": {"id": 12345}}}
         pr, status = match_target_pr(up_reply, open_prs)
         self.assertEqual(pr["number"], 10)
         self.assertEqual(status, "TOKEN_MATCH")
 
         # 2. Text token
-        up_text = {"message": {"text": "승인 #A0730"}}
+        up_text = {"message": {"text": "승인 #A0730", "chat": {"id": 12345}}}
         pr, status = match_target_pr(up_text, open_prs)
         self.assertEqual(pr["number"], 11)
         self.assertEqual(status, "TOKEN_MATCH")
 
-        # 3. 2+ open PRs without token
-        up_notoken = {"message": {"text": "승인"}}
+        # 3. Invalid token
+        up_bad_token = {"message": {"text": "승인 #P9999", "chat": {"id": 12345}}}
+        pr_bad, status_bad = match_target_pr(up_bad_token, open_prs)
+        self.assertIsNone(pr_bad)
+        self.assertEqual(status_bad, "TOKEN_NOT_FOUND")
+
+        # 4. 2+ open PRs without token
+        up_notoken = {"message": {"text": "승인", "chat": {"id": 12345}}}
         pr, status = match_target_pr(up_notoken, open_prs)
         self.assertIsNone(pr)
         self.assertEqual(status, "MULTIPLE_PRS_NEED_TOKEN")
 
-        # 4. 1 open PR fallback
+        # 5. 1 open PR fallback
         pr_single, status_single = match_target_pr(up_notoken, [open_prs[0]])
         self.assertEqual(pr_single["number"], 10)
         self.assertEqual(status_single, "SINGLE_PR_FALLBACK")

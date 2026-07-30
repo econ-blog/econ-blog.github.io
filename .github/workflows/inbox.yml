@@ -9,6 +9,11 @@ concurrency:
   group: telegram-inbox
   cancel-in-progress: false
 
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
 jobs:
   process-inbox:
     runs-on: ubuntu-latest

@@ -9,6 +9,9 @@ concurrency:
   group: analytics-snapshot
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   fetch-snapshot:
     runs-on: ubuntu-latest
