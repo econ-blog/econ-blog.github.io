@@ -15,10 +15,6 @@ def parse_verdict(text: str) -> str:
         return "APPROVED"
     if cleaned in REJECTED_SET:
         return "REJECTED"
-        
-    words = set(re.findall(r'\w+', cleaned))
-    if words & NEGATION_WORDS:
-        return "AMBIGUOUS"
     return "AMBIGUOUS"
 
 def match_target_pr(update: dict, open_prs: list) -> tuple:
