@@ -180,7 +180,7 @@ def main():
                 print(json.dumps({"error": "GSC에 접근 가능한 사이트가 없다",
                                   "stage": "list_sites"}, ensure_ascii=False))
                 sys.exit(1)
-            site_url = sites[0].get("siteUrl")
+            site_url = os.environ.get("GSC_SITE_URL") or (sites[0].get("siteUrl") if sites else DEFAULT_SITE_URL)
             payload = {
                 "site_url": site_url,
                 "property_type": property_type(site_url),
