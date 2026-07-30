@@ -106,7 +106,7 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 - 로컬 push는 저장소 전용 SSH 키(`~/.ssh/id_ed25519_econblog`)로 인증한다 — 자격증명 프롬프트가 뜨지 않는다.
 - **포스트·사전 초안을 사용자 승인 없이 커밋·푸시하지 않는다.** 이미 작성된 콘텐츠의 사소해 보이는 수정에도 적용된다.
 - `.claude/loop/reference-corpus/`는 제3자 저작물이다. 로컬 전용, gitignored, **발행·재배포 금지.**
-- **`/docs/`는 통째로 gitignored다.** `docs/superpowers/` 아래 스펙·계획은 커밋되지 않고 git 이력에도 없다 — `git add docs/...`는 무효다. 그 안에만 있는 운영 지식은 파일을 지우면 유실되므로, 남길 것은 `CLAUDE.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)로 옮긴다.
+- **`/docs/`는 `docs/superpowers/plans/` 하나만 빼고 gitignored다.** `.gitignore`가 `/docs/*` → `!/docs/superpowers/` → `/docs/superpowers/*` → `!/docs/superpowers/plans/` 4단으로 뚫는다(중간 단계를 지우면 부모가 무시되어 예외가 통째로 죽는다). **`docs/superpowers/specs/`는 여전히 커밋되지 않고 git 이력에도 없다** — `git add docs/superpowers/specs/...`는 무효다. 거기에만 있는 운영 지식은 파일을 지우면 유실되므로, 남길 것은 `CLAUDE.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)로 옮긴다.
 - `ga4-credentials.json`(저장소 루트, gitignored)은 Google 서비스 계정 키 원본이다. `scripts/fetch_gsc.py`와 `scripts/fetch_ga4.py`는 `get_credentials_path()` 헬퍼를 통해 `GA4_CREDENTIALS`, `GSC_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS` 환경변수 또는 로컬 파일 경로를 통합 관리한다.
 
 ## 로드맵

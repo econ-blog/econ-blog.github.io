@@ -199,21 +199,38 @@ To satisfy Spec Known Limit #6, the following 4 environment items must be execut
 - **판정 토큰 매칭 실패는 `판정불가`다.** 토큰이 있는데 어느 PR과도 맞지 않을 때 "대기 PR 1건" 폴백으로 떨어뜨리면 사람이 지정하지 않은 글을 발행한다. AC #8의 3단계 폴백은 **토큰이 없을 때만** 적용된다.
 - **미해결 스펙 모순**: AC #27(스냅샷 부재를 게이트 미달과 구분)·#28(Hugo 실패 시 `측정 불가`)은 감사 ②③④ 스테이지 파일 수정을 요구하는데, 같은 스펙 Constraints가 "스테이지 파일은 변경되지 않는다"고 못박았다. 어느 쪽을 접을지 정하지 않은 채 구현하면 조용히 드롭된다.
 
-**루틴 등록 파라미터**(계획 Task 6이 지워질 문서에 두려던 것): 데일리 = 매일 KST 07:00 `/daily-post`, 인박스(KST 06:00)보다 뒤. 위클리 = 일요일 KST 08:00 `/weekly-audit`, 데일리 작성보다 뒤(감사 AC #4가 더티 트리에서 중단한다). 둘 다 부트스트랩으로 `python -m venv .venv && .venv/bin/pip install -r requirements.txt` + `git submodule update --init --recursive`, 자격증명은 fine-grained PAT(`contents: write` · `pull_requests: write`) 하나.
+**루틴 등록 파라미터**(계획 Task 6이 지워질 문서에 두려던 것): 데일리 = 매일 KST 07:00 `/daily-post`, 인박스(KST 06:00)보다 뒤. 위클리 = 일요일 KST 08:00 `/weekly-audit`, 데일리 작성보다 뒤(감사 AC #4가 더티 트리에서 중단한다). 둘 다 부트스트랩으로 `python -m venv .venv && .venv/bin/pip install -r requirements.txt` + `git submodule update --init --recursive`, 자격증명은 아래 PAT 하나.
+
+### PAT 권한 (fine-grained, 이 저장소만)
+
+루틴과 `inbox.yml`이 **같은 토큰 하나**를 쓴다. 네 번째·다섯 번째 항목이 빠지면 실패
+지점이 서로 다르고 둘 다 조용하다 — 오프셋이 안 올라가면 같은 판정이 매일 재실행되고,
+스냅샷 다운로드 실패는 `|| true`가 삼킨다.
+
+| 권한 | 수준 | 없으면 깨지는 것 |
+|---|---|---|
+| Contents | Read and write | 브랜치 push, `draft:` 플립, 브랜치 삭제 |
+| Pull requests | Read and write | PR 생성·병합·닫기, 알림 실패 시 PR 코멘트 |
+| **Variables** | Read and write | `process_inbox.update_telegram_offset` — **없으면 오프셋이 고정되어 같은 업데이트가 매일 재처리된다** |
+| **Actions** | Read | 위클리 부트스트랩의 `gh run download --name analytics-snapshot` |
+| Metadata | Read (자동) | fine-grained PAT 필수 항목 |
+
+classic PAT을 쓰지 않는다. `GITHUB_TOKEN`으로 대체할 수 없다 — 그것으로 병합해도
+`hugo.yml`이 깨어나지 않고 저장소 변수도 못 쓴다(위 §3).
 
 ### Claude Routine Parameters
 
 1. **Daily Post Routine**
-   - **Schedule**: Every day KST 07:00
+   - **Schedule**: Every day KST 07:00 (인박스 06:00보다 뒤)
    - **Command**: `/daily-post`
    - **Bootstrap**: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && git submodule update --init --recursive`
-   - **Credentials**: GitHub PAT (`contents: write`, `pull_requests: write`)
+   - **Credentials**: 위 표의 PAT
 
 2. **Weekly Audit Routine**
-   - **Schedule**: Every Sunday KST 08:00
+   - **Schedule**: Every Sunday KST 08:00 (analytics 스냅샷 07:30보다 뒤, 데일리 작성보다 뒤 — AC #4가 더티 트리에서 중단한다)
    - **Command**: `/weekly-audit`
-   - **Bootstrap**: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && gh run download --name analytics-snapshot --dir snapshot_output || true`
-   - **Credentials**: GitHub PAT (`contents: write`, `pull_requests: write`)
+   - **Bootstrap**: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && git submodule update --init --recursive && gh run download --name analytics-snapshot --dir snapshot_output || true`
+   - **Credentials**: 위 표의 PAT (`Actions: Read`가 `gh run download`에 필요하다)
 
 ### 미해결·미착수
 

@@ -43,20 +43,36 @@ def format_post_notification(title: str, body: str, branch: str, url: str) -> st
         f"승인 / 반려 로 답장."
     )
 
+# weekly-audit.md §9-1이 PR 본문에 쓰기로 한 여섯 줄의 키. `키:` 형태만 받는다.
+# 리포트 본문의 H2(`## ⚠ 계약 위반`)는 콜론이 없어 의도적으로 탈락한다 — 리포트를
+# 통째로 복사하면 값이 빠진 헤딩만 늘어서 요약처럼 보이는 빈 메시지가 된다.
+SUMMARY_KEYS = ("계약 위반", "확정 사망 링크", "데이터 충분성",
+                "색인 건전성", "소견", "새 가설 제안")
+SUMMARY_LINE = re.compile(r'^(?:' + '|'.join(SUMMARY_KEYS) + r')\s*:\s*\S')
+DECISION_DIVIDER = re.compile(r'^[─-]+\s*결정 필요\s*[─-]*$')
+
+
 def format_audit_notification(title: str, body: str, branch: str, url: str) -> str:
     token = extract_verdict_token(branch, "audit")
-    
-    lines = body.splitlines()
+
     filtered_lines = []
-    keywords = ["계약 위반", "확정 사망 링크", "데이터 충분성", "색인 건전성", "소견", "새 가설 제안", "결정 필요", "주간 감사", "Audit Summary"]
-    for l in lines:
-        l_str = l.strip()
-        if not l_str or l_str.startswith("PR:"):
+    in_decision_block = False
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
             continue
-        if any(k in l_str for k in keywords) or l_str.startswith("*") or l_str.startswith("-"):
-            filtered_lines.append(l_str)
-            
-    summary_block = "\n".join(filtered_lines[:10]) if filtered_lines else (lines[0] if lines else "요약 정보 없음")
+        if DECISION_DIVIDER.match(line):
+            in_decision_block = True
+            filtered_lines.append(line)
+        elif SUMMARY_LINE.match(line):
+            filtered_lines.append(line)
+        elif in_decision_block and line[:1] in ("*", "-"):
+            # 결정 필요 블록 안의 항목만 싣는다. 블록 밖의 불릿은 리포트 산문이다.
+            filtered_lines.append(line)
+
+    # 계약을 지키지 않은 본문은 조용히 반쪽 요약을 내지 않고 그렇다고 말한다.
+    # PR 링크는 아래에 그대로 붙으므로 사람이 열어볼 경로는 남는다.
+    summary_block = "\n".join(filtered_lines[:12]) if filtered_lines else "요약 정보 없음"
     return (
         f"{token} 주간 감사\n\n"
         f"{summary_block}\n\n"

@@ -46,20 +46,49 @@ class TestTelegramNotify(unittest.TestCase):
         self.assertIn("draft: false", updated.split("---")[1])
         self.assertIn("Here is draft: true in body.", updated)
 
-    def test_format_audit_notification(self):
-        from telegram_notify import format_audit_notification
-        report = """계약 위반: 1건
+    # weekly-audit.md §9-1이 지시하는 PR 본문 축자 템플릿. 이 상수와 그 절이
+    # 어긋나면 알림에서 줄이 조용히 사라진다 — 양쪽을 함께 고친다.
+    AUDIT_PR_BODY = """## 감사 요약
+계약 위반: 1건
 확정 사망 링크: 0건 / 사람 점검 필요: 2건
 데이터 충분성: 미달 (발행 5 / 20건)
 색인 건전성: 정상
-소견: 1건 (④ 1)
+소견: 1건 (④ 1, ⑥ 0)
 새 가설 제안: 1건
 ─ 결정 필요 ─
 * Check link X
-PR: https://github.com/org/repo/pull/2"""
-        msg = format_audit_notification("Weekly Audit", report, "auto/audit-2026-07-30", "https://github.com/org/repo/pull/2")
+PR 리포트: .claude/audit/audit-2026-07-30.md"""
+
+    def test_format_audit_notification(self):
+        from telegram_notify import format_audit_notification
+        msg = format_audit_notification("Weekly Audit", self.AUDIT_PR_BODY,
+                                        "auto/audit-2026-07-30",
+                                        "https://github.com/org/repo/pull/2")
         self.assertIn("#A0730 주간 감사", msg)
-        self.assertIn("계약 위반: 1건", msg)
+        # 일곱 줄 전부가 살아남아야 한다. 하나라도 빠지면 요약이 반쪽이 된다.
+        for line in ("계약 위반: 1건",
+                     "확정 사망 링크: 0건 / 사람 점검 필요: 2건",
+                     "데이터 충분성: 미달 (발행 5 / 20건)",
+                     "색인 건전성: 정상",
+                     "소견: 1건 (④ 1, ⑥ 0)",
+                     "새 가설 제안: 1건",
+                     "─ 결정 필요 ─"):
+            self.assertIn(line, msg, f"§9-1 계약 줄이 필터를 통과하지 못했다: {line}")
+        self.assertNotIn("요약 정보 없음", msg)
+
+    def test_audit_notification_report_headings_do_not_match(self):
+        """리포트 H2를 PR 본문으로 복사하면 빈 요약이 된다 — 그 실패를 고정한다.
+
+        `## ⚠ 계약 위반`에는 콜론이 없어 필터를 통과하지 못한다. 이 테스트가
+        깨지면 누군가 필터를 느슨하게 만든 것이고, 그 순간 §9-1 계약은
+        "정규식이 알아서 맞춰준다"로 퇴화한다.
+        """
+        from telegram_notify import format_audit_notification
+        report_body = "## ⚠ 계약 위반\n1건\n\n## ③ 색인 건전성\n정상"
+        msg = format_audit_notification("Weekly Audit", report_body,
+                                        "auto/audit-2026-07-30",
+                                        "https://github.com/org/repo/pull/2")
+        self.assertIn("요약 정보 없음", msg)
 
 
 class TestSelectInspectUrls(unittest.TestCase):
