@@ -93,6 +93,81 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str):
         print(f"Telegram API send failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
 
+
+# 텔레그램 텍스트 메시지 상한은 4096자다. UTF-8 바이트가 아니라 문자 수이며,
+# 넘기면 400 Bad Request로 통째로 실패한다 — 잘라 보내는 쪽이 낫다.
+TELEGRAM_TEXT_LIMIT = 3500
+
+
+def strip_front_matter(raw: str) -> str:
+    """본문만 남긴다. 초안 알림에서 front matter는 읽을 가치가 없다."""
+    return re.sub(r'^---\s*\n.*?\n---\s*\n?', '', raw, count=1, flags=re.DOTALL)
+
+
+def chunk_text(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list:
+    """문단 경계를 우선 지키고, 한 문단이 상한을 넘으면 그 문단만 강제로 자른다."""
+    chunks, current = [], ""
+    for para in text.split("\n\n"):
+        if len(para) > limit:
+            if current:
+                chunks.append(current)
+                current = ""
+            for i in range(0, len(para), limit):
+                chunks.append(para[i:i + limit])
+            continue
+        candidate = f"{current}\n\n{para}" if current else para
+        if len(candidate) > limit:
+            chunks.append(current)
+            current = para
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return [c for c in chunks if c.strip()]
+
+
+def send_telegram_document(bot_token: str, chat_id: str, path: str, caption: str = ""):
+    """초안 파일을 첨부한다. 실패해도 죽지 않는다 — 요약 메시지는 이미 갔고,
+    첨부는 편의 기능이라 이것 때문에 워크플로를 실패시키면 PR 코멘트 폴백이
+    '알림 전송 실패'라고 거짓말을 하게 된다."""
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    try:
+        with open(path, "rb") as fh:
+            resp = requests.post(
+                url,
+                data={"chat_id": chat_id, "caption": caption[:1024]},
+                files={"document": (os.path.basename(path), fh, "text/markdown")},
+                timeout=30,
+            )
+        resp.raise_for_status()
+        return True
+    except Exception as e:
+        err_msg = str(e)
+        if bot_token:
+            err_msg = err_msg.replace(bot_token, "[MASKED_BOT_TOKEN]")
+        print(f"Telegram document send failed ({path}): {err_msg}", file=sys.stderr)
+        return False
+
+
+def send_draft_files(bot_token: str, chat_id: str, paths: list):
+    """포스트 초안을 본문(인라인) + 파일(첨부) 두 형태로 보낸다.
+
+    인라인이 주다 — 텔레그램은 .md를 다운로드 카드로만 그려서 모바일에서 바로
+    읽히지 않는다. 첨부는 원문 확인·보관용이다.
+    """
+    for path in paths:
+        if not os.path.isfile(path):
+            print(f"draft file not found, skipping: {path}", file=sys.stderr)
+            continue
+        raw = open(path, encoding="utf-8").read()
+        name = os.path.basename(path)
+        body = strip_front_matter(raw).strip()
+        chunks = chunk_text(body)
+        for i, chunk in enumerate(chunks, 1):
+            header = f"📄 {name}" + (f" ({i}/{len(chunks)})" if len(chunks) > 1 else "")
+            send_telegram_message(bot_token, chat_id, f"{header}\n\n{chunk}")
+        send_telegram_document(bot_token, chat_id, path, caption=name)
+
 def main():
     creds_json = os.environ.get("CREDENTIALS_JSON")
     if not creds_json:
@@ -113,8 +188,15 @@ def main():
         msg = format_audit_notification(title, body, branch, url)
     else:
         sys.exit(0)
-        
+
     send_telegram_message(bot_token, chat_id, msg)
+
+    # 초안 본문·파일 전송. 포스트 PR에만 붙인다 — 감사 PR은 리포트가 길고
+    # 요약이 이미 판정에 필요한 것을 다 담는다.
+    if "auto/post-" in branch:
+        paths = [p.strip() for p in os.environ.get("PR_FILES", "").splitlines() if p.strip()]
+        if paths:
+            send_draft_files(bot_token, chat_id, paths)
 
 if __name__ == "__main__":
     main()
