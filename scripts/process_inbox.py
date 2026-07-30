@@ -10,7 +10,7 @@ REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
 NEGATION_WORDS = {"안", "않", "못", "금지", "no", "not"}
 
 def parse_verdict(text: str) -> str:
-    cleaned = text.strip().lower()
+    cleaned = re.sub(r'#([paPA])\d{4}', '', text).strip().lower()
     if cleaned in APPROVED_SET:
         return "APPROVED"
     if cleaned in REJECTED_SET:
@@ -34,9 +34,10 @@ def match_target_pr(update: dict, open_prs: list) -> tuple:
         prefix = token_match.group(1).upper()
         mmdd = token_match.group(2)
         pr_prefix = "auto/post-" if prefix == "P" else "auto/audit-"
+        target_date_str = f"-{mmdd[:2]}-{mmdd[2:]}"
         for pr in open_prs:
             ref = pr["head"]["ref"]
-            if ref.startswith(pr_prefix) and ref.endswith(f"-{mmdd[:2]}-{mmdd[2:]}"):
+            if ref.startswith(pr_prefix) and target_date_str in ref:
                 return (pr, "TOKEN_MATCH")
         return (None, "TOKEN_NOT_FOUND")
         
@@ -65,15 +66,32 @@ def get_open_prs(repo: str, pat: str) -> list:
     resp.raise_for_status()
     return [pr for pr in resp.json() if pr["head"]["ref"].startswith("auto/")]
 
+def check_pr_open(pr: dict, repo: str, pat: str) -> bool:
+    if pr.get("state") != "open":
+        return False
+    pr_num = pr["number"]
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        return resp.json().get("state") == "open"
+    return False
+
 def update_telegram_offset(repo: str, pat: str, offset: int):
     url = f"https://api.github.com/repos/{repo}/actions/variables/TELEGRAM_OFFSET"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     resp = requests.patch(url, headers=headers, json={"name": "TELEGRAM_OFFSET", "value": str(offset)})
     if resp.status_code == 404:
         url_create = f"https://api.github.com/repos/{repo}/actions/variables"
-        requests.post(url_create, headers=headers, json={"name": "TELEGRAM_OFFSET", "value": str(offset)})
+        resp_create = requests.post(url_create, headers=headers, json={"name": "TELEGRAM_OFFSET", "value": str(offset)})
+        resp_create.raise_for_status()
+    else:
+        resp.raise_for_status()
 
 def execute_approved_post(pr: dict, repo: str, pat: str):
+    if not check_pr_open(pr, repo, pat):
+        print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
+        return
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     
@@ -82,7 +100,10 @@ def execute_approved_post(pr: dict, repo: str, pat: str):
     f_resp = requests.get(files_url, headers=headers)
     f_resp.raise_for_status()
     
-    post_files = [f for f in f_resp.json() if f["filename"].startswith("content/posts/")]
+    post_files = [
+        f for f in f_resp.json()
+        if f["filename"].startswith("content/posts/") and f.get("status") != "removed"
+    ]
     
     # 2. Flip draft: true -> draft: false on modified post files
     for pf in post_files:
@@ -115,6 +136,9 @@ def execute_approved_post(pr: dict, repo: str, pat: str):
     requests.delete(ref_url, headers=headers)
 
 def execute_approved_audit(pr: dict, repo: str, pat: str):
+    if not check_pr_open(pr, repo, pat):
+        print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
+        return
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/merge"
@@ -122,6 +146,9 @@ def execute_approved_audit(pr: dict, repo: str, pat: str):
     m_resp.raise_for_status()
 
 def execute_rejected(pr: dict, repo: str, pat: str):
+    if not check_pr_open(pr, repo, pat):
+        print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
+        return
     pr_num = pr["number"]
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
     close_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"

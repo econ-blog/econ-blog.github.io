@@ -69,6 +69,8 @@ class TestProcessInbox(unittest.TestCase):
         self.assertEqual(parse_verdict("승인"), "APPROVED")
         self.assertEqual(parse_verdict("발행"), "APPROVED")
         self.assertEqual(parse_verdict("ok"), "APPROVED")
+        self.assertEqual(parse_verdict("승인 #P0730"), "APPROVED")
+        self.assertEqual(parse_verdict("반려 #A0730"), "REJECTED")
         self.assertEqual(parse_verdict("반려"), "REJECTED")
         
         # Must NOT approve loose words or negations
@@ -80,7 +82,7 @@ class TestProcessInbox(unittest.TestCase):
         from process_inbox import match_target_pr
         open_prs = [
             {"number": 10, "head": {"ref": "auto/post-2026-07-30"}},
-            {"number": 11, "head": {"ref": "auto/audit-2026-07-30"}}
+            {"number": 11, "head": {"ref": "auto/audit-2026-07-30-1430"}}
         ]
         
         # 1. Reply to message with token
