@@ -84,6 +84,27 @@ class TestGate(unittest.TestCase):
         r = gate(snap("2026-07-31", []), "2026-07-31")
         self.assertEqual(r["status"], "no_usable")
 
+    def test_linkstate_shaped_snapshot_is_ok_when_fresh(self):
+        """candidates 키가 아예 없는 스냅샷(예: linkstate)은 본문 게이트 대상이 아니다."""
+        linkstate = {"generated_at": "2026-07-31T01:47:00+09:00",
+                     "inventory": [], "summary": {}, "ledger": []}
+        r = gate(linkstate, "2026-07-31")
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["candidates"], [])
+
+    def test_linkstate_shaped_snapshot_is_stale_when_old(self):
+        linkstate = {"generated_at": "2026-07-30T01:47:00+09:00",
+                     "inventory": [], "summary": {}, "ledger": []}
+        r = gate(linkstate, "2026-07-31")
+        self.assertEqual(r["status"], "stale")
+        self.assertEqual(r["candidates"], [])
+
+    def test_candidates_key_present_but_empty_stays_no_usable(self):
+        """candidates: [] 는 후보 스냅샷이다 — 키 부재와 혼동하면 안 된다(회귀 가드)."""
+        r = gate(snap("2026-07-31", []), "2026-07-31")
+        self.assertEqual(r["status"], "no_usable")
+        self.assertEqual(r["candidates"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

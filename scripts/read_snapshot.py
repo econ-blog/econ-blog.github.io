@@ -58,9 +58,16 @@ def gate(snapshot: dict, today: str) -> dict:
         return {"status": "stale", "candidates": [],
                 "reason": f"스냅샷 날짜 {snap_date} ≠ 오늘 KST {today}"}
 
-    usable = [c for c in snapshot.get("candidates", []) if body_ok(c)]
+    # "candidates" 키가 아예 없으면 후보 스냅샷이 아니다(예: linkstate) — 본문 게이트는
+    # 적용 대상이 없다. 빈 리스트로 존재하는 경우와는 다르게 취급해야 하므로 truthiness가
+    # 아니라 키 존재로 판별한다.
+    if "candidates" not in snapshot:
+        return {"status": "ok", "candidates": [],
+                "reason": "candidates 키 없음 — 날짜 신선도만 확인"}
+
+    usable = [c for c in snapshot["candidates"] if body_ok(c)]
     if not usable:
-        total = len(snapshot.get("candidates", []))
+        total = len(snapshot["candidates"])
         return {"status": "no_usable", "candidates": [],
                 "reason": f"본문 확보 후보 0건 (후보 {total}건)"}
 
