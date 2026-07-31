@@ -1,0 +1,79 @@
+name: Fetch Daily Candidates
+
+on:
+  schedule:
+    - cron: '47 16 * * *' # UTC 16:47 = KST 익일 01:47 (루틴 05:00 KST의 3시간 13분 전)
+  workflow_dispatch:
+
+concurrency:
+  group: fetch-candidates
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Mask Telegram token
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Fetch candidates
+        id: fetch
+        run: |
+          mkdir -p snapshot_out
+          RESULT=$(python scripts/fetch_candidates.py --out snapshot_out)
+          echo "$RESULT"
+          echo "total=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"])')" >> "$GITHUB_OUTPUT"
+          echo "usable=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["usable"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Deliver to sidecar
+        env:
+          PAT: ${{ secrets.PAT }}
+        run: bash scripts/sidecar_push.sh snapshot_out candidates
+
+      - name: Alert on empty pool
+        if: steps.fetch.outputs.total == '0'
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "fetch-candidates" "후보 0건 — 피드 전멸" \
+            "한경 3피드와 폴백 4피드 모두에서 24시간 이내 기사를 얻지 못했다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Alert on zero usable bodies
+        if: steps.fetch.outputs.total != '0' && steps.fetch.outputs.usable == '0'
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "fetch-candidates" "본문 확보 후보 0건" \
+            "후보 ${{ steps.fetch.outputs.total }}건 중 body_ok 0건 — trafilatura 추출 열화 의심." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Alert on workflow failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "fetch-candidates" "워크플로 실패" \
+            "수집이 완료되지 않았다. 오늘 무인 /daily-post는 산출물 없이 중단된다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
