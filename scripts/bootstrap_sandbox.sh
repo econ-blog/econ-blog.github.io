@@ -12,6 +12,7 @@ if command -v hugo >/dev/null 2>&1; then
 fi
 
 TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 URL="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
 
 echo "bootstrap: hugo ${HUGO_VERSION} 다운로드"
