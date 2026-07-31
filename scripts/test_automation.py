@@ -198,5 +198,25 @@ class TestProcessInbox(unittest.TestCase):
             self.assertEqual(offset_val, 0)
 
 
+class TestAutomationAlert(unittest.TestCase):
+    def test_alert_contains_workflow_reason_and_url(self):
+        from telegram_notify import format_automation_alert
+        msg = format_automation_alert(
+            "fetch-candidates", "본문 확보 후보 0건",
+            "후보 12건 중 body_ok 0건", "https://github.com/x/y/actions/runs/1")
+        self.assertIn("fetch-candidates", msg)
+        self.assertIn("본문 확보 후보 0건", msg)
+        self.assertIn("후보 12건 중 body_ok 0건", msg)
+        self.assertIn("https://github.com/x/y/actions/runs/1", msg)
+
+    def test_alert_does_not_match_audit_summary_filter(self):
+        """경보는 §9-1 PR 본문 계약과 다른 경로다. 감사 요약 필터에 걸리면 안 된다."""
+        from telegram_notify import format_automation_alert, SUMMARY_LINE
+        msg = format_automation_alert("fetch-candidates", "실패", "detail", "https://e.com")
+        for line in msg.splitlines():
+            self.assertIsNone(SUMMARY_LINE.match(line.strip()),
+                              f"경보 줄이 감사 요약 매처에 걸렸다: {line}")
+
+
 if __name__ == "__main__":
     unittest.main()

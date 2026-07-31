@@ -80,6 +80,20 @@ def format_audit_notification(title: str, body: str, branch: str, url: str) -> s
         f"승인 / 반려 로 답장."
     )
 
+
+def format_automation_alert(workflow: str, reason: str, detail: str, run_url: str) -> str:
+    """수집 워크플로 실패 경보. §9-1 PR 본문 계약과 무관한 별개 경로다.
+
+    SUMMARY_LINE 매처에 걸리지 않도록 'X: Y' 형태의 줄을 만들지 않는다.
+    """
+    return (
+        f"⚠ 자동화 경보 [{workflow}]\n\n"
+        f"{reason}\n"
+        f"{detail}\n\n"
+        f"실행 로그 {run_url}"
+    )
+
+
 def send_telegram_message(bot_token: str, chat_id: str, message: str):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message}
@@ -175,8 +189,13 @@ def main():
         sys.exit(1)
     creds = json.loads(creds_json)
     bot_token = creds["telegram"]["bot_token"]
-    chat_id = creds["telegram"]["chat_id"]
-    
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    if mode == "alert":
+        workflow, reason, detail, run_url = sys.argv[2:6]
+        send_telegram_message(bot_token, chat_id,
+                              format_automation_alert(workflow, reason, detail, run_url))
+        return
+
     branch = os.environ.get("PR_BRANCH", "")
     title = os.environ.get("PR_TITLE", "")
     body = os.environ.get("PR_BODY", "")
