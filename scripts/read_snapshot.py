@@ -52,6 +52,12 @@ def load_snapshot(sidecar: str, subdir: str, date_str: str) -> dict:
         return json.load(fh)
 
 
+# gate()가 채우는 계약 키 + main()이 진단용으로 얹는 키. 이 이름들은
+# candidates-없는 스냅샷(예: linkstate)의 페이로드 통과 시에도 덮어쓰지 않는다.
+RESULT_KEYS = {"status", "candidates", "reason", "sidecar_via",
+               "feeds_used", "feed_errors", "snapshot_path"}
+
+
 def gate(snapshot: dict, today: str) -> dict:
     snap_date = snapshot.get("generated_at", "")[:10]
     if snap_date != today:
@@ -73,6 +79,24 @@ def gate(snapshot: dict, today: str) -> dict:
 
     return {"status": "ok", "candidates": usable,
             "reason": f"후보 {len(usable)}건"}
+
+
+def build_result(snapshot: dict, today: str, how: str, snapshot_path: str | None) -> dict:
+    """gate() 결과에 진단 필드를 얹는다. candidates 키가 없는 스냅샷(예: linkstate)은
+    본문 게이트 대상이 아니다 — 대신 그 스냅샷 자신의 페이로드(summary/ledger 등)를
+    result에 통째로 얹어서, 소비자가 stdout만으로 문서화된 키를 읽을 수 있게 한다.
+    RESULT_KEYS(계약 키)와 이름이 겹치는 페이로드 키는 덮어쓰지 않는다."""
+    result = gate(snapshot, today)
+    result["sidecar_via"] = how
+    result["feeds_used"] = snapshot.get("feeds_used", [])
+    result["feed_errors"] = snapshot.get("feed_errors", [])
+    if snapshot_path is not None:
+        result["snapshot_path"] = snapshot_path
+    if "candidates" not in snapshot:
+        for key, value in snapshot.items():
+            if key not in RESULT_KEYS:
+                result[key] = value
+    return result
 
 
 def main() -> int:
@@ -100,20 +124,20 @@ def main() -> int:
 
     try:
         snapshot = load_snapshot(sidecar, args.subdir, today)
+        snapshot_path = os.path.abspath(
+            os.path.join(sidecar, args.subdir, f"{today}.json"))
     except FileNotFoundError:
         if args.allow_local_fetch:
             from fetch_candidates import collect
             snapshot = collect(now)
+            snapshot_path = None  # 파일에서 읽은 게 아니라 그 자리에서 수집한 것 — 가리킬 경로가 없다
         else:
             print(json.dumps({"status": "no_snapshot", "candidates": [],
                               "reason": f"{args.subdir}/{today}.json 없음",
                               "sidecar_via": how}, ensure_ascii=False))
             return 1
 
-    result = gate(snapshot, today)
-    result["sidecar_via"] = how
-    result["feeds_used"] = snapshot.get("feeds_used", [])
-    result["feed_errors"] = snapshot.get("feed_errors", [])
+    result = build_result(snapshot, today, how, snapshot_path)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] == "ok" else 1
 

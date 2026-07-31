@@ -49,19 +49,27 @@ jobs:
           now = datetime.now(timezone.utc)
           today = now.astimezone(KST).strftime("%Y-%m-%d")
 
+          def run(cmd):
+              # capture_output=True 이면 CalledProcessError.__str__ 은 종료코드만 보여주고
+              # stderr 는 삼켜진다 — Actions 로그와 텔레그램 알림 둘 다 진단 불가가 된다.
+              # 실패 시 stderr/stdout 을 로그에 찍은 뒤 그대로 실패시킨다(삼키지 않는다).
+              proc = subprocess.run(cmd, capture_output=True, text=True)
+              if proc.returncode != 0:
+                  print(f"::error::명령 실패: {' '.join(cmd)}", file=sys.stderr)
+                  print(f"--- stderr ---\n{proc.stderr[-4000:]}", file=sys.stderr)
+                  print(f"--- stdout (마지막 2000자) ---\n{proc.stdout[-2000:]}", file=sys.stderr)
+                  raise subprocess.CalledProcessError(proc.returncode, cmd, proc.stdout, proc.stderr)
+              return proc
+
           files = sorted(glob.glob("content/posts/*.md")) + sorted(glob.glob("content/dictionary/*.md"))
-          inv = json.loads(subprocess.run(
-              [sys.executable, ".claude/audit/lib/mdtext.py", *files],
-              capture_output=True, text=True, check=True).stdout)
+          inv = json.loads(run([sys.executable, ".claude/audit/lib/mdtext.py", *files]).stdout)
 
           # mdtext.inventory() 의 "external" 은 이미 source_url 과 related_urls 를
           # 포함한다 (.claude/audit/lib/mdtext.py 의 inventory 참조). 다시 더하지 않는다.
           urls = sorted({u for rec in inv.values() for u in rec.get("external") or [] if u})
 
-          summary = json.loads(subprocess.run(
-              [sys.executable, ".claude/audit/lib/linkcheck.py",
-               ".claude/audit/link-state.json", *urls],
-              capture_output=True, text=True, check=True).stdout)
+          summary = json.loads(run([sys.executable, ".claude/audit/lib/linkcheck.py",
+               ".claude/audit/link-state.json", *urls]).stdout)
 
           with open(".claude/audit/link-state.json", encoding="utf-8") as fh:
               ledger = json.load(fh)

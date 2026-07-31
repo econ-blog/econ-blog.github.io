@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from read_snapshot import resolve_sidecar, gate
+from read_snapshot import resolve_sidecar, gate, build_result
 
 
 def snap(date_iso, candidates):
@@ -104,6 +104,60 @@ class TestGate(unittest.TestCase):
         r = gate(snap("2026-07-31", []), "2026-07-31")
         self.assertEqual(r["status"], "no_usable")
         self.assertEqual(r["candidates"], [])
+
+
+class TestBuildResult(unittest.TestCase):
+    def test_snapshot_path_present_when_loaded_from_file(self):
+        r = build_result(snap("2026-07-31", [cand()]), "2026-07-31", "sibling",
+                          "/abs/path/candidates/2026-07-31.json")
+        self.assertEqual(r["snapshot_path"], "/abs/path/candidates/2026-07-31.json")
+
+    def test_snapshot_path_absent_when_locally_collected(self):
+        """--allow-local-fetch 로 그 자리에서 수집한 경우 가리킬 파일이 없다."""
+        r = build_result(snap("2026-07-31", [cand()]), "2026-07-31", "sibling", None)
+        self.assertNotIn("snapshot_path", r)
+
+    def test_candidates_path_output_unchanged_besides_snapshot_path(self):
+        """/daily-post 소비 경로 회귀 가드: candidates 스냅샷은 여전히 status/candidates/
+        reason/sidecar_via/feeds_used/feed_errors 만 나오고(+ snapshot_path), 스냅샷의
+        다른 키가 섞여 들어오지 않는다."""
+        r = build_result(snap("2026-07-31", [cand()]), "2026-07-31", "env",
+                          "/x/candidates/2026-07-31.json")
+        self.assertEqual(set(r.keys()),
+                          {"status", "candidates", "reason", "sidecar_via",
+                           "feeds_used", "feed_errors", "snapshot_path"})
+
+    def test_linkstate_summary_and_ledger_reach_result(self):
+        linkstate = {"generated_at": "2026-07-31T01:47:00+09:00",
+                     "inventory": {"a.md": {"external": []}},
+                     "summary": {"confirmed_dead": [], "manual_review": [], "moved": [],
+                                 "ledger_was_stale": False},
+                     "ledger": [{"url": "https://e.com/x", "status": "ok"}]}
+        r = build_result(linkstate, "2026-07-31", "sibling",
+                          "/x/linkstate/2026-07-31.json")
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["summary"], linkstate["summary"])
+        self.assertEqual(r["ledger"], linkstate["ledger"])
+        self.assertEqual(r["inventory"], linkstate["inventory"])
+        self.assertEqual(r["snapshot_path"], "/x/linkstate/2026-07-31.json")
+
+    def test_linkstate_payload_never_clobbers_contract_keys(self):
+        """스냅샷 페이로드에 계약 키와 이름이 겹치는 필드가 있어도 결과의 계약 값이
+        이긴다 — 예컨대 스냅샷 안에 우연히 'status' 라는 페이로드 키가 있어도 무시한다."""
+        linkstate = {"generated_at": "2026-07-31T01:47:00+09:00",
+                     "status": "should-not-leak", "summary": {"x": 1}, "ledger": []}
+        r = build_result(linkstate, "2026-07-31", "sibling", "/x/linkstate/2026-07-31.json")
+        self.assertEqual(r["status"], "ok")  # gate()의 판정이 이긴다, 스냅샷의 "status" 아님
+        self.assertEqual(r["summary"], {"x": 1})
+
+    def test_stale_linkstate_still_passes_through_payload(self):
+        """stale 이어도 candidates 없는 스냅샷이면 페이로드는 통과시킨다 — 호출부가
+        status로 알아서 걸러 쓴다(§3의 '측정 안 함' 규칙은 소비자 쪽 책임)."""
+        linkstate = {"generated_at": "2026-07-30T01:47:00+09:00",
+                     "summary": {"confirmed_dead": []}, "ledger": []}
+        r = build_result(linkstate, "2026-07-31", "sibling", "/x/linkstate/2026-07-30.json")
+        self.assertEqual(r["status"], "stale")
+        self.assertEqual(r["summary"], {"confirmed_dead": []})
 
 
 if __name__ == "__main__":

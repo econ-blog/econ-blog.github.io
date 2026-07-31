@@ -41,7 +41,12 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 확정 사망 링크: 측정 안 함 / 사람 점검 필요: 측정 안 함
 ```
 
-`ok`이면 스냅샷의 `summary`·`ledger`를 쓴다:
+`ok`이면 `summary`·`ledger`·`inventory`는 명령의 stdout JSON에 **최상위 키로 그대로**
+들어 있다 — `read_snapshot.py`가 candidates 키 없는 스냅샷(linkstate 모양)을 만나면
+자신의 페이로드 키를 결과에 얹어 통과시키기 때문이다(`status`·`candidates`·`reason`·
+`sidecar_via`·`snapshot_path`·`feeds_used`·`feed_errors`는 계약 키라 덮어쓰지 않는다).
+즉 이 명령 하나의 출력만 파싱하면 된다 — 별도로 스냅샷 파일을 열 필요는 없지만, 필요하면
+같은 출력의 `snapshot_path`가 로드된 JSON의 절대 경로를 가리킨다. 이 값들을 쓴다:
 
 - `summary.ledger_was_stale`이 true면 리포트 최상단에 원장 정체 경고를 낸다(AC #13).
 - `summary.confirmed_dead`가 **수정 대상**이다(하드 2회 + 5일 경과, AC #9).
