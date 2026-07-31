@@ -52,6 +52,25 @@ def load_snapshot(sidecar: str, subdir: str, date_str: str) -> dict:
         return json.load(fh)
 
 
+def load_snapshot_dir(sidecar: str, subdir: str, date_str: str) -> dict:
+    """analytics는 파일 하나가 아니라 날짜 디렉터리 안의 여러 JSON이다.
+
+    "candidates" 키를 일부러 넣지 않는다 — gate()는 그 키의 존재 여부로
+    후보 스냅샷인지를 판별한다. 넣으면 candidates: [] 있음-으로 오인되어
+    본문 게이트가 "본문 확보 후보 0건"으로 오판정한다(빈 파일 목록과는
+    다른 사상인데 같은 코드로 떨어진다). 대신 main()이 files 존재 여부로
+    직접 status를 정한다."""
+    base = os.path.join(sidecar, subdir, date_str)
+    if not os.path.isdir(base):
+        raise FileNotFoundError(base)
+    files = {}
+    for name in sorted(os.listdir(base)):
+        if name.endswith(".json"):
+            with open(os.path.join(base, name), encoding="utf-8") as fh:
+                files[name[:-5]] = json.load(fh)
+    return {"generated_at": f"{date_str}T00:00:00+09:00", "files": files}
+
+
 # gate()가 채우는 계약 키 + main()이 진단용으로 얹는 키. 이 이름들은
 # candidates-없는 스냅샷(예: linkstate)의 페이로드 통과 시에도 덮어쓰지 않는다.
 RESULT_KEYS = {"status", "candidates", "reason", "sidecar_via",
@@ -105,6 +124,8 @@ def main() -> int:
     ap.add_argument("--subdir", default="candidates")
     ap.add_argument("--allow-local-fetch", action="store_true",
                     help="수동 모드 전용. 스냅샷이 없으면 직접 수집한다.")
+    ap.add_argument("--dir-mode", action="store_true",
+                    help="스냅샷이 단일 JSON이 아니라 YYYY-MM-DD/ 디렉터리인 경우(analytics)")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)
@@ -123,21 +144,37 @@ def main() -> int:
             return 1
 
     try:
-        snapshot = load_snapshot(sidecar, args.subdir, today)
-        snapshot_path = os.path.abspath(
-            os.path.join(sidecar, args.subdir, f"{today}.json"))
+        if args.dir_mode:
+            snapshot = load_snapshot_dir(sidecar, args.subdir, today)
+            snapshot_path = os.path.abspath(os.path.join(sidecar, args.subdir, today))
+        else:
+            snapshot = load_snapshot(sidecar, args.subdir, today)
+            snapshot_path = os.path.abspath(
+                os.path.join(sidecar, args.subdir, f"{today}.json"))
     except FileNotFoundError:
-        if args.allow_local_fetch:
+        if args.allow_local_fetch and not args.dir_mode:
             from fetch_candidates import collect
             snapshot = collect(now)
             snapshot_path = None  # 파일에서 읽은 게 아니라 그 자리에서 수집한 것 — 가리킬 경로가 없다
         else:
+            missing = f"{args.subdir}/{today}" + ("" if args.dir_mode else ".json")
             print(json.dumps({"status": "no_snapshot", "candidates": [],
-                              "reason": f"{args.subdir}/{today}.json 없음",
+                              "reason": f"{missing} 없음",
                               "sidecar_via": how}, ensure_ascii=False))
             return 1
 
     result = build_result(snapshot, today, how, snapshot_path)
+    if args.dir_mode:
+        # gate()는 "candidates" 키 부재 스냅샷을 날짜 신선도만으로 ok 처리한다 — 그건
+        # analytics 디렉터리가 존재한다는 사실 자체로 이미 참이다(경로에 today가 박혀
+        # 있으므로 stale이 될 수 없다). 파일이 하나도 없는 빈 디렉터리까지 ok로 남기지
+        # 않기 위해 status만 여기서 덮어쓴다. files는 브리핑이 요구한 대로 스템 이름의
+        # 정렬된 목록으로 낸다 — 내용까지 담으면 계약이 무거워지고, 소비자(performance.md
+        # §2)는 어차피 사이드카 경로에서 개별 파일을 직접 읽는다.
+        file_names = sorted(snapshot["files"].keys())
+        result["files"] = file_names
+        result["status"] = "ok" if file_names else "no_usable"
+        result["reason"] = f"스냅샷 파일 {len(file_names)}건"
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] == "ok" else 1
 

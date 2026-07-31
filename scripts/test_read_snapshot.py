@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from read_snapshot import resolve_sidecar, gate, build_result
+from read_snapshot import resolve_sidecar, gate, build_result, load_snapshot_dir
 
 
 def snap(date_iso, candidates):
@@ -158,6 +158,38 @@ class TestBuildResult(unittest.TestCase):
         r = build_result(linkstate, "2026-07-31", "sibling", "/x/linkstate/2026-07-30.json")
         self.assertEqual(r["status"], "stale")
         self.assertEqual(r["summary"], {"confirmed_dead": []})
+
+
+class TestDirMode(unittest.TestCase):
+    def test_loads_every_json_in_the_date_directory(self):
+        import json, tempfile
+        from read_snapshot import load_snapshot_dir
+        with tempfile.TemporaryDirectory() as tmp:
+            day = os.path.join(tmp, "analytics", "2026-07-31")
+            os.makedirs(day)
+            for name in ("ga4_28d", "gsc_page_28d"):
+                with open(os.path.join(day, f"{name}.json"), "w") as fh:
+                    json.dump({"total_rows": 3}, fh)
+            out = load_snapshot_dir(tmp, "analytics", "2026-07-31")
+            self.assertEqual(sorted(out["files"]), ["ga4_28d", "gsc_page_28d"])
+            self.assertEqual(out["files"]["ga4_28d"]["total_rows"], 3)
+
+    def test_missing_directory_raises(self):
+        from read_snapshot import load_snapshot_dir
+        with self.assertRaises(FileNotFoundError):
+            load_snapshot_dir("/nonexistent-xyz", "analytics", "2026-07-31")
+
+    def test_no_candidates_key_so_gate_treats_it_as_freshness_only(self):
+        """load_snapshot_dir()가 candidates 키를 내지 않는다는 것은 회귀 가드가 필요한
+        계약이다 — 있으면 gate()가 candidates: [] 있음으로 오인해 no_usable로 오판정한다."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            day = os.path.join(tmp, "analytics", "2026-07-31")
+            os.makedirs(day)
+            out = load_snapshot_dir(tmp, "analytics", "2026-07-31")
+            self.assertNotIn("candidates", out)
+            r = gate(out, "2026-07-31")
+            self.assertEqual(r["status"], "ok")
 
 
 if __name__ == "__main__":

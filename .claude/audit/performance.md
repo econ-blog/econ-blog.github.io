@@ -28,14 +28,27 @@ GA4·GSC 데이터로 어떤 주제가 먹히는지 판정하고, **데이터 �
 
 ## 2. 트래픽 수집 (28일)
 
+**스크립트를 직접 실행하지 않는다.** 루틴 샌드박스는 Google API에 도달할 수 없다(설계
+문서 §1.2). `analytics.yml`이 일 01:20 KST에 미리 수집해 사이드카에 올려둔다:
+
 ```
-.venv/bin/python scripts/fetch_gsc.py --json --days 28 --dimensions page
-.venv/bin/python scripts/fetch_ga4.py --days 28 --limit 200
+.venv/bin/python scripts/read_snapshot.py --subdir analytics --dir-mode
 ```
 
-- **전제조건은 2단계로 판정한다**(AC #26 규약을 ②에도 적용): (1) 스크립트 파일이
+AC #23("API를 직접 호출하지 않는다 — `scripts/fetch_*.py` 경유로만")의 취지는 유지된다.
+스크립트가 여전히 유일한 산출 경로이고 실행 위치만 Actions로 옮겼다.
+
+읽는 파일:
+
+| 파일 | 대응하는 기존 호출 |
+|---|---|
+| `gsc_page_28d.json` | `fetch_gsc.py --json --days 28 --dimensions page` |
+| `ga4_28d.json` | `fetch_ga4.py --days 28 --limit 200` |
+| `gsc_28d.json` | `fetch_gsc.py --json --days 28` (차원 `query,page`) — ⑤가 쓴다 |
+
+- **전제조건은 2단계로 판정한다**(AC #26 규약을 ②에도 적용): (1) 스냅샷 파일이
   존재하는가 = 연동됨. (2) 출력의 `total_rows > 0` = 데이터 있음. 두 판정을 리포트에
-  **각각** 기록한다.
+  **각각** 기록한다. 스냅샷이 통째로 없으면 "조회 실패"로 기록한다.
 - GSC 출력이 `{"error": ...}`이거나 `{"ok": false}` 또는 종료 코드가 1이면 **"조회 실패"**로
   기록한다. `total_rows: 0`과 **다르게** 취급한다 — 전자는 모르는 것이고 후자는 아는 것이다.
 - `has_gsc_data` = GSC `page` 차원의 `total_rows > 0`.
