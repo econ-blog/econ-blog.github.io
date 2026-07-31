@@ -22,6 +22,11 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Extract title and body from commit message
         id: msg
         run: |
