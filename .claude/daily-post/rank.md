@@ -2,27 +2,37 @@
 
 후보 기사를 수집·점수 매겨 상위 후보(무인: 1건, 수동: 3건)를 선별한다. 결과는 daily-post.md로 넘긴다(파일로 저장하지 않음).
 
-## 1. RSS 수집
-1차로 한경 세 피드를 WebFetch로 가져온다:
-- https://www.hankyung.com/feed/economy
-- https://www.hankyung.com/feed/finance
-- https://www.hankyung.com/feed/realestate
+## 1. 후보 스냅샷 읽기
 
-세 피드 모두 실패하거나 빈 결과면 **중단**한다 — 후보를 지어내지 않는다. 무인 모드라면 산출물 없이 종료, 수동 모드라면 사용자에게 알리고 멈춘다.
+후보는 GitHub Actions(`fetch-candidates.yml`)가 매일 01:47 KST에 미리 수집해
+비공개 사이드카 `econ-blog/automation-data`에 올려둔다. **이 단계에서 RSS를 직접
+가져오지 않는다** — 루틴 샌드박스는 뉴스 사이트에 도달할 수 없다(설계 문서 §1.2).
 
-각 항목의 제목·링크·발행시각을 파싱한다. 발행시각(pubDate, `+0900` RFC-822)과 현재 시각을 **둘 다 KST로 맞춰** 비교해 **24시간 이내** 기사만 남긴다.
+```
+.venv/bin/python scripts/read_snapshot.py
+```
 
-24시간 이내 기사가 10건 미만이면 아래 2차 피드를 순서대로 추가한다. 10건을 넘기면 멈춘다:
-1. 연합뉴스 경제: https://www.yna.co.kr/rss/economy.xml
-2. 경향신문 경제: https://www.khan.co.kr/rss/rssdata/economy_news.xml
-3. 동아일보 경제: https://rss.donga.com/economy.xml
-4. 한겨레 경제: https://www.hani.co.kr/rss/economy (끝에 슬래시를 붙이지 않는다 — 308 리다이렉트 발생)
+수동 모드에서는 `--allow-local-fetch`를 붙인다. 사이드카에 스냅샷이 없으면 그 자리에서
+직접 수집한다(로컬은 egress가 있다).
 
-매일경제는 403을 반환하므로 fallback 목록에서 제외한다.
+출력의 `status`로 분기한다. **`ok`가 아니면 후보를 지어내지 않고 중단한다.**
 
-사용한 피드를 출력에 기록한다.
+| `status` | 뜻 | 동작 |
+|---|---|---|
+| `ok` | 본문 확보 후보 있음 | `candidates`로 §2 이하를 진행한다 |
+| `no_snapshot` | 오늘자 스냅샷 없음 | 무인은 산출물 없이 종료, 수동은 사용자에게 알리고 멈춘다 |
+| `stale` | 스냅샷 날짜 ≠ 오늘 KST | 위와 같다. **어제 뉴스로 글을 쓰지 않는다** |
+| `no_usable` | 후보는 있으나 본문이 전부 미달 | 위와 같다 |
+| `sidecar_unreachable` | 사이드카 접근 자체 실패 | 위와 같다. 단 **"뉴스 없음"과 구분해서** 보고한다 |
 
-혼합된 후보 풀이 30건을 넘으면 발행시각 최신순으로 상위 30건만 대상으로 삼는다.
+`candidates`의 각 항목은 `title`·`url`·`published_at`(KST, `+09:00`)·`source`·`feed`·
+`body_text`·`body_chars`를 갖는다. `body_text`가 곧 daily-post.md §2의 원문이다 —
+§2에서 다시 가져오지 않는다.
+
+`feeds_used`를 출력에 기록한다. `feed_errors`가 비어 있지 않으면 그것도 적는다.
+
+풀은 이미 발행시각 최신순 30건 이하로 잘려 있고 URL 중복이 제거되어 있다. 24시간 창도
+수집 시점(01:47 KST) 기준으로 적용되어 있다.
 
 ## 2. 중복 판정 (점수 체계 4번·5번 항목에서만 반영)
 
