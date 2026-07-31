@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fetch_candidates import (
     KST, parse_feed, within_window, cap_by_recency, kst_date_str,
+    BODY_MIN_CHARS, attach_body, body_ok, dedupe_by_url, build_snapshot,
 )
 
 FEED_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -101,6 +102,77 @@ class TestKstDate(unittest.TestCase):
     def test_kst_midday_is_same_day(self):
         self.assertEqual(
             kst_date_str(datetime(2026, 7, 31, 12, 0, tzinfo=KST)), "2026-07-31")
+
+
+class TestBody(unittest.TestCase):
+    def _item(self):
+        return {"title": "t", "url": "https://e.com/1",
+                "published_at": datetime(2026, 7, 31, 1, 0, tzinfo=KST),
+                "source": "s", "feed": "f"}
+
+    def test_attach_body_records_text_and_count(self):
+        out = attach_body(self._item(), lambda url: "가" * 900)
+        self.assertEqual(out["body_chars"], 900)
+        self.assertIsNone(out["body_error"])
+        self.assertTrue(body_ok(out))
+
+    def test_extractor_returning_none_is_an_error_not_empty_body(self):
+        out = attach_body(self._item(), lambda url: None)
+        self.assertEqual(out["body_chars"], 0)
+        self.assertEqual(out["body_error"], "extraction_returned_none")
+        self.assertFalse(body_ok(out))
+
+    def test_extractor_raising_is_captured_not_propagated(self):
+        def boom(url):
+            raise RuntimeError("boom")
+        out = attach_body(self._item(), boom)
+        self.assertIn("boom", out["body_error"])
+        self.assertFalse(body_ok(out))
+
+    def test_threshold_is_exactly_400(self):
+        self.assertEqual(BODY_MIN_CHARS, 400)
+        self.assertFalse(body_ok(attach_body(self._item(), lambda u: "가" * 399)))
+        self.assertTrue(body_ok(attach_body(self._item(), lambda u: "가" * 400)))
+        self.assertTrue(body_ok(attach_body(self._item(), lambda u: "가" * 401)))
+
+
+class TestDedupe(unittest.TestCase):
+    def test_same_url_kept_once_newest_wins(self):
+        now = datetime(2026, 7, 31, 1, 0, tzinfo=KST)
+        items = [
+            {"title": "old", "url": "https://e.com/1", "published_at": now - timedelta(hours=2),
+             "source": "s", "feed": "a"},
+            {"title": "new", "url": "https://e.com/1", "published_at": now,
+             "source": "s", "feed": "b"},
+        ]
+        out = dedupe_by_url(items)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["title"], "new")
+
+
+class TestSnapshot(unittest.TestCase):
+    def test_generated_at_is_kst_and_serialisable(self):
+        import json
+        utc_now = datetime(2026, 7, 30, 16, 47, tzinfo=timezone.utc)
+        item = attach_body(
+            {"title": "t", "url": "https://e.com/1",
+             "published_at": datetime(2026, 7, 31, 0, 30, tzinfo=KST),
+             "source": "s", "feed": "f"},
+            lambda u: "가" * 800)
+        snap = build_snapshot([item], ["hankyung/economy"], [], utc_now)
+        raw = json.dumps(snap, ensure_ascii=False)
+        self.assertIn("+09:00", snap["generated_at"])
+        self.assertIn("+09:00", snap["candidates"][0]["published_at"])
+        self.assertEqual(snap["window_hours"], 24)
+        self.assertEqual(snap["feeds_used"], ["hankyung/economy"])
+        self.assertTrue(snap["candidates"][0]["body_ok"])
+        self.assertIn("가", raw)
+
+    def test_snapshot_records_feed_errors(self):
+        utc_now = datetime(2026, 7, 30, 16, 47, tzinfo=timezone.utc)
+        snap = build_snapshot([], [], [{"feed": "hankyung/economy", "error": "403"}], utc_now)
+        self.assertEqual(len(snap["feed_errors"]), 1)
+        self.assertEqual(snap["candidates"], [])
 
 
 if __name__ == "__main__":
