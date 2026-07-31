@@ -8,7 +8,10 @@ SRC="$1"
 DEST="$2"
 WORK="$(mktemp -d)"
 
-git -c http.https://github.com/.extraheader= clone --depth 1 "https://${PAT}@github.com/econ-blog/automation-data.git" "$WORK"
+git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+git config --global --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+
+git clone --depth 1 "https://x-access-token:${PAT}@github.com/econ-blog/automation-data.git" "$WORK"
 mkdir -p "$WORK/$DEST"
 cp -R "$SRC"/. "$WORK/$DEST"/
 
@@ -23,5 +26,5 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "data: $DEST"
-git -c http.https://github.com/.extraheader= push
+git push
 echo "sidecar: $DEST 배달 완료"
