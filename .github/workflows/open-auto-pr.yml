@@ -1,0 +1,73 @@
+name: Open Auto PR
+
+on:
+  push:
+    branches:
+      - 'auto/**'
+
+concurrency:
+  group: open-auto-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Extract title and body from commit message
+        id: msg
+        run: |
+          # PR 본문은 커밋 메시지 본문으로 배달된다. 루틴 샌드박스에 gh를 쓸
+          # 자격증명 경로가 없어 PR 생성을 여기로 옮겼다 (설계 문서 §3.3).
+          # 셸 인젝션 방지: 타임스탬프 기반 고유 delim을 써서 commit message 본문이
+          # heredoc을 깨뜨리지 못하도록 한다.
+          DELIM_TITLE="__GITHUB_ACTIONS_TITLE_DELIMITER_$(date +%s)__"
+          DELIM_BODY="__GITHUB_ACTIONS_BODY_DELIMITER_$(date +%s)__"
+          {
+            echo "title<<$DELIM_TITLE"
+            git log -1 --format=%s
+            echo "$DELIM_TITLE"
+            echo "body<<$DELIM_BODY"
+            git log -1 --format=%b
+            echo "$DELIM_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Skip if PR already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          COUNT=$(gh pr list --head "${GITHUB_REF_NAME}" --state open --json number --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        if: steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          PR_TITLE: ${{ steps.msg.outputs.title }}
+          PR_BODY: ${{ steps.msg.outputs.body }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "${GITHUB_REF_NAME}" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          pip install requests
+          python scripts/telegram_notify.py alert \
+            "open-auto-pr" "PR 생성 실패" \
+            "브랜치 ${GITHUB_REF_NAME} 가 푸시되었으나 PR이 만들어지지 않았다. 텔레그램 승인 루프가 끊긴다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

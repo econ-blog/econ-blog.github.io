@@ -174,11 +174,18 @@ PR 리포트: .claude/audit/audit-YYYY-MM-DD[-HHMM].md
      `.claude/audit/topic-history.json`을 쓰고 add한다 — 미충족이면 두 파일에 손대지
      않는다(AC #21). 이 다섯이 AC #36의 산출물 전부이며 여섯 번째 파일을 만들지 않는다.
   2. `git status`로 다른 변경이 섞이지 않았는지 확인한다.
-  3. `auto/audit-YYYY-MM-DD[-HHMM]` 브랜치를 만들어
-     `git commit -m "audit: YYYY-MM-DD 주간 감사"`로 커밋하고 그 브랜치로 푸시한 뒤
-     `gh pr create --title "audit: YYYY-MM-DD 주간 감사" --body "<§9-1 본문>"`으로 PR을
-     만든다. **`--body`는 §9-1의 계약을 따른다** — 생략하거나 `--fill`로 대체하지
-     않는다. `main`에는 어떤 경우에도 직접 푸시하지 않는다.
+  3. `auto/audit-YYYY-MM-DD[-HHMM]` 브랜치를 만들어 커밋하고 그 브랜치로 푸시한다.
+     **`gh`를 호출하지 않는다** — 루틴 샌드박스에 `gh` 자격증명 경로가 없다. PR은
+     `.github/workflows/open-auto-pr.yml`이 push를 받아 만들며, **커밋 메시지 본문을 그대로
+     PR 본문으로 쓴다.** 따라서 §9-1의 일곱 줄 블록을 커밋 메시지 본문에 넣는다:
+
+     ```
+     git commit --cleanup=verbatim -m "audit: YYYY-MM-DD 주간 감사" -m "<§9-1 본문>"
+     ```
+
+     `--cleanup=verbatim`이 필수다 — §9-1 본문이 `## 감사 요약`으로 시작하므로 `#` 줄이
+     지워지면 텔레그램 요약이 통째로 사라진다. §9-1의 일곱 줄 계약은 그대로 유지한다.
+     `main`에는 어떤 경우에도 직접 푸시하지 않는다.
   4. 콘텐츠 수정(확정 사망 및 백필)이 0건이면 **콘텐츠 수정 없이 리포트·원장만** 커밋하여 PR을 만든다. (I4 통일)
 - **수동 모드**: 링크 수정이 1건 이상이면 (a) 변경 파일 경로 (b) 각 링크의 실패 이력
   (2회 관측 날짜·상태코드)을 상위 10건까지 상세히, 나머지는 "외 N건"으로 제시하고
