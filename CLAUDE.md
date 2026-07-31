@@ -50,8 +50,8 @@ for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
 
 | 단계 | 파일 | 하는 일 |
 |---|---|---|
-| §1 랭킹 | `rank.md` | 한경 3피드 → 신선 후보 10건 미만이면 연합/경향/동아/한겨레 폴백. 5기준 0–15점, 8점 바닥. 무인은 1위 자동 선택, 바닥 미달이면 조용히 중단. 수동은 3건 제시. |
-| §2 원문 | 시퀀서 | WebFetch. 실패 시 지어내지 않고 중단 — 무인은 후보를 폐기하고 2위로 넘어가지 않는다. |
+| §1 랭킹 | `rank.md` | `read_snapshot.py`로 사이드카 후보 스냅샷을 읽는다(RSS 직접 수집 없음). 5기준 0–15점, 8점 바닥. 무인은 1위 자동 선택, 바닥 미달이면 조용히 중단. 수동은 3건 제시. |
+| §2 원문 | 시퀀서 | 스냅샷의 `body_text`. WebFetch를 쓰지 않는다 — 샌드박스가 뉴스 사이트에 도달할 수 없다. `body_ok` 미달이면 후보를 폐기하고 중단한다. |
 | §3 연관 기사 | 시퀀서 | WebSearch. 실패·0건이면 필드를 통째로 생략한다. URL을 지어내지 않는다. |
 | §4 분석 | `analysis.md` | 3렌즈 분류 + 선행/동행 태깅, `macro-reference.md` 1회 조회, 지표 1–2개의 🟢/🟡/🔴 임계값. **디스크에 저장하지 않는다.** |
 | §5 작성 | `draft.md` | 포스트 + 사전 항목 + 위키링크. 산문·톤 규칙은 `writing-styles.md`에 위임. 끝에 **발행 전 결정론 검사**(§5-1~5-3). |
@@ -108,6 +108,36 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 - `.claude/loop/reference-corpus/`는 제3자 저작물이다. 로컬 전용, gitignored, **발행·재배포 금지.**
 - **`/docs/`는 `docs/superpowers/plans/` 하나만 빼고 gitignored다.** `.gitignore`가 `/docs/*` → `!/docs/superpowers/` → `/docs/superpowers/*` → `!/docs/superpowers/plans/` 4단으로 뚫는다(중간 단계를 지우면 부모가 무시되어 예외가 통째로 죽는다). **`docs/superpowers/specs/`는 여전히 커밋되지 않고 git 이력에도 없다** — `git add docs/superpowers/specs/...`는 무효다. 거기에만 있는 운영 지식은 파일을 지우면 유실되므로, 남길 것은 `CLAUDE.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)로 옮긴다.
 - `ga4-credentials.json`(저장소 루트, gitignored)은 Google 서비스 계정 키 원본이다. `scripts/fetch_gsc.py`와 `scripts/fetch_ga4.py`는 `get_credentials_path()` 헬퍼를 통해 `GA4_CREDENTIALS`, `GSC_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS` 환경변수 또는 로컬 파일 경로를 통합 관리한다.
+
+## 자동화 평면 (매 실행에 알아야 하는 것)
+
+**루틴 샌드박스는 뉴스 사이트·Google API·`econ-blog.github.io`에 도달할 수 없다.**
+egress allowlist는 GitHub 계열 + PyPI + npm뿐이다(2026-07-30 프로브 3회 실측).
+WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
+
+따라서 열린 인터넷이 필요한 수집은 GitHub Actions가 하고, 결과는 **비공개** 사이드카
+`econ-blog/automation-data`로 배달된다. `econ-blog.github.io`는 PUBLIC이므로 기사 본문
+(제3자 저작물)과 분석 데이터를 여기 커밋하지 않는다.
+
+| 워크플로 | 크론 (UTC) | KST | 산출물 |
+|---|---|---|---|
+| `fetch-candidates.yml` | `47 16 * * *` | 매일 01:47 | `candidates/YYYY-MM-DD.json` |
+| `analytics.yml` | `20 16 * * 6` | 일 01:20 | `analytics/YYYY-MM-DD/*.json` |
+| `fetch-linkstate.yml` | `37 16 * * 6` | 일 01:37 | `linkstate/YYYY-MM-DD.json` |
+| `open-auto-pr.yml` | `push` on `auto/**` | — | PR (→ `notify.yml`) |
+
+루틴은 `/daily-post` 매일 05:00 KST, `/weekly-audit` 일 05:00 KST. 수집은 루틴보다 최소
+3시간 앞에 둔다.
+
+**스냅샷 파일명과 `generated_at`은 언제나 KST 기준이다.** 워크플로가 UTC 16시대에 도는데
+UTC 날짜를 쓰면 매일 "스냅샷 부재"로 조용히 중단된다.
+
+**`gh`를 루틴에서 호출하지 않는다.** 샌드박스에 설치되어 있지 않고, 토큰을 넣을 안전한
+경로도 없다. PR 생성은 `open-auto-pr.yml`이 커밋 메시지 본문을 PR 본문으로 써서 만든다 —
+그래서 무인 커밋은 `git commit --cleanup=verbatim -m "<제목>" -m "<PR 본문>"` 형태다.
+
+Hugo는 샌드박스에 설치 가능하다. `scripts/bootstrap_sandbox.sh`가 0.164.0을 받는다
+(로컬에서는 no-op). 실패하면 ④E1·④E4·③I1·⑤D4를 **`측정 불가`**로 낸다 — `통과`가 아니다.
 
 ## 로드맵
 

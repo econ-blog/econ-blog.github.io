@@ -46,9 +46,13 @@ AC #23("API를 직접 호출하지 않는다 — `scripts/fetch_*.py` 경유로�
 | `ga4_28d.json` | `fetch_ga4.py --days 28 --limit 200` |
 | `gsc_28d.json` | `fetch_gsc.py --json --days 28` (차원 `query,page`) — ⑤가 쓴다 |
 
-- **전제조건은 2단계로 판정한다**(AC #26 규약을 ②에도 적용): (1) 스냅샷 파일이
-  존재하는가 = 연동됨. (2) 출력의 `total_rows > 0` = 데이터 있음. 두 판정을 리포트에
-  **각각** 기록한다. 스냅샷이 통째로 없으면 "조회 실패"로 기록한다.
+- **전제조건은 2단계로 판정하고, 두 판정은 서로 다른 곳에서 읽는다**(AC #26 규약을
+  ②에도 적용): (1) 연동됨 — `--dir-mode` 실행 결과의 `files` 목록(정렬된 stem명)에
+  해당 stem이 있는가로 판정한다. (2) 데이터 있음 — `{snapshot_path}/{stem}.json`을
+  개별로 열어 그 안의 `total_rows > 0`을 본다. `--dir-mode`의 stdout 자체에는
+  `total_rows`가 없다(`status`·`files`·`snapshot_path`·`reason`뿐이다). 두 판정을
+  리포트에 **각각** 기록한다. 스냅샷이 통째로 없으면(`files`가 비었거나 stem 자체가
+  없으면) "조회 실패"로 기록한다.
 - GSC 출력이 `{"error": ...}`이거나 `{"ok": false}` 또는 종료 코드가 1이면 **"조회 실패"**로
   기록한다. `total_rows: 0`과 **다르게** 취급한다 — 전자는 모르는 것이고 후자는 아는 것이다.
 - `has_gsc_data` = GSC `page` 차원의 `total_rows > 0`.
