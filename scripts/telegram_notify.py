@@ -189,6 +189,7 @@ def main():
         sys.exit(1)
     creds = json.loads(creds_json)
     bot_token = creds["telegram"]["bot_token"]
+    chat_id = creds["telegram"]["chat_id"]
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "alert":
         workflow, reason, detail, run_url = sys.argv[2:6]

@@ -217,6 +217,23 @@ class TestAutomationAlert(unittest.TestCase):
             self.assertIsNone(SUMMARY_LINE.match(line.strip()),
                               f"경보 줄이 감사 요약 매처에 걸렸다: {line}")
 
+    @patch("telegram_notify.send_telegram_message")
+    def test_main_alert_mode(self, mock_send_telegram):
+        import json
+        from telegram_notify import main
+        creds = json.dumps({"telegram": {"bot_token": "dummy_token", "chat_id": "123456"}})
+        test_args = ["telegram_notify.py", "alert", "test-workflow", "test-reason", "test-detail", "https://example.com/run/1"]
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds}), patch.object(sys, "argv", test_args):
+            main()
+        mock_send_telegram.assert_called_once()
+        args, _ = mock_send_telegram.call_args
+        self.assertEqual(args[0], "dummy_token")
+        self.assertEqual(args[1], "123456")
+        self.assertIn("⚠ 자동화 경보 [test-workflow]", args[2])
+        self.assertIn("test-reason", args[2])
+        self.assertIn("test-detail", args[2])
+        self.assertIn("https://example.com/run/1", args[2])
+
 
 if __name__ == "__main__":
     unittest.main()
