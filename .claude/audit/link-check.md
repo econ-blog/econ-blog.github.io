@@ -22,16 +22,34 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 네트워크를 쓰지 않는다.
 
 ## 3. 외부 링크 조회 (AC #7·#8)
-§1에서 모은 external URL 전체(중복 제거)를 원장과 함께 검사한다:
+
+**이 단계에서 `linkcheck.py`를 실행하지 않는다.** 루틴 샌드박스는 뉴스 사이트에도
+`econ-blog.github.io`에도 도달할 수 없다(설계 문서 §1.2). 여기서 실행하면 외부 URL 전건이
+연결 실패 → `classify()`가 전부 `soft`로 분류 → `consecutive_soft_failures`가 올라가고
+`manual_review`가 부풀어 **영속 원장에 가짜 실패가 커밋된다.** 감사를 하지 않는 것보다 나쁘다.
+
+조회는 `fetch-linkstate.yml`이 일 01:37 KST에 미리 한다. 결과를 읽는다:
+
 ```
-.venv/bin/python .claude/audit/lib/linkcheck.py .claude/audit/link-state.json <url1> <url2> ...
+.venv/bin/python scripts/read_snapshot.py --subdir linkstate
 ```
-- 이 명령이 `link-state.json`을 제자리 갱신하고 요약 JSON을 낸다. 호스트당 ≥1초 간격은
-  스크립트가 처리한다.
-- 요약의 `ledger_was_stale`이 true면 리포트 최상단에 원장 정체 경고를 낸다(AC #13).
-- 요약의 `confirmed_dead`가 **수정 대상**이다(하드 2회 + 5일 경과, AC #9).
+
+`status`가 `ok`가 아니면 **① 전체를 `측정 안 함`으로 낸다.** 이 값은 §9-1 PR 본문 계약을
+깨지 않는다 — `SUMMARY_LINE` 매처는 키 접두어만 보고 값은 자유다:
+
+```
+확정 사망 링크: 측정 안 함 / 사람 점검 필요: 측정 안 함
+```
+
+`ok`이면 스냅샷의 `summary`·`ledger`를 쓴다:
+
+- `summary.ledger_was_stale`이 true면 리포트 최상단에 원장 정체 경고를 낸다(AC #13).
+- `summary.confirmed_dead`가 **수정 대상**이다(하드 2회 + 5일 경과, AC #9).
 - `manual_review`는 **사람 점검 필요** 섹션에, `moved`는 **이동됨** 섹션에 싣는다(둘 다
   자동 수정 대상 아님, AC #10·#7).
+- `ledger`(갱신된 원장 전체)를 시퀀서 §10에 넘긴다. **§10이 그것을
+  `.claude/audit/link-state.json`에 쓰고 커밋한다** — 원장의 쓰기 주체는 바뀌지 않았고,
+  사람이 승인하는 PR을 여전히 거친다.
 
 ## 4. 확정 사망 링크 수정안 준비 (AC #11·#12)
 `confirmed_dead`의 각 URL에 대해 그 URL이 어디서 왔는지로 변경안을 만든다. **변경안은
