@@ -28,8 +28,7 @@ GA4·GSC 데이터로 어떤 주제가 먹히는지 판정하고, **데이터 �
 
 ## 2. 트래픽 수집 (28일)
 
-**스크립트를 직접 실행하지 않는다.** 루틴 샌드박스는 Google API에 도달할 수 없다(설계
-문서 §1.2). `analytics.yml`이 일 01:20 KST에 미리 수집해 사이드카에 올려둔다:
+**스크립트를 직접 실행하지 않는다.** 루틴 샌드박스는 Google API에 도달할 수 없다(`AGENTS.md` 자동화 평면). `analytics.yml`이 일 01:20 KST에 미리 수집해 사이드카에 올려둔다:
 
 ```
 .venv/bin/python scripts/read_snapshot.py --subdir analytics --dir-mode
