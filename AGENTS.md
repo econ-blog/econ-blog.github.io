@@ -8,7 +8,7 @@
 
 한국 경제뉴스를 비전문가에게 설명하는 Hugo 정적 사이트(테마: PaperMod, `themes/PaperMod` 서브모듈), GitHub Pages 배포. 산출물은 (a) Hugo 콘텐츠·설정과 (b) 그것을 만드는 `/daily-post`·`/weekly-audit` 슬래시 명령이다.
 
-**렌더 경로에 우리가 쓴 코드는 없다.** Python(`.claude/audit/lib/`, `.claude/loop/`, `scripts/`)은 통지·감사·인박스 자동화 및 오프라인 도구로 GitHub Actions Workflows(`.github/workflows/`)에서 실행된다.
+**렌더 경로에 우리가 쓴 코드는 없다.** Python(`.claude/audit/lib/`, `scripts/`)은 통지·감사·인박스 자동화 및 오프라인 도구로 GitHub Actions Workflows(`.github/workflows/`)에서 실행된다.
 
 ## 명령
 
@@ -26,11 +26,11 @@ CI(`.github/workflows/hugo.yml`)는 `main` push 시 Hugo **0.164.0**으로 빌�
 사이트 자체에는 린터도 테스트도 없다 — 프롬프트 파일 + 마크다운 + Hugo 설정이다. Python은 예외로 테스트가 있다.
 
 ```bash
-.venv/bin/python .claude/loop/test_extract_features.py
+for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
 ```
 
 ```bash
-for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
+for f in scripts/test_*.py; do .venv/bin/python "$f"; done
 ```
 
 새 측정 헬퍼를 추가하면 테스트를 함께 낸다.
@@ -76,9 +76,9 @@ for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
 - **`topic-report.md` 부재는 정상이다.** `rank.md`가 조용히 건너뛴다.
 - **산출물은 다섯 개뿐이다**: `report/audit-YYYY-MM-DD.md` · `.claude/audit/link-state.json` · `.claude/audit/topic-history.json` · `.claude/audit/direction-log.json` · `.claude/audit/topic-report.md`(게이트 통과 시에만). 여섯 번째 파일을 만들지 않는다.
 - **리포트는 `report/`에, 원장은 `.claude/audit/`에 쓴다.** 리포트(`audit-*.md`)는 매 실행이 새로 만드는 읽을거리이고, 원장 JSON 셋은 다음 실행이 되읽는 상태다 — 그래서 자리가 다르다. `.claude/audit/`에 `audit-*.md`를 만들지 않는다.
-- **쓰기 금지**: `.claude/daily-post/` 전체 · `.claude/loop/` 전체 · `hugo.toml` · `CLAUDE.md` · `MEMORY.md` · `layouts/` · `content/` 본문 산문. `content/`에서 허용되는 유일한 변경은 확정 사망 링크 수정과 내부링크 백필이다.
+- **쓰기 금지**: `.claude/daily-post/` 전체 · `hugo.toml` · `CLAUDE.md` · `MEMORY.md` · `layouts/` · `content/` 본문 산문. `content/`에서 허용되는 유일한 변경은 확정 사망 링크 수정과 내부링크 백필이다.
 - **리포트가 공개 저장소에 커밋된다.** 자격증명·서비스 계정 이메일·토큰을 리포트에 쓰지 않는다.
-- **`writing-styles.md`는 `.claude/loop/`가 소유한다.** 감사는 읽기만 한다. 특히 `genre-diagnostic.md`가 반증 테스트용으로 load-bearing으로 지정한 **"40~60자" 문자열 두 곳을 건드리지 않는다.**
+- **`writing-styles.md`는 `.claude/daily-post/`가 소유한다.** 감사는 읽기만 하며 항목 **수만** 센다. (문체 루프가 이 파일의 "40~60자" 문자열을 반증 테스트용 load-bearing으로 지정했었으나, 2026-08-01에 루프를 삭제해 그 근거는 사라졌다. 문자열 자체는 여전히 살아 있는 작성 규칙이므로 감사가 고치지 않는다.)
 
 ## 조용히 깨지는 계약 셋
 
@@ -118,7 +118,7 @@ for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
 ## `.claude/audit/lib/` 규약
 
 - 실행: `.venv/bin/python .claude/audit/lib/<name>.py <args>` (시스템 python 금지).
-- 측정 헬퍼(`mdtext`·`internal_links`·`backfill`·`corpus`)는 **표준 라이브러리 + 정규식만**. AST 파서·형태소 분석기·외부 의존성을 도입하지 않는다 — `.claude/loop/`가 못박은 클라우드 재현성 규약과 동일하다.
+- 측정 헬퍼(`mdtext`·`internal_links`·`backfill`·`corpus`)는 **표준 라이브러리 + 정규식만**. AST 파서·형태소 분석기·외부 의존성을 도입하지 않는다 — 클라우드 재현성 규약이다.
 - `linkcheck.py`만 네트워크 I/O에 `requests`를 쓴다. 순수 로직(원장 갱신·판정)은 여전히 stdlib이며 테스트 대상이다.
 - 각 헬퍼는 파일 경로를 argv로 받아 JSON을 stdout에 낸다. 같은 입력에 같은 출력이며 **LLM은 여기의 어떤 값도 산출하지 않는다.**
 - 이 디렉터리의 `.py`는 에이전트 **소스**다. "산출물 5개 외 파일 금지"는 감사 **실행**이 남기는 파일에 대한 제약이지 소스에 대한 것이 아니다.
@@ -144,7 +144,6 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 - 커밋 작성자: `bjh7790` / `bjh7790@gmail.com`.
 - 로컬 push는 저장소 전용 SSH 키(`~/.ssh/id_ed25519_econblog`)로 인증한다 — 자격증명 프롬프트가 뜨지 않는다.
 - **포스트·사전 초안을 사용자 승인 없이 커밋·푸시하지 않는다.** 이미 작성된 콘텐츠의 사소해 보이는 수정에도 적용된다.
-- `.claude/loop/reference-corpus/`는 제3자 저작물이다. 로컬 전용, gitignored, **발행·재배포 금지.**
 - **`/docs/`와 `/.superpowers/`는 통째로 gitignored다.** 스펙·계획·리뷰 diff는 2026-08-01에 삭제했고 git 이력에도 없다 — 거기에만 있던 운영 지식은 이 파일과 `MEMORY.md`로 옮겼다. **그 디렉터리에 새 문서를 만들지 않는다.** 남길 것이 생기면 `AGENTS.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)에 직접 쓴다.
 - **자격증명은 `credentials.json` 하나다**(저장소 루트, gitignored). 스키마는 GitHub Secret `CREDENTIALS_JSON`과 **동일**하다: `{"telegram": {bot_token, chat_id}, "ga4": {"service_account": {…}}}`. 시크릿을 갱신할 때 이 파일을 그대로 올린다:
 

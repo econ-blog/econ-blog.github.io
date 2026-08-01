@@ -187,24 +187,3 @@ def decay(history: dict, tag: str, adj: int, today: str,
         entry["조정치"] = adj
         entry["마지막감쇄일"] = today
     return adj, entry
-
-
-def patch_cohorts(posts: list[dict], patch_dates: list[str],
-                  min_posts: int = 5) -> list[dict]:
-    """문체 패치 반영 시점 기준 전/후 발행글 코호트. (AC #25)
-
-    accepted-patches.md가 아직 없고 loop도 실행 전이므로 이 함수는 상당 기간
-    빈 목록을 받는다 — 그 상태가 정상이다(Known limits #11). 이 결과로
-    writing-styles.md를 수정하지 않는다. loop이 소유한다.
-
-    날짜가 없는 발행글은 어느 코호트에도 속할 수 없다.
-    """
-    posts = [p for p in posts if p.get("date")]
-
-    out = []
-    for patch_date in sorted(patch_dates):
-        before = sorted(p["file"] for p in posts if p["date"] < patch_date)
-        after = sorted(p["file"] for p in posts if p["date"] >= patch_date)
-        out.append({"patch_date": patch_date, "before": before, "after": after,
-                    "ready": len(after) >= min_posts})
-    return out

@@ -16,7 +16,7 @@
 | 배포 | `.github/workflows/hugo.yml` — `main` push 시 Hugo 0.164.0 빌드 → `actions/deploy-pages` | 동작 중 (`gh-pages` 브랜치 없음) |
 | 작성 | `/daily-post` — 7단계 시퀀서 + 5개 스테이지 프롬프트 | 무인·수동 양 모드 구현·검증 |
 | 감사 | `/weekly-audit` — 시퀀서 + 6개 스테이지 프롬프트 + `.claude/audit/lib/` 13개 모듈·13개 테스트 | 6축 전부 구현, 2026-07-28 1회 실행 검증 |
-| 문체 루프 | `.claude/loop/` | 측정 리그까지만 (§5 참조) |
+| 문체 루프 | **삭제됨** (2026-08-01) | §5 참조 |
 | 분석 | `scripts/fetch_ga4.py` · `fetch_gsc.py` | API 연동 완료 |
 | 스케줄러 | GitHub Actions cron 6종 + Telegram 승인 루프 | 구현 완료 (`.github/workflows/`) |
 
@@ -25,7 +25,6 @@
 ### 렌더 경로 밖의 Python
 
 - `.claude/audit/lib/*.py` — 감사 에이전트의 결정론적 판정 엔진. 13개 모듈, 각각 테스트 동반.
-- `.claude/loop/*.py` — 문체 측정. `extract_features.py`가 특성값을 계산하는 **유일한** 주체.
 - `scripts/fetch_*.py` — GA4·GSC 리더.
 
 모두 `.venv/bin/python`으로 호출한다. 시스템 인터프리터에는 Google API 패키지가 없다. 의존성은 `requirements.txt`에 핀되어 있다.
@@ -148,12 +147,12 @@ Plan 1–6 전부 구현·커밋 완료(총 48 Task). `.claude/audit/lib/` 테�
 
 - **AC #68** — 유실, 재구성하지 않음(위 §2 참조). 필요해지면 새 번호의 새 조항으로 도입한다.
 - **AC #71** — ②③ 게이트 stub 과도기 조항. Plan 6 병합으로 소멸했고 2026-07-30에 삭제했다.
-- **AC #25(문체 사후검증)** — `accepted-patches.md`가 없으므로 영구 침묵 중. Known limits #11이 그것을 정상이라고 명시한다.
+- **AC #25(문체 사후검증)** — 2026-08-01 문체 루프 삭제로 소멸. `performance.md` §7과 `attribution.patch_cohorts`를 함께 제거했다.
 - **수용 판정된 이연 소견 2건** — `indexation.REMOTE_HOST`의 repo 그룹이 점에서 잘려 커스텀 도메인 baseURL이면 I3 오탐(이 저장소에선 무해) / ②의 판정 근거가 두 표로 나뉘어 한 주제군의 경로를 보려면 대조가 필요(주제군 표는 게이트 전에도 재보정 데이터를 남기므로 의도된 설계).
 
 ---
 
-## 5. 문체 루프 (`.claude/loop/`) — 설계 요약
+## 5. 문체 루프 (`.claude/loop/`) — 삭제됨 (2026-08-01)
 
 설계 스펙 원문(`2026-07-20-loop-writing-style-design.md`, v3.0)은 2026-07-30에 삭제했다. 핵심만 남긴다.
 
@@ -173,6 +172,16 @@ Plan 1–6 전부 구현·커밋 완료(총 48 Task). `.claude/audit/lib/` 테�
 **`genre-diagnostic.md`가 제안한 미실행 반증 테스트**: `writing-styles.md`에서 "40~60자" 범위를 제거하고 재측정. 그래서 그 문자열 두 곳이 load-bearing이며, 감사 에이전트도 건드리지 못한다.
 
 **`reference-corpus/`는 제3자 저작물이다.** 로컬 전용, gitignored, 발행·재배포 금지.
+
+### 왜 지웠나 (2026-08-01)
+
+**코드는 살아 있었고 배선이 죽어 있었다.** 스크립트 5개와 골든 테스트는 전부 통과했고 참조 코퍼스 53건도 있었지만 — 호출하는 워크플로가 0개, 슬래시 명령 없음, `accepted-patches.md` 없음, 돌릴 주기·계획도 없었다. 측정 리그 상태로 3주가 지났고 재개 시점이 정해지지 않아 폴더째 삭제했다.
+
+**함께 정리한 것**: `performance.md` §7(문체 패치 사후검증) · `attribution.patch_cohorts`와 그 테스트 · `AGENTS.md`의 loop 참조 6곳.
+
+**살아남은 것**: `writing-styles.md`는 `.claude/loop/`가 아니라 **`.claude/daily-post/`에** 있었고 `draft.md`가 매 발행에 쓴다 — 삭제 영향이 없다. 다만 그 파일의 **"40~60자" 문자열을 load-bearing으로 만들던 근거(genre-diagnostic.md의 미실행 반증 테스트)는 함께 사라졌다.** 문자열 자체는 여전히 살아 있는 작성 규칙이라 감사는 계속 건드리지 않는다.
+
+**복원하려면**: 위 스크립트는 git 이력(`1e77c94` 이전)에 있다. 다만 `reference-corpus/`는 gitignored였으므로 **이력에 없다** — 재개하려면 `collect_corpus.py`로 다시 수집해야 하고, 그건 제3자 저작물 재수집이다.
 
 ---
 

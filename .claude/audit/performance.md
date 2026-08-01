@@ -136,17 +136,7 @@ render(good, bad, conditions, today)
   일반론을 채우지 않는다** — 근거가 없으면 빈 섹션으로 둔다.
 - 출력 문자열을 시퀀서에 돌려준다. **파일에 쓰지 않는다.**
 
-## 7. 문체 패치 사후검증 (AC #25)
-
-`.claude/loop/accepted-patches.md`가 **없으면 이 절과 리포트 섹션을 통째로 생략한다.**
-placeholder를 만들지 않는다. 현재 그 파일은 없고 loop도 실행 전이므로 **상당 기간
-아무것도 출력하지 않는 것이 정상이다**(Known limits #11).
-
-있으면 각 패치의 반영 날짜를 뽑아 `attribution.patch_cohorts(posts, dates)`에 넘긴다.
-`ready`가 참인 코호트만 전/후 지표를 비교해 리포트에 남긴다. **이 결과로
-`writing-styles.md`를 수정하지 않는다.**
-
-## 8. 수익 섹션 (AC #24)
+## 7. 수익 섹션 (AC #24)
 
 AdSense는 미신청이다. **수익 섹션을 통째로 생략한다.** "데이터 없음" placeholder나 빈 표를
 만들지 않는다. (④ P1의 신청 준비도 소견은 ④가 이미 낸다 — 여기서 중복하지 않는다.)

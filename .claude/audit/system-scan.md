@@ -8,8 +8,8 @@ weekly-audit.md에 넘긴다 — 파일 쓰기·git은 시퀀서가 한다.
 산출물(`public/`) 삭제는 예외다 — §1 E1 빌드 기준선이 `rm -rf public`을 요구하며,
 `public/`은 추적 대상이 아니므로 이 불변조건과 충돌하지 않는다. CLAUDE.md의 낡은
 카운트도, 미연결 용어도, 로드맵 불일치도 전부 소견으로만 낸다. `writing-styles.md`는
-읽기만 하며 항목 **수만** 센다 — loop이 소유하고 `genre-diagnostic.md`가 "40~60자"
-문자열을 falsification test용 load-bearing으로 지정했다. **git을 호출하지 않는다.**
+읽기만 하며 항목 **수만** 센다 — `.claude/daily-post/`가 소유한다.
+**git을 호출하지 않는다.**
 
 모든 Python은 `.venv/bin/python`으로 호출한다. **닫힌 목록 밖은 보지 않는다** — 축을
 늘리려면 사람이 이 파일의 목록을 고친다 — 에이전트가 축을 추가하지 않는다.

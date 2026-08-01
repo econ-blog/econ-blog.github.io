@@ -1,7 +1,7 @@
 """마크다운 전처리 — 주간 감사의 코드스팬·링크 처리 단일 주체.
 
 결정론적. 표준 라이브러리 + 정규식만 사용한다. AST 파서를 도입하지 않는다.
-(근거: SEED Constraints — extract_features.py와 같은 재현성 규약.)
+(근거: 클라우드 재현성 규약 — 표준 라이브러리 + 정규식만.)
 
 사용:
     .venv/bin/python .claude/audit/lib/mdtext.py <파일.md>   # JSON 링크 인벤토리
