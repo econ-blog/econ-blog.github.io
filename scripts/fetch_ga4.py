@@ -9,6 +9,9 @@ import sys
 import json
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from credentials import service_account_path  # noqa: E402
+
 DEFAULT_PROPERTY_ID = "546174128"
 DEFAULT_DAYS = 7
 DEFAULT_LIMIT = 200
@@ -42,13 +45,7 @@ def parse_args(argv):
 
 
 def get_credentials_path():
-    credentials_path = os.environ.get("GA4_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if not credentials_path:
-        for possible_name in ["ga4-credentials.json", "ga4-credentials.json.json"]:
-            if os.path.exists(possible_name):
-                credentials_path = possible_name
-                break
-    return credentials_path
+    return service_account_path()
 
 
 def main():
@@ -57,7 +54,7 @@ def main():
     if not credentials_path or not os.path.exists(credentials_path):
         print(json.dumps({
             "error": "Credentials file not found.",
-            "hint": "Please place your Service Account JSON key file as 'ga4-credentials.json' in the project root."
+            "hint": "저장소 루트에 credentials.json을 두거나 GA4_CREDENTIALS로 서비스 계정 키 경로를 넘긴다."
         }, ensure_ascii=False, indent=2))
         sys.exit(1)
 

@@ -102,10 +102,10 @@
 | D5 | 없음 — `D < 90`이면 항상 0이며 그 상태가 정상 | `D5.corpus_age < 90` |
 | D6 | 어느 슬롯이든 충족률 **100% 미만** → 미충족 파일 목록을 소견으로 | 100%면 침묵 |
 
-D4의 1차 출처 호스트 목록은 SEED D4의 다섯 개(`ecos.bok.or.kr`·`fred.stlouisfed.org`·
-`dart.fss.or.kr`·`kosis.kr`·`bok.or.kr`)다. `draft.md`의 목록은 `portal.kfb.or.kr`을
+D4의 1차 출처 호스트 목록은 다섯 개다: `ecos.bok.or.kr`·`fred.stlouisfed.org`·
+`dart.fss.or.kr`·`kosis.kr`·`bok.or.kr`. `draft.md`의 목록은 `portal.kfb.or.kr`을
 포함하고 `bok.or.kr`을 빼서 다르다 — **두 목록이 다르다는 사실을 리포트에 한 줄 적고,
-합치지 않는다**(사람의 SEED 개정 판단이다).
+합치지 않는다**(사람이 판단할 일이다).
 
 ## 4. 외부 가설 유입 — 수동 모드 전용 (AC #50·#51)
 

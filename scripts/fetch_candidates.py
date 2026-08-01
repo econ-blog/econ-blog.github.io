@@ -37,8 +37,8 @@ def kst_date_str(now: datetime) -> str:
 def parse_feed(xml_text: str, feed_id: str, source: str) -> list:
     try:
         root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        return []
+    except ET.ParseError as exc:
+        raise ValueError(f"XMLParseError: {exc}")
 
     items = []
     for node in root.iter("item"):
@@ -177,7 +177,11 @@ def collect(now: datetime, fetch=fetch_url, extract=extract_body) -> dict:
             time.sleep(1)  # 호스트당 최소 간격
 
     pool = cap_by_recency(dedupe_by_url(pool))
-    pool = [attach_body(i, extract) for i in pool]
+    detailed = []
+    for item in pool:
+        detailed.append(attach_body(item, extract))
+        time.sleep(1)  # 요청 간격 (호스트 차단 방지)
+    pool = detailed
     return build_snapshot(pool, feeds_used, feed_errors, now)
 
 

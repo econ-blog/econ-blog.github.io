@@ -6,7 +6,7 @@
 
 후보는 GitHub Actions(`fetch-candidates.yml`)가 매일 01:47 KST에 미리 수집해
 비공개 사이드카 `econ-blog/automation-data`에 올려둔다. **이 단계에서 RSS를 직접
-가져오지 않는다** — 루틴 샌드박스는 뉴스 사이트에 도달할 수 없다(설계 문서 §1.2).
+가져오지 않는다** — 루틴 샌드박스는 뉴스 사이트에 도달할 수 없다(`AGENTS.md` 자동화 평면).
 
 ```
 .venv/bin/python scripts/read_snapshot.py
@@ -61,7 +61,7 @@
 동점 처리(순서대로): ① 투자 도움도 높은 쪽 → ② 발행시각 최신 쪽 → ③ 한경 피드 우선.
 
 ### 감사 리포트 반영 (있으면만)
-`.claude/audit/topic-report.md`가 존재하면 읽고, 형식은 `.claude/audit/README.md`를 따른다. 후보 총점에 −2~+3 범위 조정을 더한다(15점 만점·8점 임계값은 고정). 90일 이상 경과 파일은 +1까지만 적용, 감점 없음. 없으면 건너뛴다.
+`.claude/audit/topic-report.md`가 존재하면 읽고, 형식은 `AGENTS.md`의 「`topic-report.md` 형식 계약」 절을 따른다. 후보 총점에 −2~+3 범위 조정을 더한다(15점 만점·8점 임계값은 고정). 90일 이상 경과 파일은 +1까지만 적용, 감점 없음. 없으면 건너뛴다.
 
 ## 4. 임계값 판정
 

@@ -24,7 +24,7 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 ## 3. 외부 링크 조회 (AC #7·#8)
 
 **이 단계에서 `linkcheck.py`를 실행하지 않는다.** 루틴 샌드박스는 뉴스 사이트에도
-`econ-blog.github.io`에도 도달할 수 없다(설계 문서 §1.2). 여기서 실행하면 외부 URL 전건이
+`econ-blog.github.io`에도 도달할 수 없다(`AGENTS.md` 자동화 평면). 여기서 실행하면 외부 URL 전건이
 연결 실패 → `classify()`가 전부 `soft`로 분류 → `consecutive_soft_failures`가 올라가고
 `manual_review`가 부풀어 **영속 원장에 가짜 실패가 커밋된다.** 감사를 하지 않는 것보다 나쁘다.
 

@@ -7,6 +7,7 @@ set -euo pipefail
 SRC="$1"
 DEST="$2"
 WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 
 git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
 git config --global --unset-all http.https://github.com/.extraheader 2>/dev/null || true

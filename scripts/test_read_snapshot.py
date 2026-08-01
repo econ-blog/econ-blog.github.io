@@ -191,6 +191,23 @@ class TestDirMode(unittest.TestCase):
             r = gate(out, "2026-07-31")
             self.assertEqual(r["status"], "ok")
 
+    def test_malformed_json_main_returns_no_snapshot_with_error_reason(self):
+        import tempfile, subprocess, sys, json
+        from datetime import datetime, timezone
+        from read_snapshot import kst_date_str
+        today = kst_date_str(datetime.now(timezone.utc))
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = os.path.join(tmp, "candidates")
+            os.makedirs(sub)
+            with open(os.path.join(sub, f"{today}.json"), "w") as fh:
+                fh.write("invalid json content")
+            cmd = [sys.executable, "scripts/read_snapshot.py", "--sidecar", tmp]
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 1)
+            out = json.loads(proc.stdout)
+            self.assertEqual(out["status"], "no_snapshot")
+            self.assertIn("손상됨 (JSONDecodeError)", out["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

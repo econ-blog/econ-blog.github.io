@@ -98,7 +98,7 @@ Python 헬퍼 호출 중 스크립트가 비정상 종료(exit != 0 또는 Trace
 - ⑤는 `topic-report.md`를 **쓰지도 읽지도 않는다.** (AC #43)
 
 ## 8. 리포트 조립
-`.claude/audit/audit-YYYY-MM-DD[-HHMM].md`를 아래 골격으로 쓴다(형식은 §9 지침의 조립 규칙을
+`report/audit-YYYY-MM-DD[-HHMM].md`를 아래 골격으로 쓴다(형식은 §9 지침의 조립 규칙을
 따른다). 리포트는 `topic-report.md`와 **다른 파일**이며 형식 계약에 묶이지 않는다.
 
 리포트 최상단 순서: (1) 계약 위반 전용 섹션 (2) 원장 정체 경고(링크 원장·방향 원장)
@@ -148,7 +148,7 @@ PR 본문을 줄 단위로 필터링해 텔레그램 요약을 만들며, **아�
 새 가설 제안: N건
 ─ 결정 필요 ─
 * <사람 판단이 필요한 항목 한 줄>
-PR 리포트: .claude/audit/audit-YYYY-MM-DD[-HHMM].md
+PR 리포트: report/audit-YYYY-MM-DD[-HHMM].md
 ```
 
 각 값의 출처는 이미 계산된 것을 그대로 옮긴다 — **여기서 다시 세지 않는다.**
@@ -168,7 +168,7 @@ PR 리포트: .claude/audit/audit-YYYY-MM-DD[-HHMM].md
 
 ## 10. 게시 (git은 여기서만)
 - **무인 모드**: `draft`/게시 개념이 없다 — 리포트와 원장은 항상 쓴다.
-  1. 리포트 `.claude/audit/audit-YYYY-MM-DD[-HHMM].md`와 원장
+  1. 리포트 `report/audit-YYYY-MM-DD[-HHMM].md`와 원장
      `.claude/audit/link-state.json`·`.claude/audit/direction-log.json`을 명시적으로
      `git add`한다(글롭 금지). 확정 사망 링크 수정 및 백필이 있으면 해당 `content/` 파일도 add한다.
      **②가 게이트를 통과했을 때만** `.claude/audit/topic-report.md`와

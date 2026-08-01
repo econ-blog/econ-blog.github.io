@@ -1,4 +1,4 @@
-"""골든 테스트 — topicreport. .claude/audit/README.md의 형식 계약을 코드로 고정한다.
+"""골든 테스트 — topicreport. AGENTS.md 「topic-report.md 형식 계약」을 코드로 고정한다.
 
 .venv/bin/python .claude/audit/lib/test_topicreport.py
 """

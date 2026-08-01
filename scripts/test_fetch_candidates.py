@@ -44,8 +44,9 @@ class TestParseFeed(unittest.TestCase):
         self.assertIsNotNone(dt.tzinfo)
         self.assertEqual(dt.astimezone(KST).hour, 9)
 
-    def test_malformed_xml_returns_empty(self):
-        self.assertEqual(parse_feed("<not xml", "x", "y"), [])
+    def test_malformed_xml_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            parse_feed("<not xml", "x", "y")
 
     def test_item_missing_pubdate_is_dropped(self):
         xml = ('<rss><channel><item><title>t</title>'

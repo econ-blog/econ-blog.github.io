@@ -1,4 +1,4 @@
-"""topic-report.md 직렬화. 형식 계약은 .claude/audit/README.md이며 여기 고정한다.
+"""topic-report.md 직렬화. 형식 계약은 AGENTS.md 「topic-report.md 형식 계약」이며 여기 고정한다.
 
 계약을 README에서 파싱하지 않는다 — 파싱하면 문장이 바뀔 때 출력이 조용히
 변하고 계약의 권위가 코드로 새어 나간다. 대신 Plan 2의

@@ -5,20 +5,13 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from credentials import service_account_path  # noqa: E402
+
 DEFAULT_SITE_URL = 'https://econ-blog.github.io/'
 
 def get_credentials_path():
-    credentials_path = (
-        os.environ.get("GSC_CREDENTIALS")
-        or os.environ.get("GA4_CREDENTIALS")
-        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    )
-    if not credentials_path:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        default_path = os.path.join(base_dir, 'ga4-credentials.json')
-        if os.path.exists(default_path):
-            credentials_path = default_path
-    return credentials_path
+    return service_account_path()
 
 def get_site_url():
     return os.environ.get("GSC_SITE_URL") or DEFAULT_SITE_URL

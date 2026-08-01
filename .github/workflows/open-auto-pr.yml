@@ -31,7 +31,7 @@ jobs:
         id: msg
         run: |
           # PR 본문은 커밋 메시지 본문으로 배달된다. 루틴 샌드박스에 gh를 쓸
-          # 자격증명 경로가 없어 PR 생성을 여기로 옮겼다 (설계 문서 §3.3).
+          # 자격증명 경로가 없어 PR 생성을 여기로 옮겼다 (AGENTS.md 자동화 평면).
           # 셸 인젝션 방지: 타임스탬프 기반 고유 delim을 써서 commit message 본문이
           # heredoc을 깨뜨리지 못하도록 한다.
           DELIM_TITLE="__GITHUB_ACTIONS_TITLE_DELIMITER_$(date +%s)__"

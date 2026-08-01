@@ -18,7 +18,7 @@
 | 감사 | `/weekly-audit` — 시퀀서 + 6개 스테이지 프롬프트 + `.claude/audit/lib/` 13개 모듈·13개 테스트 | 6축 전부 구현, 2026-07-28 1회 실행 검증 |
 | 문체 루프 | `.claude/loop/` | 측정 리그까지만 (§5 참조) |
 | 분석 | `scripts/fetch_ga4.py` · `fetch_gsc.py` | API 연동 완료 |
-| 스케줄러 | **없음** | 스펙만: `docs/superpowers/specs/2026-07-30-automation-telegram-loop.md` |
+| 스케줄러 | GitHub Actions cron 6종 + Telegram 승인 루프 | 구현 완료 (`.github/workflows/`) |
 
 렌더 경로에는 우리가 쓴 코드가 없다. Python은 전부 오프라인 도구이며 `hugo` 빌드나 CI에서 돌지 않는다.
 
@@ -28,11 +28,12 @@
 - `.claude/loop/*.py` — 문체 측정. `extract_features.py`가 특성값을 계산하는 **유일한** 주체.
 - `scripts/fetch_*.py` — GA4·GSC 리더.
 
-모두 `.venv/bin/python`으로 호출한다. 시스템 인터프리터에는 Google API 패키지가 없다. `requirements.txt`는 아직 없다 — 자동화 스펙 AC #16이 그것을 요구한다.
+모두 `.venv/bin/python`으로 호출한다. 시스템 인터프리터에는 Google API 패키지가 없다. 의존성은 `requirements.txt`에 핀되어 있다.
 
 ### 자격증명
 
-- `ga4-credentials.json` (서비스 계정, gitignored) — **경로가 `scripts/fetch_*.py`에 하드코딩되어 있다.** 자동화 스펙 AC #1이 이 하드코딩을 전제조건으로 지목한다.
+- `credentials.json` (저장소 루트, gitignored) — telegram + GA4 서비스 계정을 담은 **단일** 원본이며 GitHub Secret `CREDENTIALS_JSON`과 스키마가 같다. 2026-08-01에 `ga4-credentials.json`·`telegram-credentials.json`·`credentials.example.json` 셋을 여기로 합쳤다. 해소 경로는 `scripts/credentials.py` 하나이며 스크립트에 경로 하드코딩이 없다. 운영 사실은 `AGENTS.md` 저장소 규약에 있다.
+- **로테이션 경로는 여전히 없다.** 토큰이 유출되면 사람이 봇 토큰을 재발급하고 시크릿을 갱신해야 한다. 자동 감지·차단 장치는 만들지 않았다.
 - GA4 property `546174128`, 측정 태그 `G-E2V0CFN172`.
 - GSC 사이트 확인 태그 `Pq-uzUwYArRYxLu2YzvnVhdM43JSCa7wQuHup-UJdGk`.
 - 로컬 push는 저장소 전용 SSH 키 `~/.ssh/id_ed25519_econblog`를 쓴다. 클라우드 런너에는 없다 — 자동화 스펙 AC #3이 PAT으로 푼다.
@@ -133,20 +134,20 @@ Hugo/Goldmark에 위키링크 shortcode가 없다. `[기준금리](/dictionary/b
 
 ## 4. 감사 에이전트 참조점
 
-전체 스펙은 `.claude/audit/SEED-weekly-audit.md`(v3.6, 71개 AC, Known limits 25건)에 있다. 여기서는 위치만 적는다.
+전체 스펙이었던 `.claude/audit/SEED-weekly-audit.md`(v3.6, 71개 AC, Known limits 25건)는 2026-08-01에 삭제했다(§7 참조). 실행에 필요한 규칙은 `AGENTS.md`와 스테이지 파일에 있고, 여기에는 근거만 남긴다.
 
-- **출력 형식 계약**: `.claude/audit/README.md`가 `topic-report.md` 형식을 고정한다. `rank.md`가 그것을 읽는다. **양쪽을 동시에 고치지 않으면 조용히 깨진다.**
-- **산출물은 다섯 개로 못박혀 있다**: `audit-YYYY-MM-DD.md` · `link-state.json` · `topic-history.json` · `direction-log.json` · `topic-report.md`(게이트 통과 시에만). 여섯 번째 파일을 만들지 않는다 — 자동화 스펙이 분석 스냅샷을 Actions 아티팩트로 둔 이유다.
+- **출력 형식 계약**: `AGENTS.md`의 「`topic-report.md` 형식 계약」이 형식을 고정한다. `rank.md`가 그것을 읽고 `lib/topicreport.py`+골든 테스트가 생성 측을 고정한다. **양쪽을 동시에 고치지 않으면 조용히 깨진다.**
+- **산출물은 다섯 개로 못박혀 있다**: `report/audit-YYYY-MM-DD.md` · `link-state.json` · `topic-history.json` · `direction-log.json` · `topic-report.md`(게이트 통과 시에만). 여섯 번째 파일을 만들지 않는다 — 분석 스냅샷을 저장소가 아니라 비공개 사이드카에 둔 이유다.
 - **원장은 PR 병합에만 누적된다**(Known limits #3·#17·#24). PR을 방치하면 2-strike 판정·감쇄·⑥ 회귀 판정이 전부 성립하지 않는다.
 - **⑥이 ⑤의 원장을 읽는다**: 회귀 판정용 직전값 3개(`n1_count`·`claims_total`·`claims_per_post`)를 `direction-log.json`의 `portfolio_history`에 얹었다. `portfolio_history`의 11개 키가 두 축에서 왔다는 사실을 아는 사람만 그것을 옳게 읽는다.
-- **리포트가 공개 저장소에 들어간다**. 트래픽 절대수치와 유입 경로가 공개된다. 원치 않으면 `audit-*.md`만 gitignore하고 원장 셋은 추적을 유지해야 한다.
+- **리포트가 공개 저장소에 들어간다**. 트래픽 절대수치와 유입 경로가 공개된다. 원치 않으면 `report/`만 gitignore하고 원장 셋은 추적을 유지해야 한다. 2026-08-01에 리포트를 `.claude/audit/`에서 `report/`로 옮긴 것이 그 선택지를 한 줄로 만들어 준다.
 
 ### 2026-07-30 시점 구현 상태
 
 Plan 1–6 전부 구현·커밋 완료(총 48 Task). `.claude/audit/lib/` 테스트 13개 파일 전부 통과. 남은 것:
 
 - **AC #68** — 유실, 재구성하지 않음(위 §2 참조). 필요해지면 새 번호의 새 조항으로 도입한다.
-- **AC #71** — ②③ 게이트 stub 과도기 조항. Plan 6 병합으로 소멸했고 2026-07-30에 SEED에서 삭제했다.
+- **AC #71** — ②③ 게이트 stub 과도기 조항. Plan 6 병합으로 소멸했고 2026-07-30에 삭제했다.
 - **AC #25(문체 사후검증)** — `accepted-patches.md`가 없으므로 영구 침묵 중. Known limits #11이 그것을 정상이라고 명시한다.
 - **수용 판정된 이연 소견 2건** — `indexation.REMOTE_HOST`의 repo 그룹이 점에서 잘려 커스텀 도메인 baseURL이면 I3 오탐(이 저장소에선 무해) / ②의 판정 근거가 두 표로 나뉘어 한 주제군의 경로를 보려면 대조가 필요(주제군 표는 게이트 전에도 재보정 데이터를 남기므로 의도된 설계).
 
@@ -179,7 +180,7 @@ Plan 1–6 전부 구현·커밋 완료(총 48 Task). `.claude/audit/lib/` 테�
 
 ### 자동화 (다음 작업)
 
-`docs/superpowers/specs/2026-07-30-automation-telegram-loop.md`. 요지: Claude routine이 LLM 작업을, GitHub Actions가 자격증명이 필요한 I/O 전부를 맡고, 두 런타임은 저장소(브랜치·PR)로만 통신한다. 승인은 텔레그램 답장 닫힌 어휘로 판정한다.
+설계 스펙 원문(`2026-07-30-automation-telegram-loop.md`)은 2026-08-01에 삭제했다(§7). 요지: Claude routine이 LLM 작업을, GitHub Actions가 자격증명이 필요한 I/O 전부를 맡고, 두 런타임은 저장소(브랜치·PR)로만 통신한다. 승인은 텔레그램 답장 닫힌 어휘로 판정한다.
 
 ### Cloud Routine Environment Verification Log
 
@@ -191,7 +192,7 @@ To satisfy Spec Known Limit #6, the following 4 environment items must be execut
 
 **구현 첫 단계는 기능이 아니라 실측이다** — 클라우드 샌드박스에서 `.venv` 부트스트랩 / Hugo 설치 / submodule / PAT push 넷이 한 번도 실행된 적이 없고, 한경 RSS가 데이터센터 IP에서 열리는지도 미검증이다.
 
-**계획 파일**: `docs/superpowers/plans/2026-07-30-automation-telegram-loop.md`(6 Task). 2026-07-30에 리뷰했고 **착수 전 수정이 필요한 상태다.** 계획 파일은 gitignored이고 결국 삭제되므로, 리뷰에서 나온 계획-독립 사실은 위 §3에, 아래 다섯 가지는 여기에 남긴다.
+**계획 파일**(6 Task)은 구현 완료 후 2026-08-01에 삭제했다. 리뷰에서 나온 계획-독립 사실은 위 §3에, 아래 다섯 가지는 여기에 남긴다.
 
 - **인박스 워크플로도 PAT을 쓴다.** `GITHUB_TOKEN`으로는 병합이 배포를 깨우지 못하고 `TELEGRAM_OFFSET` 변수도 못 쓴다(§3). 스펙 AC #3은 PR 생성만 다뤘고 병합·변수 쓰기는 그 논리의 확장이다.
 - **`CREDENTIALS_JSON` 전문을 서비스 계정 키 파일로 넘길 수 없다.** 그 JSON은 `{telegram:…, ga4:{service_account:…}}` 래퍼이고 `service_account.Credentials.from_service_account_file()`은 `type`·`private_key`·`client_email`이 최상위인 파일을 요구한다. 워크플로가 `.ga4.service_account`만 별도 파일로 추출해야 한다.
@@ -250,4 +251,34 @@ classic PAT을 쓰지 않는다. `GITHUB_TOKEN`으로 대체할 수 없다 — �
 - **`.superpowers/sdd/`** — Task 브리프·리포트·리뷰 diff. 진행 상태 추적용이며 커밋 이력이 같은 정보를 담는다.
 - **loop 설계 스펙** — 설계 근거를 위 §5로 옮겼다. AC 문면(13개 조항)은 옮기지 않았다 — 구현이 그 스펙의 3분의 1 수준에서 멈춰 있고, 재개 시점에 다시 쓰는 편이 낫다.
 
-**남긴 것**: `.claude/audit/SEED-weekly-audit.md`(감사 에이전트가 실행 중 참조하는 판정 근거이고, 스테이지 파일과 lib 주석 약 200곳이 AC 번호로 그것을 가리킨다) · 자동화 스펙 하나.
+**남긴 것**: `.claude/audit/SEED-weekly-audit.md`(감사 에이전트가 실행 중 참조하는 판정 근거이고, 스테이지 파일과 lib 주석 약 200곳이 AC 번호로 그것을 가리킨다) · 자동화 스펙 하나. **둘 다 2026-08-01에 삭제했다 — 아래 참조.**
+
+**2026-08-01** — 남아 있던 설계 문서를 전부 없애고 저장소를 실행에 필요한 것만 남겼다.
+
+지운 것:
+
+- `.claude/audit/SEED-weekly-audit.md` (94KB, 71개 AC) — **git 이력에 있으므로 복원 가능하다**(`9c6bd4d` 이전). 스테이지 파일과 `lib/*.py` 주석의 `AC #NN` 표기는 그대로 남았고, 이제 **출처 주석이지 조회 대상이 아니다.** 그 사실을 `AGENTS.md` 머리에 못박았다.
+- `.claude/audit/README.md` → `AGENTS.md` 「`topic-report.md` 형식 계약」으로 축자 이동. **런타임 계약이었다** — `rank.md`·`topicreport.py`·`test_topicreport.py`의 참조 문자열을 함께 고쳤다.
+- `.claude/audit/lib/README.md` → `AGENTS.md` 「`.claude/audit/lib/` 규약」으로 이동.
+- `docs/` 전체(자동화 스펙·설계 문서·계획 3건)와 `.superpowers/` 전체(SDD 리뷰 diff 등). gitignored였으므로 git 이력에도 없다 — 아래 §8이 그중 살릴 값이 있던 것을 흡수한 결과다.
+- `credentials.example.json`·`ga4-credentials.json`·`telegram-credentials.json` → `credentials.json` 하나로 통합(§1 자격증명).
+- `.claude/audit/candidates_temp/` — 사이드카에서 받은 후보 스냅샷 사본. 재취득 가능한 캐시다.
+
+옮긴 것: 감사 리포트 `audit-*.md`가 `.claude/audit/`에서 **`report/`**로 갔다. `.claude/audit/`는 이제 리포트를 **만드는** 것(스테이지 프롬프트 6개 · `lib/` · 원장 JSON 3개)만 담는다.
+
+---
+
+## 8. 자동화 평면의 실패 모드 (스펙에서 흡수)
+
+`AGENTS.md`의 「자동화 평면」이 매 실행에 필요한 사실을 담고, 여기에는 **알고도 고치지 않기로 한 것**만 남긴다.
+
+1. **답장 유실 창이 24시간이다.** Telegram은 미수신 업데이트를 24시간만 보관하고 폴링은 하루 1회다. 유실되면 PR은 열린 채 남고 사람이 다시 답장해야 한다 — 데이터 손실은 없지만 사람이 "답장했는데 왜 안 올라갔나"를 경험한다. 적체 경고가 3건째에 알린다.
+2. **오프셋이 저장소 변수 하나에 걸려 있다.** `TELEGRAM_OFFSET` 쓰기가 실패하면 다음 실행이 같은 답장을 다시 읽는다. 멱등성 검사가 이중 발행을 막지만 재질의 메시지는 중복 발송될 수 있다.
+3. **판정 토큰이 `MMDD`라 1년을 넘기면 충돌한다.** 대안(PR 번호)은 충돌이 없지만 사람이 어느 날 글인지 읽어서 모른다. **열린 결정으로 남겼다.**
+4. **하루 위상 어긋남이 이연을 누적시킨다.** 답장을 3일 미루면 PR 3건이 열리고 답장 3번이 필요하다. **일괄 승인 경로를 의도적으로 만들지 않았다** — 한 번의 `승인`이 검토하지 않은 글 3건을 발행하는 쪽이 더 나쁘다. 실제로 밀리면 사람이 원할 수 있다는 것도 안다.
+5. **Actions cron은 지연된다.** 크론 시각은 목표이고 보장이 아니다. 드물게 스킵되며 그날 발행이 하루 밀린다 — 시각에 의존하는 판단이 없어 데이터는 깨지지 않는다.
+6. **감사 원장이 병합에 종속된다.** 승인 루프는 병합을 답장 하나로 싸게 만들 뿐, 답장하지 않는 사람을 고치지 못한다.
+7. **두 런타임의 분리가 디버깅을 어렵게 한다.** 실패가 루틴(LLM)에서 났는지 Actions(스크립트)에서 났는지 두 곳의 로그를 봐야 한다. 통합 로그를 만들면 그 로그가 공개 저장소에 들어가므로 채택하지 않았다.
+8. **감사 승인의 의미가 미정이다.** 감사 PR은 리포트·원장뿐일 때가 대부분이고 그건 사실상 항상 병합해야 하는 것이다. 콘텐츠 변경 0건일 때 자동 병합을 허용할지 매주 답장을 요구할지 **정하지 않았다.**
+
+**의도적으로 만들지 않은 것**: 텔레그램 웹훅(서버가 없다) · 승인 판정의 자연어 이해(어휘는 닫힌 목록, 판정은 문자열 비교) · `/status`·`/rerun` 같은 봇 명령 · 실패 자동 복구(재시도·롤백·자동 rebase) · 알림 채널 다중화 · `draft: true`를 우회하는 경로.

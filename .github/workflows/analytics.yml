@@ -59,11 +59,20 @@ jobs:
         run: rm -f "$RUNNER_TEMP/ga4_sa.json"
 
       - name: Deliver to sidecar
-        if: always()
         env:
           PAT: ${{ secrets.PAT }}
         run: |
           # 공개 저장소의 아티팩트는 누구나 다운로드할 수 있고, 루틴 샌드박스에는
-          # gh 자격증명 경로가 없다 (설계 문서 §1.5·§3.3).
+          # gh 자격증명 경로가 없다 (AGENTS.md 자동화 평면).
           DAY=$(python3 -c "from datetime import datetime,timezone,timedelta; print(datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime('%Y-%m-%d'))")
           bash scripts/sidecar_push.sh snapshot_output "analytics/${DAY}"
+
+      - name: Alert on workflow failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "analytics" "워크플로 실패" \
+            "GA4/GSC 수집이 완료되지 않았다. 이번 주 감사 ②는 '조회 실패'로 저하된다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

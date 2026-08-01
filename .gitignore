@@ -21,20 +21,15 @@
 *.pdf
 /SEED.md
 /tudul.md
-/docs/*
-!/docs/superpowers/
-/docs/superpowers/*
-!/docs/superpowers/plans/
+# 설계 문서·SDD 산출물은 두지 않는다. 남길 것은 AGENTS.md / MEMORY.md에 직접 쓴다.
+/docs/
 .superpowers/
 
-# GA4 Credentials & Venv
-ga4-credentials.json
-# CREDENTIALS_JSON 시크릿을 채운 사본과 그 재료. 템플릿(credentials.example.json)만 커밋한다.
+# 자격증명 — credentials.json 하나가 원본이며 GitHub Secret CREDENTIALS_JSON과 스키마가 같다.
 credentials.json
 creds.json
 *.credentials.json
 *-credentials.json
-telegram-credentials.json
 .venv/
 # Python cache
 __pycache__/

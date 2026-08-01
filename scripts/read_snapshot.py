@@ -39,6 +39,8 @@ def resolve_sidecar(explicit, env, cwd_parent):
 
 def clone_sidecar():
     dest = tempfile.mkdtemp(prefix="automation-data-")
+    import atexit, shutil
+    atexit.register(shutil.rmtree, dest, ignore_errors=True)
     subprocess.run(
         ["git", "clone", "--depth", "1", "--filter=blob:none", SIDECAR_URL, dest],
         check=True, capture_output=True,
@@ -151,15 +153,16 @@ def main() -> int:
             snapshot = load_snapshot(sidecar, args.subdir, today)
             snapshot_path = os.path.abspath(
                 os.path.join(sidecar, args.subdir, f"{today}.json"))
-    except FileNotFoundError:
-        if args.allow_local_fetch and not args.dir_mode:
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        if args.allow_local_fetch and not args.dir_mode and isinstance(exc, FileNotFoundError):
             from fetch_candidates import collect
             snapshot = collect(now)
             snapshot_path = None  # 파일에서 읽은 게 아니라 그 자리에서 수집한 것 — 가리킬 경로가 없다
         else:
             missing = f"{args.subdir}/{today}" + ("" if args.dir_mode else ".json")
+            reason = f"{missing} 없음" if isinstance(exc, FileNotFoundError) else f"{missing} 손상됨 (JSONDecodeError)"
             print(json.dumps({"status": "no_snapshot", "candidates": [],
-                              "reason": f"{missing} 없음",
+                              "reason": reason,
                               "sidecar_via": how}, ensure_ascii=False))
             return 1
 
