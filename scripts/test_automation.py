@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -131,6 +132,50 @@ class TestSelectInspectUrls(unittest.TestCase):
             urls = select_top_published_urls("content/posts")
             if urls:
                 self.assertTrue(urls[0].startswith("https://example.com/"))
+
+    def _write(self, d, slug, date):
+        with open(os.path.join(d, f"{slug}.md"), "w", encoding="utf-8") as f:
+            f.write(f'---\ntitle: {slug}\ndate: {date}\ndraft: false\n---\nBody\n')
+
+    def test_sample_is_homepage_newest_and_oldest(self):
+        """I6 표본은 최신순 상위 N건이 아니라 진입점·최신·최고령 혼합이다."""
+        from select_inspect_urls import select_top_published_urls
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(1, 7):
+                self._write(d, f"p{i}", f"2026-07-{10 + i:02d}T10:00:00Z")
+            urls = select_top_published_urls(d, base_url="https://ex.io")
+
+        self.assertEqual(urls[0], "https://ex.io/", "홈페이지가 항상 첫 항목")
+        self.assertEqual(len(urls), 5, "쿼터 5건을 채운다")
+        self.assertIn("https://ex.io/posts/p6/", urls, "최신 포함")
+        self.assertIn("https://ex.io/posts/p5/", urls, "차신 포함")
+        self.assertIn("https://ex.io/posts/p1/", urls, "최고령 포함")
+        self.assertIn("https://ex.io/posts/p2/", urls, "차고령 포함")
+        self.assertNotIn("https://ex.io/posts/p3/", urls, "중간 글은 표본 밖")
+
+    def test_sample_dedupes_when_few_posts(self):
+        """발행글이 적으면 최신과 최고령이 겹친다 — 중복 없이 줄어들 뿐 깨지지 않는다."""
+        from select_inspect_urls import select_top_published_urls
+        with tempfile.TemporaryDirectory() as d:
+            self._write(d, "only", "2026-07-11T10:00:00Z")
+            urls = select_top_published_urls(d, base_url="https://ex.io")
+        self.assertEqual(urls, ["https://ex.io/", "https://ex.io/posts/only/"])
+
+    def test_sample_survives_empty_corpus(self):
+        """발행글이 0건이어도 홈페이지 한 건은 낸다 — 진입점 판정은 여전히 가능하다."""
+        from select_inspect_urls import select_top_published_urls
+        with tempfile.TemporaryDirectory() as d:
+            urls = select_top_published_urls(d, base_url="https://ex.io")
+        self.assertEqual(urls, ["https://ex.io/"])
+
+    def test_sample_respects_smaller_limit(self):
+        """limit이 줄면 홈페이지가 가장 먼저 살아남는다."""
+        from select_inspect_urls import select_top_published_urls
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(1, 7):
+                self._write(d, f"p{i}", f"2026-07-{10 + i:02d}T10:00:00Z")
+            urls = select_top_published_urls(d, base_url="https://ex.io", limit=2)
+        self.assertEqual(urls, ["https://ex.io/", "https://ex.io/posts/p6/"])
 
     def test_fetch_gsc_parse_args(self):
         from fetch_gsc import parse_args

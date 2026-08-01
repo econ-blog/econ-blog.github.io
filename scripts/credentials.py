@@ -45,10 +45,16 @@ def _materialize(service_account: dict) -> str:
 
 
 def service_account_path():
-    """GA4/GSC용 평탄한 서비스 계정 키 파일 경로. 없으면 None."""
+    """GA4/GSC용 평탄한 서비스 계정 키 파일 경로. 없으면 None.
+
+    환경변수가 설정돼 있으면 **파일 존재 여부와 무관하게 그 값을 돌려준다.**
+    경로가 틀렸을 때 조용히 credentials.json으로 넘어가면, 오타 하나가
+    "다른 자격증명으로 성공"이라는 최악의 진단 불가 상태를 만든다.
+    없는 파일이면 호출자가 그 경로를 그대로 담은 오류를 내는 편이 낫다.
+    """
     for key in _ENV_KEYS:
         path = os.environ.get(key)
-        if path and os.path.exists(path):
+        if path:
             return path
     bundle = _load_bundle()
     if not bundle:

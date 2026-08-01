@@ -87,25 +87,30 @@ git remote get-url origin
 
 ## 5. I6 표본 선택과 조회
 
-발행글 목록을 가져오되, 가장 최신 포스트부터 최대 5개까지만 선택한다:
+**표본 선택은 `scripts/select_inspect_urls.py`가 유일한 주체다.** 여기에 목록을
+직접 만들지 않는다 — 이 절과 스크립트가 각자 표본을 정하던 동안 둘이 어긋났고,
+`analytics.yml`이 스크립트 쪽을 쓰는 바람에 **홈페이지가 한 번도 조회되지 않았다.**
+그래서 2026-08-01까지 홈페이지가 이미 색인돼 있다는 사실(`Submitted and indexed`,
+크롤 2026-07-19)을 13일간 놓쳤다.
 
 ```
-.venv/bin/python - <<'PY'
-import json, sys
-from pathlib import Path
-sys.path.insert(0, ".claude/audit/lib")
-from corpus import published
-
-posts = published(Path("content"))
-post_slugs = [p["file"].replace(".md", "") for p in posts][:5]
-urls = ["https://econ-blog.github.io/"] + [
-    f"https://econ-blog.github.io/posts/{s}/" for s in post_slugs
-]
-print(json.dumps(urls))
-PY
+.venv/bin/python scripts/select_inspect_urls.py content/posts
 ```
+
+돌려주는 5건은 **최신순 상위 5건이 아니다.** 크롤이 멈춘 지점을 찾는 혼합 표본이다:
+
+| 자리 | 무엇 | 무엇에 답하나 |
+|---|---|---|
+| 1 | 홈페이지 | 크롤 진입점이 살아 있는가. 여기가 죽으면 나머지는 볼 필요도 없다 |
+| 2–3 | 최신 2건 | 새 글이 수집되고 있는가 |
+| 4–5 | 최고령 2건 | 시간이 지나면 색인되기는 하는가 |
+
+발행글이 적으면 최신과 최고령이 겹쳐 표본이 줄어든다 — 정상이다.
 
 이 URL 목록을 `scripts/fetch_gsc.py --inspect <url1> <url2> ...` 에 넘긴다.
+표본 해석은 **자리별로** 한다: 홈페이지가 `PASS`인데 나머지가 전부
+`URL is unknown to Google`이면 그것은 "색인이 안 된다"가 아니라
+**"진입점만 크롤되고 스파이더링이 일어나지 않는다"**이며, 원인이 다르므로 소견도 다르다.
 
 색인되지 않은 URL의 `coverage_state`를 **가공 없이 그대로** 리포트에 옮긴다. 번역하거나
 요약하지 않는다 — 그 문자열이 Search Console UI와 같아야 사람이 대조할 수 있다.
