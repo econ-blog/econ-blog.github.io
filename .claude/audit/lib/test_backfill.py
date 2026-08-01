@@ -63,6 +63,40 @@ with tempfile.TemporaryDirectory() as tmp:
     anchor_linked = write(tmp, "g.md", "[기준금리](/dictionary/base-rate/#section)를 올렸다.")
     check("앵커 포함 링크 → 후보 0", find_candidates([anchor_linked], TERMS), [])
 
+# 규칙 A — 백필 부분문자열 가드 (더 긴 낱말의 일부는 버린다)
+LOAN_TERMS = {"loan": {"title": "대출", "aliases": []}}
+print("부분문자열 가드")
+with tempfile.TemporaryDirectory() as tmp:
+    # "대출금리"·"가계대출"의 일부로만 등장 → 후보 0
+    inner = write(tmp, "h.md", "오늘 대출금리와 가계대출 동향입니다.")
+    check("더 긴 낱말 내부 → 후보 0", find_candidates([inner], LOAN_TERMS), [])
+
+    # 조사가 붙은 정상 등장은 낱말 경계로 허용 (예: "대출은")
+    particle = write(tmp, "i.md", "대출은 늘었다.")
+    cands = find_candidates([particle], LOAN_TERMS)
+    check("조사 결합은 낱말 경계 → backfill 1건", len(cands), 1)
+    check("조사 결합 slug", cands[0]["slug"] if cands else None, "loan")
+
+    # 앞은 낱말 경계(공백)이나 뒤가 다른 한글로 이어지면 여전히 내부로 간주
+    mixed = write(tmp, "j.md", "대출금리가 올랐다.")
+    check("앞만 경계이고 뒤가 이어지면 여전히 내부", find_candidates([mixed], LOAN_TERMS), [])
+
+    # 기준금리 뒤에 조사 "는"이 붙는 정상 케이스는 계속 backfill로 잡혀야 한다
+    kikeum = write(tmp, "k.md", "기준금리는 동결됐다.")
+    cands2 = find_candidates([kikeum], TERMS)
+    check("기준금리+조사 → backfill 유지", [c["kind"] for c in cands2], ["backfill"])
+
+# 영숫자 표면(LNG)도 같은 낱말 경계 판정을 받는다
+LNG_TERMS = {"lng": {"title": "LNG", "aliases": []}}
+with tempfile.TemporaryDirectory() as tmp:
+    # "LNG" 뒤에 영문자가 바로 이어지면(예: "LNGX") 낱말 내부로 버린다
+    glued = write(tmp, "l.md", "회사명은 LNGX입니다.")
+    check("영숫자 표면도 뒤 결합이면 후보 0", find_candidates([glued], LNG_TERMS), [])
+
+    plain_lng = write(tmp, "m.md", "오늘 LNG 가격이 올랐다.")
+    check("영숫자 표면 정상 등장 → backfill",
+          find_candidates([plain_lng], LNG_TERMS)[0]["kind"], "backfill")
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

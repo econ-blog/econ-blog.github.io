@@ -286,12 +286,62 @@ def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
     return out
 
 
+def _primary_link_lines(raw: str) -> set[int]:
+    """1차 출처 링크(PRIMARY_HOSTS)가 걸린 파일 줄번호 집합.
+
+    AC #58과 같은 전제("문단 = 줄", 이 저장소의 마크다운 실측)를 쓴다 — 같은
+    줄에 1차 출처 링크가 있으면 그 줄이 곧 그 문단이다.
+    """
+    front, body = split_front_matter(raw)
+    offset = front.count("\n")
+    lines = mask_code_spans(body).split("\n")
+    out: set[int] = set()
+    for i, line in enumerate(lines):
+        for _anchor, target in MD_LINK.findall(line):
+            m = HOST.match(target)
+            if m and is_primary(m.group(1)):
+                out.add(offset + i + 1)
+    return out
+
+
+def _definition_lines(raw: str) -> set[int]:
+    """정의 서술부로 간주하는 파일 줄번호 집합 — 사전 항목 첫 '## ' 헤딩 이전.
+
+    휴리스틱이다: 이 저장소의 사전 항목은 도입부(정의) 문단 뒤에
+    '## 실생활에서는' 같은 섹션이 온다(archetypes/dictionary.md 관행, 실측 —
+    circuit-breaker.md·base-rate.md 등 13개 항목 전부가 이 형태). 한계: 정의가
+    첫 헤딩을 넘어가거나 후속 섹션에 정의성 수치가 섞이면 그쪽은 잡지 못한다
+    — 재현율보다 오탐 억제(정밀도)를 우선한 결정이다.
+    """
+    front, body = split_front_matter(raw)
+    offset = front.count("\n")
+    lines = mask_code_spans(body).split("\n")
+    out: set[int] = set()
+    for i, line in enumerate(lines):
+        if line.startswith("## "):
+            break
+        out.add(offset + i + 1)
+    return out
+
+
 def n5_reprint(dict_files: list[Path], post_files: list[Path]) -> list[dict]:
     """N5 — 사전의 수치가 포스트의 수치와 값·단위 모두 같은 경우. (AC #59)
 
     draft.md의 "이미 발행된 글의 수치를 사전으로 옮겨 적지 않는다"가 근거다.
     우연의 일치일 수 있으므로 판정이 아니라 확인 요청으로 낸다.
+
+    면제(AC #59 확장): 같은 줄에 1차 출처 링크가 있거나(_primary_link_lines),
+    사전 항목의 정의 서술부에 있는(_definition_lines) 수치는 대상에서 뺀다 —
+    제도의 발동 기준값(8%·15%)이나 이미 1차 출처가 붙은 값(2.50%→2.75%)은
+    사전이 담아야 하는 숫자이지 "전재"가 아니다. 제외 건수는
+    n5_reprint_detail이 별도로 센다.
     """
+    rows, _exempt = n5_reprint_detail(dict_files, post_files)
+    return rows
+
+
+def n5_reprint_detail(dict_files: list[Path], post_files: list[Path]) -> tuple[list[dict], int]:
+    """n5_reprint과 같되 (미면제 행, 면제 건수) 튜플로 낸다. (N5_exempt)"""
     in_posts: dict[tuple, list[str]] = {}
     for path in post_files:
         rel_path = _rel(path)
@@ -299,15 +349,23 @@ def n5_reprint(dict_files: list[Path], post_files: list[Path]) -> list[dict]:
             key = (norm_value(c["value"]), c["unit"])
             in_posts.setdefault(key, []).append(f"{rel_path}:{c['line']}")
     out = []
+    exempt = 0
     for path in dict_files:
         rel_path = _rel(path)
-        for c in claims(path.read_text(encoding="utf-8")):
+        raw = path.read_text(encoding="utf-8")
+        primary_lines = _primary_link_lines(raw)
+        def_lines = _definition_lines(raw)
+        for c in claims(raw):
             key = (norm_value(c["value"]), c["unit"])
-            if key in in_posts:
-                out.append({"at": f"{rel_path}:{c['line']}",
-                            "value": c["value"], "unit": c["unit"],
-                            "also_in": sorted(set(in_posts[key]))})
-    return out
+            if key not in in_posts:
+                continue
+            if c["line"] in primary_lines or c["line"] in def_lines:
+                exempt += 1
+                continue
+            out.append({"at": f"{rel_path}:{c['line']}",
+                        "value": c["value"], "unit": c["unit"],
+                        "also_in": sorted(set(in_posts[key]))})
+    return out, exempt
 
 
 def _md(sub: str) -> list[Path]:
@@ -418,7 +476,8 @@ def main() -> None:
                             + " / ".join(loc for v in c["values"]
                                          for loc in v["at"])})
     # 쓰기시점 `--file`과 같은 목록을 본다 — 갈리면 §J의 전제가 깨진다.
-    for c in n5_reprint(dicts, published_posts()):
+    n5_rows, n5_exempt = n5_reprint_detail(dicts, published_posts())
+    for c in n5_rows:
         rows.append({"check": "N5", "at": c["at"],
                      "quote": f"{c['value']}{c['unit']}",
                      "why": ", ".join(c["also_in"]) + " 와 값·단위 동일 — 전재 확인 요청"})
@@ -433,7 +492,8 @@ def main() -> None:
                 if summary["claims_total"] else 0.0)
     print(json.dumps({"counts": counts, "total": len(rows),
                       "rows": rows[:CAP], "overflow": max(0, len(rows) - CAP),
-                      "claims": summary, "n1_posts_count": n1_posts_count, "n1_share": n1_share},
+                      "claims": summary, "n1_posts_count": n1_posts_count, "n1_share": n1_share,
+                      "N5_exempt": n5_exempt},
                      ensure_ascii=False, indent=2))
 
 

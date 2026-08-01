@@ -19,7 +19,6 @@
 
 # Non-blog artifacts (must not be published)
 *.pdf
-/SEED.md
 /tudul.md
 # 설계 문서·SDD 산출물은 두지 않는다. 남길 것은 AGENTS.md / MEMORY.md에 직접 쓴다.
 /docs/

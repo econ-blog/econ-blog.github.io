@@ -220,10 +220,14 @@ from numerics import n5_reprint  # noqa: E402
 
 with tempfile.TemporaryDirectory() as tmp:
     posts = _files(tmp, [("p.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n")])
-    dicts = _files(tmp, [("d.md", "기준금리는 2026년 7월 16일 2.75%입니다.\n")])
+    # 정의 서술부(첫 '## ' 이전)·1차 출처 링크 둘 다 없는 위치에 둬야
+    # 규칙 B 면제 대상이 아니다 — 헤딩 뒤에 배치한다.
+    dicts = _files(tmp, [("d.md",
+        "기준금리를 설명합니다.\n\n"
+        "## 실생활에서는\n\n기준금리는 2026년 7월 16일 2.75%입니다.\n")])
     r = n5_reprint(dicts, posts)
     check("값·단위가 같으면 확인 요청", len(r), 1)
-    check("사전 위치 기록", r[0]["at"].endswith("d.md:1"), True)
+    check("사전 위치 기록", r[0]["at"].endswith("d.md:5"), True)
     check("포스트 위치 병기", r[0]["also_in"][0].endswith("p.md:1"), True)
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -235,6 +239,39 @@ with tempfile.TemporaryDirectory() as tmp:
     posts = _files(tmp, [("p.md", "유가는 80달러입니다.\n")])
     dicts = _files(tmp, [("d.md", "지분은 80%입니다.\n")])
     check("단위가 다르면 대상 아님", n5_reprint(dicts, posts), [])
+
+print("N5 면제 — 1차 출처 링크 / 정의 서술부 (규칙 B)")
+from numerics import n5_reprint_detail  # noqa: E402
+
+with tempfile.TemporaryDirectory() as tmp:
+    # 같은 줄에 1차 출처 링크가 있으면 면제
+    posts = _files(tmp, [("p.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n")])
+    dicts = _files(tmp, [("d.md",
+        "기준금리는 2026년 7월 16일 2.75%로 올랐습니다"
+        "(출처: [ECOS](https://ecos.bok.or.kr)).\n")])
+    rows, exempt = n5_reprint_detail(dicts, posts)
+    check("1차 출처 같은 줄 → 면제", rows, [])
+    check("면제 카운트 1", exempt, 1)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # 첫 '## ' 헤딩 이전(정의 서술부)의 수치는 면제
+    posts = _files(tmp, [("p.md", "지수가 8% 넘게 빠졌습니다.\n")])
+    dicts = _files(tmp, [("d.md",
+        "서킷브레이커는 지수가 8% 하락하면 발동합니다.\n\n"
+        "## 실생활에서는\n\n매매가 잠시 멈춥니다.\n")])
+    rows, exempt = n5_reprint_detail(dicts, posts)
+    check("정의 서술부 값은 면제", [r["at"] for r in rows], [])
+    check("정의 서술부 값도 세어진다", exempt, 1)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # 헤딩 이후 + 1차 출처 없음 → 면제 대상 아님(전재 확인 요청 유지)
+    posts = _files(tmp, [("p.md", "지수가 8% 넘게 빠졌습니다.\n")])
+    dicts = _files(tmp, [("d.md",
+        "서킷브레이커를 설명합니다.\n\n"
+        "## 실생활에서는\n\n오늘도 8% 하락했습니다.\n")])
+    rows, exempt = n5_reprint_detail(dicts, posts)
+    check("헤딩 이후·1차 출처 없음 → 면제 아님", len(rows), 1)
+    check("면제 없음", exempt, 0)
 
 print("claims 집계")
 from numerics import claims_summary  # noqa: E402
@@ -284,7 +321,8 @@ with tempfile.TemporaryDirectory() as tmp:
 print("check_file — 사전 분기 (N5)")
 import numerics as _n  # noqa: E402
 
-DICT_BODY = FM + "\n2026년 7월 16일 기준금리는 2.75%입니다.\n"
+DICT_BODY = (FM + "\n기준금리를 설명합니다.\n\n"
+             "## 실생활에서는\n\n2026년 7월 16일 기준금리는 2.75%입니다.\n")
 
 
 def with_content_root(tmp):

@@ -18,6 +18,69 @@ from mdtext import FENCED_CODE, MD_LINK, split_front_matter, strip_code_spans  #
 
 DICT_PREFIX = "/dictionary/"
 
+HANGUL = re.compile(r"[가-힣]")
+ALNUM = re.compile(r"[A-Za-z0-9]")
+
+# 표면 뒤에 붙어도 낱말 경계로 허용하는 한국어 조사. 최장 것부터 시도해야
+# "이라는"이 "이"에 먹혀 짧게 매칭되는 일이 없다.
+# 한계: 이 목록은 닫힌 목록이라 여기 없는 조사(예: "이나", "든지")가 붙으면
+# 오탐(낱말 내부로 오판)이 남는다 — 재현율보다 오탐 억제를 우선한 결정.
+PARTICLES = tuple(sorted([
+    "은", "는", "이", "가", "을", "를", "의", "에서", "에", "으로", "로",
+    "와", "과", "도", "만", "까지", "부터", "보다", "처럼", "라는", "이라는",
+], key=len, reverse=True))
+
+
+def _edge_class(ch: str) -> str | None:
+    if HANGUL.match(ch):
+        return "hangul"
+    if ALNUM.match(ch):
+        return "alnum"
+    return None
+
+
+def _passes_word_boundary(clean: str, start: int, end: int, surface: str) -> bool:
+    """매칭된 표면이 더 긴 낱말의 일부가 아닌지 판정한다.
+
+    앞: 표면 첫 글자와 같은 문자군(한글/영숫자)이 바로 앞에 붙어 있으면 그
+    표면은 더 긴 낱말의 뒷부분이다 — 조사 같은 예외가 없으므로 무조건 버린다
+    (한국어 복합어·접두사가 앞쪽에 붙기 때문).
+    뒤: 표면 마지막 글자와 같은 문자군이 바로 뒤에 붙어 있으면 원칙적으로
+    버리되, 한글 표면이고 그 자리부터 한국어 조사(PARTICLES)로 시작하면
+    조사가 낱말 경계 역할을 하므로 예외로 통과시킨다. 영숫자 표면(LNG·PER
+    등)에는 조사 개념이 없으므로 이 예외를 적용하지 않는다.
+    """
+    if not surface:
+        return False
+    first_class = _edge_class(surface[0])
+    if first_class is not None and start > 0:
+        prev = clean[start - 1]
+        if _edge_class(prev) == first_class:
+            return False
+
+    last_class = _edge_class(surface[-1])
+    if last_class is not None and end < len(clean):
+        nxt = clean[end]
+        if _edge_class(nxt) == last_class:
+            if last_class == "hangul" and clean[end:].startswith(PARTICLES):
+                pass  # 조사로 시작 — 낱말 경계로 허용
+            else:
+                return False
+    return True
+
+
+def _find_valid_surface(clean: str, surface: str) -> bool:
+    """clean 안에 낱말 경계를 통과하는 surface 등장이 하나라도 있는가."""
+    start = 0
+    while True:
+        idx = clean.find(surface, start)
+        if idx == -1:
+            return False
+        if _passes_word_boundary(clean, idx, idx + len(surface), surface):
+            return True
+        start = idx + 1
+    return False
+
 
 def _mask_fenced_code(text: str) -> str:
     """다행 펜스 코드블록 내 개행 제외 문자를 공백으로 대체하여 줄번호를 유지한다."""
@@ -64,7 +127,7 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
             for surface, slug in lookup:
                 if slug in seen or slug == own_slug:
                     continue
-                if surface in clean:
+                if _find_valid_surface(clean, surface):
                     if slug in linked:
                         if lineno < linked[slug]:
                             out.append({"file": path.name, "slug": slug,
