@@ -331,10 +331,17 @@ def n5_reprint(dict_files: list[Path], post_files: list[Path]) -> list[dict]:
     우연의 일치일 수 있으므로 판정이 아니라 확인 요청으로 낸다.
 
     면제(AC #59 확장): 같은 줄에 1차 출처 링크가 있거나(_primary_link_lines),
-    사전 항목의 정의 서술부에 있는(_definition_lines) 수치는 대상에서 뺀다 —
-    제도의 발동 기준값(8%·15%)이나 이미 1차 출처가 붙은 값(2.50%→2.75%)은
-    사전이 담아야 하는 숫자이지 "전재"가 아니다. 제외 건수는
-    n5_reprint_detail이 별도로 센다.
+    사전 항목의 정의 서술부에 있는(_definition_lines) 수치는 대상에서 뺀다.
+    정의 서술부에서 이미 정의된 값·단위가 같은 문서의 다른 곳(예: "실생활에서는"의
+    예시 문장)에 재등장하는 경우도 같은 값의 반복이므로 함께 면제한다 — 제도의
+    발동 기준값(8%·15%)이나 이미 1차 출처가 붙은 값(2.50%→2.75%)은 사전이
+    담아야 하는 숫자이지 "전재"가 아니다. 제외 건수는 n5_reprint_detail이
+    별도로 센다.
+
+    한계: 이 자기참조 확장은 정의부에서 한 번 언급된 값이면 문서 어디서
+    재등장해도 면제한다. 정의부 수치가 우연히 다른 절의 최신 통계와 같은
+    값이 되는 경우(예: 정의부 예시가 마침 오늘 시세와 같은 값)에도 면제되어
+    버리는 오탐 가능성이 있다 — 재현율보다 오탐 억제를 우선한 결정이다.
     """
     rows, _exempt = n5_reprint_detail(dict_files, post_files)
     return rows
@@ -355,11 +362,14 @@ def n5_reprint_detail(dict_files: list[Path], post_files: list[Path]) -> tuple[l
         raw = path.read_text(encoding="utf-8")
         primary_lines = _primary_link_lines(raw)
         def_lines = _definition_lines(raw)
-        for c in claims(raw):
+        doc_claims = claims(raw)
+        def_keys = {(norm_value(c["value"]), c["unit"])
+                    for c in doc_claims if c["line"] in def_lines}
+        for c in doc_claims:
             key = (norm_value(c["value"]), c["unit"])
             if key not in in_posts:
                 continue
-            if c["line"] in primary_lines or c["line"] in def_lines:
+            if c["line"] in primary_lines or c["line"] in def_lines or key in def_keys:
                 exempt += 1
                 continue
             out.append({"at": f"{rel_path}:{c['line']}",

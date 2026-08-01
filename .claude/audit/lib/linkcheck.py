@@ -28,16 +28,26 @@ def classify(result: dict) -> str:
 
 
 def update_ledger(ledger: dict, url: str, result: dict, today: str) -> dict:
-    """AC #8 카운터 규칙. 원장을 제자리 갱신하고 반환한다."""
+    """AC #8 카운터 규칙. 원장을 제자리 갱신하고 반환한다.
+
+    연성 실패(classify()=="soft")를 원인별로 다시 나눈다 — HTTP 상태코드가
+    있는 연성(403/429/5xx)은 consecutive_soft_failures, final_status가
+    None인 연성(타임아웃·DNS·TLS — 러너가 아예 도달하지 못한 경우)은
+    consecutive_unreachable로 각각 센다. 기존 원장에 consecutive_unreachable
+    키가 없는 엔트리를 읽을 수도 있으므로 .get으로 기본값 0을 준다(마이그레이션
+    없이 안전하게 읽기, 규칙 C).
+    """
     e = ledger.get(url) or {
         "last_status": None,
         "final_url": url,
         "last_checked": None,
         "consecutive_hard_failures": 0,
         "consecutive_soft_failures": 0,
+        "consecutive_unreachable": 0,
         "hard_streak_started": None,
         "first_seen": today,
     }
+    e.setdefault("consecutive_unreachable", 0)  # 새 키 없는 기존 엔트리 보정
     kind = classify(result)
     e["last_status"] = result["final_status"]
     e["final_url"] = result["final_url"]
@@ -47,12 +57,19 @@ def update_ledger(ledger: dict, url: str, result: dict, today: str) -> dict:
             e["hard_streak_started"] = today
         e["consecutive_hard_failures"] += 1
         e["consecutive_soft_failures"] = 0
+        e["consecutive_unreachable"] = 0
     elif kind == "soft":
-        e["consecutive_soft_failures"] += 1
+        if result["final_status"] is None:
+            e["consecutive_unreachable"] += 1
+            # HTTP 연성 카운터: 원인이 다르므로 증가시키지도 리셋하지도 않는다
+        else:
+            e["consecutive_soft_failures"] += 1
+            # 도달 불가 카운터: 원인이 다르므로 증가시키지도 리셋하지도 않는다
         # 하드 카운터: 증가시키지도 리셋하지도 않는다 (AC #8)
     else:  # ok
         e["consecutive_hard_failures"] = 0
         e["consecutive_soft_failures"] = 0
+        e["consecutive_unreachable"] = 0
         e["hard_streak_started"] = None
     ledger[url] = e
     return ledger
@@ -73,8 +90,25 @@ def confirmed_dead(entry: dict, today: str) -> bool:
 
 
 def needs_manual_review(entry: dict) -> bool:
-    """연성 4회 연속 → 리포트 사람 점검 섹션. 자동 수정 안 함. (AC #10)"""
+    """HTTP 상태코드가 있는 연성(403/429/5xx) 4회 연속 → 사람 점검 섹션.
+
+    자동 수정 안 함. (AC #10) 규칙 C 이후 consecutive_soft_failures는 원인이
+    HTTP 응답인 실패만 센다 — None(타임아웃 등)은 needs_runner_unreachable로
+    간다.
+    """
     return entry.get("consecutive_soft_failures", 0) >= 4
+
+
+def needs_runner_unreachable_review(entry: dict) -> bool:
+    """final_status가 None인 연성(타임아웃·DNS·TLS) 4회 연속 → '러너 도달 불가
+    의심' 분류. (규칙 C)
+
+    manual_review와 임계값(4)은 같게 뒀다 — AC #10이 정한 4주 연속 기준을
+    그대로 재사용한다는 뜻이며, 이 분류 자체를 위해 새로 유도된 값이 아니다.
+    기존 원장에 consecutive_unreachable 키가 없는 엔트리는 0으로 취급한다
+    (마이그레이션 없이 안전하게 읽기).
+    """
+    return entry.get("consecutive_unreachable", 0) >= 4
 
 
 def ledger_stale(ledger: dict, today: str) -> bool:
@@ -160,6 +194,9 @@ if __name__ == "__main__":
         "ledger_was_stale": stale_before,
         "confirmed_dead": [u for u in active_urls if u in ledger and confirmed_dead(ledger[u], today)],
         "manual_review": [u for u in active_urls if u in ledger and needs_manual_review(ledger[u])],
+        "runner_unreachable": [
+            u for u in active_urls if u in ledger and needs_runner_unreachable_review(ledger[u])
+        ],
         "moved": [
             {"url": u, "final_url": ledger[u]["final_url"]}
             for u in active_urls

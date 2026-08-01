@@ -52,6 +52,12 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 - `summary.confirmed_dead`가 **수정 대상**이다(하드 2회 + 5일 경과, AC #9).
 - `manual_review`는 **사람 점검 필요** 섹션에, `moved`는 **이동됨** 섹션에 싣는다(둘 다
   자동 수정 대상 아님, AC #10·#7).
+- `runner_unreachable`은 **러너 도달 불가 의심** 섹션에 싣는다(규칙 C, 자동 수정 대상
+  아님). `manual_review`와 원인이 다르다 — `manual_review`는 HTTP 상태코드가 있는
+  연성(403·429·5xx) 4회 연속, `runner_unreachable`은 `final_status`가 None인 연성
+  (타임아웃·DNS·TLS) 4회 연속이다. GitHub Actions 러너 IP에서만 도달 못 하는 링크가
+  로컬에서는 정상(200)일 수 있다 — 이 분류는 "링크가 죽었다"가 아니라 "러너에서만
+  막혔을 수 있다"는 뜻이므로 사람이 직접 열어 확인해야 한다.
 - `ledger`(갱신된 원장 전체)를 시퀀서 §10에 넘긴다. **§10이 그것을
   `.claude/audit/link-state.json`에 쓰고 커밋한다** — 원장의 쓰기 주체는 바뀌지 않았고,
   사람이 승인하는 PR을 여전히 거친다.
@@ -95,9 +101,15 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 | URL | 출처 위치 | 최근 2회 상태 | 최초 관측 | 수정안 |
 (confirmed_dead 없으면 "- 없음")
 
-### 사람 점검 필요 (연성 4주 연속)
+### 사람 점검 필요 (HTTP 연성 4주 연속 — 403·429·5xx)
 | URL | 최근 4회 상태 | 최초 관측 |
 (manual_review 없으면 생략)
+
+### 러너 도달 불가 의심 (타임아웃·DNS·TLS 4주 연속, 규칙 C)
+| URL | 최근 4회 상태 | 최초 관측 |
+사람이 로컬 또는 다른 네트워크에서 직접 열어 확인한다 — GitHub Actions 러너
+IP에서만 도달하지 못하는 경우와 실제로 죽은 링크를 구분하지 못한다.
+(runner_unreachable 없으면 생략)
 
 ### 이동됨 (리다이렉트, 자동 수정 안 함)
 | 원 URL | 최종 URL |
