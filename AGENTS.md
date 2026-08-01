@@ -67,7 +67,7 @@ for f in .claude/audit/lib/test_*.py; do .venv/bin/python "$f"; done
 
 ## `/weekly-audit`
 
-인자 없음 = 무인(`auto/audit-YYYY-MM-DD` 브랜치 + PR), `manual` = 대화형. 시퀀서 `.claude/commands/weekly-audit.md`가 `.claude/audit/` 아래 6개 스테이지를 `Read`한다: ① 링크 + 백필 → ② 성과 → ③ 색인 → ④ 시스템 스캔 → ⑥ 수치 → ⑤ 방향.
+인자 없음 = 무인, `manual` = 대화형. **무인은 리포트·원장을 `main`에 직접 푸시하고, `content/` 수정이 있을 때만 `auto/audit-YYYY-MM-DD` 브랜치 + PR로 분리한다**(2026-08-01 결정 — 감사 산출물은 관측치라 반려 대상이 아니다. `content/` 수정은 여전히 승인 대상). 시퀀서 `.claude/commands/weekly-audit.md`가 `.claude/audit/` 아래 6개 스테이지를 `Read`한다: ① 링크 + 백필 → ② 성과 → ③ 색인 → ④ 시스템 스캔 → ⑥ 수치 → ⑤ 방향.
 
 **실행 중 알아야 할 것:**
 
