@@ -1,8 +1,8 @@
 name: Fetch Link State
 
 on:
-  schedule:
-    - cron: '37 16 * * 6' # UTC 토 16:37 = KST 일 01:37 (루틴 일 05:00 KST의 3시간 23분 전)
+  # 스케줄은 cron-job.org가 REST API로 건다 — 매주 일 01:37 KST.
+  # GitHub 내장 schedule은 2026-08-02에 제거했다. 근거·설정은 MEMORY.md §9.
   workflow_dispatch:
 
 concurrency:

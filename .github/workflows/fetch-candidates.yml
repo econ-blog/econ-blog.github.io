@@ -1,8 +1,9 @@
 name: Fetch Daily Candidates
 
 on:
-  schedule:
-    - cron: '47 16 * * *' # UTC 16:47 = KST 익일 01:47 (루틴 05:00 KST의 3시간 13분 전)
+  # 스케줄은 cron-job.org가 REST API로 건다 — 매일 01:47 KST.
+  # GitHub 내장 schedule은 2026-08-02에 제거했다(3.5~4시간 상시 지연으로
+  # 루틴 05:00 KST 전에 스냅샷이 도착하지 못했다). 근거·설정은 MEMORY.md §9.
   workflow_dispatch:
 
 concurrency:

@@ -163,15 +163,26 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 `econ-blog/automation-data`로 배달된다. `econ-blog.github.io`는 PUBLIC이므로 기사 본문
 (제3자 저작물)과 분석 데이터를 여기 커밋하지 않는다.
 
-| 워크플로 | 크론 (UTC) | KST | 산출물 |
+**스케줄은 GitHub 크론이 아니라 cron-job.org가 건다** (2026-08-02 전환). 워크플로에
+`schedule:` 트리거가 없다 — 전부 `workflow_dispatch`뿐이고, 외부 스케줄러가 REST API로
+호출한다. 크론 시각을 바꾸려면 저장소가 아니라 cron-job.org 대시보드를 고친다. 근거와
+잡별 설정값은 `MEMORY.md` §9.
+
+| 워크플로 | 스케줄 (KST) | 트리거 | 산출물 |
 |---|---|---|---|
-| `fetch-candidates.yml` | `47 16 * * *` | 매일 01:47 | `candidates/YYYY-MM-DD.json` |
-| `analytics.yml` | `20 16 * * 6` | 일 01:20 | `analytics/YYYY-MM-DD/*.json` |
-| `fetch-linkstate.yml` | `37 16 * * 6` | 일 01:37 | `linkstate/YYYY-MM-DD.json` |
-| `open-auto-pr.yml` | `push` on `auto/**` | — | PR (→ `notify.yml`) |
+| `fetch-candidates.yml` | 매일 01:47 | cron-job.org | `candidates/YYYY-MM-DD.json` |
+| `analytics.yml` | 일 01:20 | cron-job.org | `analytics/YYYY-MM-DD/*.json` |
+| `fetch-linkstate.yml` | 일 01:37 | cron-job.org | `linkstate/YYYY-MM-DD.json` |
+| `inbox.yml` | 매일 06:00 | cron-job.org | 승인 판정 처리 |
+| `open-auto-pr.yml` | — | `push` on `auto/**` | PR (→ `notify.yml`) |
 
 루틴은 `/daily-post` 매일 05:00 KST, `/weekly-audit` 일 05:00 KST. 수집은 루틴보다 최소
 3시간 앞에 둔다.
+
+**GitHub 내장 `schedule:`을 다시 넣지 않는다.** 2026-08-01까지의 실측에서 예정 시각보다
+3시간 28분~3시간 58분 늦게 발화해 3시간대 여유를 통째로 잡아먹었고, 그 결과 스냅샷이
+루틴보다 **뒤에** 도착해 `/daily-post`가 `no_snapshot`으로 중단됐다. 두 스케줄러가 함께
+살아 있으면 같은 워크플로가 하루 두 번 돌아 사이드카에 중복 커밋이 쌓인다.
 
 **스냅샷 파일명과 `generated_at`은 언제나 KST 기준이다.** 워크플로가 UTC 16시대에 도는데
 UTC 날짜를 쓰면 매일 "스냅샷 부재"로 조용히 중단된다.

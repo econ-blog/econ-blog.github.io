@@ -1,8 +1,8 @@
 name: Daily Telegram Inbox Verdict Processing
 
 on:
-  schedule:
-    - cron: '0 21 * * *' # KST 06:00 (UTC 21:00 previous day)
+  # 스케줄은 cron-job.org가 REST API로 건다 — 매일 06:00 KST.
+  # GitHub 내장 schedule은 2026-08-02에 제거했다. 근거·설정은 MEMORY.md §9.
   workflow_dispatch:
 
 concurrency:
