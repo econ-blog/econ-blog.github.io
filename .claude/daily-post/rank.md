@@ -4,7 +4,7 @@
 
 ## 1. 후보 스냅샷 읽기
 
-후보는 GitHub Actions(`fetch-candidates.yml`)가 매일 01:47 KST에 미리 수집해
+후보는 GitHub Actions(`daily-collect.yml`의 `candidates` 잡)가 매일 01:30 KST에 미리 수집해
 비공개 사이드카 `econ-blog/automation-data`에 올려둔다. **이 단계에서 RSS를 직접
 가져오지 않는다** — 루틴 샌드박스는 뉴스 사이트에 도달할 수 없다(`AGENTS.md` 자동화 평면).
 

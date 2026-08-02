@@ -170,14 +170,28 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 
 | 워크플로 | 스케줄 (KST) | 트리거 | 산출물 |
 |---|---|---|---|
-| `fetch-candidates.yml` | 매일 01:47 | cron-job.org | `candidates/YYYY-MM-DD.json` |
-| `analytics.yml` | 일 01:20 | cron-job.org | `analytics/YYYY-MM-DD/*.json` |
-| `fetch-linkstate.yml` | 일 01:37 | cron-job.org | `linkstate/YYYY-MM-DD.json` |
-| `inbox.yml` | 매일 06:00 | cron-job.org | 승인 판정 처리 |
-| `open-auto-pr.yml` | — | `push` on `auto/**` | PR (→ `notify.yml`) |
+| 워크플로 | 스케줄 (KST) | 트리거 | 잡 (순서) | 산출물 |
+|---|---|---|---|---|
+| `daily-collect.yml` | 매일 01:30 | cron-job.org | `inbox` → `candidates` | 승인 판정 처리 + `candidates/YYYY-MM-DD.json` |
+| `weekly-collect.yml` | 일 01:20 | cron-job.org | `analytics` ∥ `linkstate` | `analytics/YYYY-MM-DD/*.json` + `linkstate/YYYY-MM-DD.json` |
+| `open-auto-pr.yml` | — | `push` on `auto/**` | — | PR (→ `notify.yml`) |
 
 루틴은 `/daily-post` 매일 05:00 KST, `/weekly-audit` 일 05:00 KST. 수집은 루틴보다 최소
 3시간 앞에 둔다.
+
+**하루는 한 방향으로 흐른다**: `인박스(어제 글 판정) → 후보 수집 → 루틴 05:00(오늘 글
+PR 생성·텔레그램 발송)`. 인박스가 루틴보다 앞이라 어제 PR이 닫힌 뒤 오늘 PR이 열린다 —
+글 PR이 둘 동시에 열려 있는 구간이 없다.
+
+**`candidates` 잡은 `needs: inbox` + `if: always()`다.** 순서만 강제하고 성공은 요구하지
+않는다. 인박스가 실패했다고 수집까지 막으면 그날 `/daily-post`가 통째로 `no_snapshot`이
+된다. `if: always()`를 떼지 않는다.
+
+**`weekly-collect.yml`의 두 잡은 병렬이고 그대로 둔다.** 스텝을 한 잡으로 이어 붙이면
+GA4 조회 실패가 링크 점검까지 죽여 감사 ①이 근거 없이 '측정 안 함'으로 저하된다.
+
+**사이드카 push는 재시도·rebase를 거친다**(`scripts/sidecar_push.sh`). 일요일에는 세
+잡이 10분 안에 같은 저장소로 밀기 때문에 단발 `git push`는 non-fast-forward로 튕긴다.
 
 **GitHub 내장 `schedule:`을 다시 넣지 않는다.** 2026-08-01까지의 실측에서 예정 시각보다
 3시간 28분~3시간 58분 늦게 발화해 3시간대 여유를 통째로 잡아먹었고, 그 결과 스냅샷이
@@ -201,4 +215,4 @@ Hugo는 샌드박스에 설치 가능하다. `scripts/bootstrap_sandbox.sh`가 0
 상세와 근거는 `MEMORY.md` §6. 여기서는 범위 판정에 쓰이는 두 줄만 고정한다.
 
 - **Agent3 (주간 감사, `/weekly-audit`)는 구현 완료다.** 범위는 여섯 축 — ① 링크 무결성 ② 성과 분석(GA4/GSC, 데이터 충분성 게이트 뒤) ③ 색인 건전성 ④ 시스템 스캔 ⑤ 방향성 점검 ⑥ 수치 무결성. **디자인·Lighthouse·성능 측정은 의도적으로 범위 밖이다** — 헤드리스 브라우저가 필요하다. 그것이 포함된다고 적은 문서는 낡은 초안을 기술하고 있다. **이 줄이 범위에 관한 최종 권위이며**, 감사 ④가 이 줄과 실제 범위의 불일치를 소견으로 낸다. 에이전트는 이 파일을 직접 수정하지 못한다.
-- **Telegram 승인 루프 기반 자동화 스케줄이 구성되어 있다.** GitHub Actions(`.github/workflows/notify.yml`, `analytics.yml`, `inbox.yml`) 및 Telegram Bot을 통해 PR 통지, 주간 스냅샷 수집, 무인 승인/반려 판정을 처리한다.
+- **Telegram 승인 루프 기반 자동화 스케줄이 구성되어 있다.** GitHub Actions(`.github/workflows/notify.yml`, `weekly-collect.yml`, `daily-collect.yml`) 및 Telegram Bot을 통해 PR 통지, 주간 스냅샷 수집, 무인 승인/반려 판정을 처리한다.

@@ -213,7 +213,7 @@ To satisfy Spec Known Limit #6, the following 4 environment items must be execut
 
 ### PAT 권한 (fine-grained, 이 저장소만)
 
-루틴과 `inbox.yml`이 **같은 토큰 하나**를 쓴다. 네 번째·다섯 번째 항목이 빠지면 실패
+루틴과 `daily-collect.yml`의 `inbox` 잡이 **같은 토큰 하나**를 쓴다. 네 번째·다섯 번째 항목이 빠지면 실패
 지점이 서로 다르고 둘 다 조용하다 — 오프셋이 안 올라가면 같은 판정이 매일 재실행되고,
 스냅샷 다운로드 실패는 `|| true`가 삼킨다.
 
@@ -341,10 +341,60 @@ Content-Type: application/json
 
 | 잡 이름 | 시각 (KST) | `<파일명>` |
 |---|---|---|
-| econblog-candidates | 매일 01:47 | `fetch-candidates.yml` |
-| econblog-analytics | 일 01:20 | `analytics.yml` |
-| econblog-linkstate | 일 01:37 | `fetch-linkstate.yml` |
-| econblog-inbox | 매일 06:00 | `inbox.yml` |
+| econblog-daily | 매일 01:30 | `daily-collect.yml` |
+| econblog-weekly | 일 01:20 | `weekly-collect.yml` |
+
+### 잡을 넷이 아니라 둘로 둔 이유
+
+워크플로 넷을 둘로 합쳤다. 원래 크론이 넷이었던 것은 GitHub 크론을 시각별로 분산시키려던
+잔재이고(`47`·`37`·`20` 같은 분 값), 외부 스케줄러에서는 근거가 없다.
+
+**주간 — `analytics.yml` + `fetch-linkstate.yml` → `weekly-collect.yml`.** 둘 다 같은
+일요일 감사 하나를 먹인다. 묶으면 "일요일 수집이 돌았나"를 한 곳에서 본다 — 갈라져 있으면
+한쪽만 조용히 실패해 감사가 반쪽 상태로 돈다. **잡은 둘로 분리해 병렬로 둔다**: 스텝을 한
+잡에 이어 붙이면 GA4 조회 실패(감사 ② 저하)가 링크 점검까지 죽여 감사 ①까지 근거 없이
+'측정 안 함'이 된다. 실패 알림도 잡별로 남겨 어느 쪽이 죽었는지 텔레그램에서 구분된다.
+
+**매일 — `inbox.yml` + `fetch-candidates.yml` → `daily-collect.yml`.** 여기서는 병합보다
+**순서**가 본질이다. 하루가 한 방향으로 흐른다:
+
+```
+01:30 인박스 (어제 글 판정 처리 → PR 병합·draft 플립)
+  ↓
+01:3x 후보 수집 (오늘 기사 스냅샷 → 사이드카)
+  ↓
+05:00 루틴 /daily-post (오늘 글 → auto/post PR → 텔레그램 발송)
+  ↓
+      사람이 답장 (하루 중 아무 때나)
+  ↓
+다음날 01:30 인박스 …
+```
+
+이전 배치(수집 01:47 → 루틴 05:00 → 인박스 06:00)보다 나은 점이 둘이다.
+
+1. **글 PR이 둘 동시에 열려 있는 구간이 없다.** 이전에는 루틴이 05:00에 오늘 PR을 만든
+   뒤 06:00 인박스가 어제 것을 처리해, 한 시간 동안 미해결 PR이 둘이었다.
+2. **텔레그램 24시간 보존 창에 여유가 생긴다**(§8-1). Day D 09:00 답장을 이전에는
+   D+1 06:00(21시간 뒤)에 회수했고 지금은 D+1 01:30(16.5시간 뒤)에 회수한다.
+
+대가는 하나뿐이다: **01:30~06:00 KST 사이에 보낸 답장은 하루 늦게 처리된다.** 그 시간대에
+답장하는 사람이 없다고 보고 받아들였다.
+
+**`candidates` 잡은 `needs: inbox` + `if: always()`다.** 순서만 강제하고 성공은 요구하지
+않는다. 인박스는 텔레그램 API·저장소 변수 쓰기·PR 병합에 걸려 있어 이 워크플로에서 가장
+잘 깨지는 쪽인데, 그 실패가 수집까지 막으면 그날 `/daily-post`가 통째로 `no_snapshot`이
+된다 — 방금 고친 그 증상을 다른 원인으로 재현하는 셈이다. **`if: always()`를 떼지 않는다.**
+
+### 사이드카 push 경합 (병합이 만든 것)
+
+`scripts/sidecar_push.sh`는 `clone --depth 1 → commit → push` 단발이었다. 워크플로가
+시각별로 갈려 있던 동안에는 두 잡이 같은 순간에 밀 일이 없어 안전했다. 병합 후에는
+`weekly-collect`의 두 잡이 병렬이고 **일요일에는 `daily-collect`까지 겹쳐 10분 안에 세
+번** 같은 저장소로 민다 — 단발 push는 non-fast-forward로 튕기고 `set -e`가 잡을 죽인다.
+
+push 실패 시 5회까지 rebase 후 재시도한다(3·6·9·12초 백오프). 각 잡이 서로 다른 경로에만
+쓰므로 충돌 파일은 없다. `--depth 1` 클론이라 rebase가 공통 조상을 못 찾으므로 첫 재시도에서
+`fetch --unshallow`로 이력을 편다.
 
 타임존을 `Asia/Seoul`로 두면 UTC 환산이 사라진다 — 기존 크론이 UTC 16시대에 도느라
 "UTC 날짜를 쓰면 하루 어긋난다"는 함정을 달고 있었다(`AGENTS.md` 자동화 평면). 워크플로

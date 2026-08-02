@@ -89,7 +89,8 @@ git remote get-url origin
 
 **표본 선택은 `scripts/select_inspect_urls.py`가 유일한 주체다.** 여기에 목록을
 직접 만들지 않는다 — 이 절과 스크립트가 각자 표본을 정하던 동안 둘이 어긋났고,
-`analytics.yml`이 스크립트 쪽을 쓰는 바람에 **홈페이지가 한 번도 조회되지 않았다.**
+수집 워크플로(당시 `analytics.yml`, 현 `weekly-collect.yml`)가 스크립트 쪽을 쓰는
+바람에 **홈페이지가 한 번도 조회되지 않았다.**
 그래서 2026-08-01까지 홈페이지가 이미 색인돼 있다는 사실(`Submitted and indexed`,
 크롤 2026-07-19)을 13일간 놓쳤다.
 

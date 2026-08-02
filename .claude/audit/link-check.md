@@ -28,7 +28,7 @@ git은 시퀀서 §10이 한다. 모든 Python은 `.venv/bin/python`으로 호�
 연결 실패 → `classify()`가 전부 `soft`로 분류 → `consecutive_soft_failures`가 올라가고
 `manual_review`가 부풀어 **영속 원장에 가짜 실패가 커밋된다.** 감사를 하지 않는 것보다 나쁘다.
 
-조회는 `fetch-linkstate.yml`이 일 01:37 KST에 미리 한다. 결과를 읽는다:
+조회는 `weekly-collect.yml`의 `linkstate` 잡이 일 01:20 KST에 미리 한다. 결과를 읽는다:
 
 ```
 .venv/bin/python scripts/read_snapshot.py --subdir linkstate
