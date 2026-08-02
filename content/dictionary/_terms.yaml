@@ -39,6 +39,10 @@ circuit-breaker:
   title: "서킷브레이커"
   aliases: ["circuit breaker", "매매 중단", "거래 정지", "시장 안정 장치"]
 
+fx-intervention:
+  title: "외환시장 개입"
+  aliases: ["환율 개입", "공조 개입", "시장 개입"]
+
 
 
 
