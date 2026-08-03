@@ -3,7 +3,7 @@ title: "미·일 28년 만의 엔화 방어 공조 개입…원화도 덩달아 
 date: 2026-08-03T05:13:00+09:00
 description: "미국이 일본과 손잡고 엔화를 사들이며 환율 방어에 나섰습니다. 28년 만의 공조 개입에 엔화값이 이틀 만에 급반등했습니다."
 tags: ["환율", "국제경제", "금리"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/202608020059i"
 related_articles:
   - title: "162엔 뚫린 엔화 39년 반만에 최저…금리인상·개입에도 '수퍼엔저'"
