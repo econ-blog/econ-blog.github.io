@@ -1,10 +1,26 @@
 import os
 import sys
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+class FakeResponse:
+    """requests.Response 대역 — 상태 코드와 JSON 본문만 흉내 낸다."""
+
+    def __init__(self, status_code: int, payload=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else {}
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"{self.status_code} error")
 
 class TestScriptWireup(unittest.TestCase):
     def test_fetch_ga4_credentials_wireup(self):
@@ -235,6 +251,94 @@ class TestProcessInbox(unittest.TestCase):
         pr_single, status_single = match_target_pr(up_notoken, [open_prs[0]])
         self.assertEqual(pr_single["number"], 10)
         self.assertEqual(status_single, "SINGLE_PR_FALLBACK")
+
+    def test_merge_retries_transient_405(self):
+        """커밋을 민 직후 GitHub의 mergeable은 null이고 PUT /merge는 405를 준다 — 재시도 대상이다."""
+        import process_inbox
+        pr_ready = {"state": "open", "mergeable": True, "head": {"sha": "abc"}}
+        calls = []
+
+        def fake_get(url, **kw):
+            return FakeResponse(200, pr_ready)
+
+        def fake_put(url, headers=None, json=None, timeout=None):
+            calls.append(json["merge_method"])
+            if len(calls) == 1:
+                return FakeResponse(405, {"message": "Pull Request is not mergeable"})
+            return FakeResponse(200, {"merged": True})
+
+        with patch.object(process_inbox.requests, "get", fake_get), \
+             patch.object(process_inbox.requests, "put", fake_put):
+            process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
+
+        self.assertEqual(calls, ["squash", "squash"])
+
+    def test_merge_falls_back_when_squash_disabled(self):
+        import process_inbox
+        pr_ready = {"state": "open", "mergeable": True, "head": {"sha": "abc"}}
+        calls = []
+
+        def fake_put(url, headers=None, json=None, timeout=None):
+            calls.append(json["merge_method"])
+            if json["merge_method"] == "squash":
+                return FakeResponse(405, {"message": "Squash merges are not allowed on this repository."})
+            return FakeResponse(200, {"merged": True})
+
+        with patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, pr_ready)), \
+             patch.object(process_inbox.requests, "put", fake_put):
+            process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
+
+        # squash는 한 번만 시도하고(영구 거부) 곧장 merge로 내려간다
+        self.assertEqual(calls, ["squash", "merge"])
+
+    def test_merge_reports_github_reason(self):
+        """raise_for_status()는 본문을 버린다. 텔레그램에 실제 사유가 실려야 한다."""
+        import process_inbox
+        pr_blocked = {"state": "open", "mergeable": False, "mergeable_state": "dirty", "head": {"sha": "abc"}}
+        with patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, pr_blocked)):
+            with self.assertRaises(RuntimeError) as ctx:
+                process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
+        self.assertIn("dirty", str(ctx.exception))
+
+    def test_failed_verdict_is_not_consumed(self):
+        """실행이 실패하면 그 업데이트의 오프셋을 넘기지 않는다 — 넘기면 승인이 사라진다."""
+        import process_inbox
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        updates = [{"update_id": 100, "message": {"chat": {"id": 1}, "text": "승인"}}]
+        recorded = []
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("PR #7 병합 실패: 405 Pull Request is not mergeable")
+
+        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
+        with patch.dict(os.environ, env), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [{"number": 7, "head": {"ref": "auto/post-2026-08-03"}}]), \
+             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": updates})), \
+             patch.object(process_inbox, "execute_approved_post", boom), \
+             patch.object(process_inbox, "update_telegram_offset", lambda *a: recorded.append(a[2])), \
+             patch.object(process_inbox, "send_telegram", lambda *a: recorded.append(a[2])):
+            with self.assertRaises(SystemExit) as ctx:
+                process_inbox.main()
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertNotIn(101, recorded)  # 오프셋이 전진하지 않았다
+        self.assertTrue(any("405" in str(r) for r in recorded))  # 사유가 실려 나갔다
+
+    def test_successful_verdict_consumes_update(self):
+        import process_inbox
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        updates = [{"update_id": 100, "message": {"chat": {"id": 1}, "text": "승인"}}]
+        offsets = []
+
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [{"number": 7, "head": {"ref": "auto/post-2026-08-03"}}]), \
+             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": updates})), \
+             patch.object(process_inbox, "execute_approved_post", lambda *a: True), \
+             patch.object(process_inbox, "update_telegram_offset", lambda *a: offsets.append(a[2])), \
+             patch.object(process_inbox, "send_telegram", lambda *a: None):
+            process_inbox.main()
+
+        self.assertEqual(offsets, [101])
 
     def test_telegram_offset_parsing(self):
         with patch.dict(os.environ, {"TELEGRAM_OFFSET": ""}):
