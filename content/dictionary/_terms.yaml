@@ -38,6 +38,9 @@ circular-financing:
 circuit-breaker:
   title: "서킷브레이커"
   aliases: ["circuit breaker", "매매 중단", "거래 정지", "시장 안정 장치"]
+comprehensive-real-estate-tax:
+  title: "종합부동산세"
+  aliases: ["종부세"]
 
 
 
