@@ -2,11 +2,21 @@ import os
 import re
 import sys
 import json
+import time
 import base64
 import requests
 
 APPROVED_SET = {"승인", "발행", "게시", "ok", "okay", "go"}
 REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
+
+# 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
+MERGE_METHODS = ("squash", "merge")
+# GitHub는 `mergeable`을 비동기로 계산한다. 방금 커밋을 민 직후에는 null이고,
+# 그 상태의 PUT /merge는 멀쩡한 PR에도 405를 준다.
+MERGEABLE_POLL_ATTEMPTS = 8
+MERGEABLE_POLL_DELAY = 3
+MERGE_RETRY_ATTEMPTS = 3
+MERGE_RETRY_DELAY = 3
 
 def parse_verdict(text: str) -> str:
     cleaned = re.sub(r'#([paPA])\d{4}', '', text).strip().lower()
@@ -72,6 +82,81 @@ def check_pr_open(pr: dict, repo: str, pat: str) -> bool:
         return resp.json().get("state") == "open"
     return False
 
+def api_error_detail(resp) -> str:
+    """GitHub가 준 이유를 살려 둔다. raise_for_status()는 상태줄만 남기고 본문을 버린다."""
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = None
+    message = payload.get("message", "") if isinstance(payload, dict) else ""
+    return f"{resp.status_code} {message}".strip()
+
+
+def merge_method_rejected(detail: str) -> bool:
+    """405가 '이 방식은 이 저장소에서 못 쓴다'인지, '아직 병합 가능하지 않다'인지 가른다."""
+    lowered = detail.lower()
+    return "merges are not allowed" in lowered or "merge method" in lowered
+
+
+def wait_until_mergeable(repo: str, pr_num: int, pat: str, sleep=time.sleep) -> tuple:
+    """(상태, 사유, PR) — 상태는 READY · BLOCKED · UNKNOWN."""
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+    pr = None
+    for attempt in range(MERGEABLE_POLL_ATTEMPTS):
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        pr = resp.json()
+        if pr.get("state") != "open":
+            return ("BLOCKED", f"PR이 열려 있지 않다 (state={pr.get('state')})", pr)
+        mergeable = pr.get("mergeable")
+        if mergeable is True:
+            return ("READY", "", pr)
+        if mergeable is False:
+            return ("BLOCKED", f"병합 불가 (mergeable_state={pr.get('mergeable_state')})", pr)
+        if attempt < MERGEABLE_POLL_ATTEMPTS - 1:
+            sleep(MERGEABLE_POLL_DELAY)
+    return ("UNKNOWN", "mergeable 계산이 끝나지 않았다", pr)
+
+
+def merge_pr(repo: str, pr_num: int, pat: str, sleep=time.sleep):
+    """PR을 병합한다. 실패하면 GitHub가 준 사유를 담아 RuntimeError를 낸다."""
+    status, reason, pr = wait_until_mergeable(repo, pr_num, pat, sleep=sleep)
+    if status == "BLOCKED":
+        raise RuntimeError(f"PR #{pr_num} 병합 중단: {reason}")
+
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+    merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/merge"
+    head_sha = (pr or {}).get("head", {}).get("sha")
+    last_detail = reason or "사유 없음"
+
+    for method in MERGE_METHODS:
+        for attempt in range(MERGE_RETRY_ATTEMPTS):
+            payload = {"merge_method": method}
+            if head_sha:
+                payload["sha"] = head_sha
+            resp = requests.put(merge_url, headers=headers, json=payload, timeout=10)
+            if resp.status_code == 200:
+                return
+            last_detail = api_error_detail(resp)
+            if resp.status_code == 409:
+                # 우리가 본 것과 다른 head다. 다시 읽어 그 sha로 재시도한다.
+                status, reason, pr = wait_until_mergeable(repo, pr_num, pat, sleep=sleep)
+                if status == "BLOCKED":
+                    raise RuntimeError(f"PR #{pr_num} 병합 중단: {reason}")
+                head_sha = (pr or {}).get("head", {}).get("sha")
+                continue
+            if resp.status_code == 405:
+                if merge_method_rejected(last_detail):
+                    break  # 다음 병합 방식으로
+                if attempt < MERGE_RETRY_ATTEMPTS - 1:
+                    sleep(MERGE_RETRY_DELAY)
+                continue
+            raise RuntimeError(f"PR #{pr_num} 병합 실패: {last_detail}")
+
+    raise RuntimeError(f"PR #{pr_num} 병합 실패: {last_detail}")
+
+
 def update_telegram_offset(repo: str, pat: str, offset: int):
     url = f"https://api.github.com/repos/{repo}/actions/variables/TELEGRAM_OFFSET"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
@@ -131,10 +216,8 @@ def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
         p_resp.raise_for_status()
         
     # 3. Merge PR to main (triggers hugo.yml)
-    merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/merge"
-    m_resp = requests.put(merge_url, headers=headers, json={"merge_method": "squash"}, timeout=10)
-    m_resp.raise_for_status()
-    
+    merge_pr(repo, pr_num, pat)
+
     # 4. Delete branch
     ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}"
     requests.delete(ref_url, headers=headers, timeout=10)
@@ -144,11 +227,7 @@ def execute_approved_audit(pr: dict, repo: str, pat: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
         return False
-    pr_num = pr["number"]
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
-    merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}/merge"
-    m_resp = requests.put(merge_url, headers=headers, json={"merge_method": "squash"}, timeout=10)
-    m_resp.raise_for_status()
+    merge_pr(repo, pr["number"], pat)
     return True
 
 def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
@@ -161,6 +240,59 @@ def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
     c_resp = requests.patch(close_url, headers=headers, json={"state": "closed"}, timeout=10)
     c_resp.raise_for_status()
     return True
+
+def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str, chat_id: str) -> list:
+    """업데이트 1건을 처리하고 갱신된 대기 PR 목록을 돌려준다.
+
+    실행이 실패하면 예외를 올린다 — 호출자가 그 업데이트를 소비하지 않고 멈춘다.
+    """
+    msg_obj = up.get("message", {})
+    up_chat_id = msg_obj.get("chat", {}).get("id")
+
+    # C1: Strict Chat ID validation
+    if str(up_chat_id) != str(chat_id):
+        return open_prs
+
+    msg_text = msg_obj.get("text", "")
+
+    verdict = parse_verdict(msg_text)
+    if verdict == "AMBIGUOUS":
+        send_telegram(bot_token, chat_id, f"판정불가: '{msg_text[:40]}' — 승인 또는 반려 로 재답장하세요.")
+        return open_prs
+
+    target_pr, match_status = match_target_pr(up, open_prs)
+    if not target_pr:
+        if match_status == "NO_OPEN_PRS":
+            send_telegram(bot_token, chat_id, "대기 중인 PR이 없습니다.")
+        elif match_status == "TOKEN_NOT_FOUND":
+            send_telegram(bot_token, chat_id, "지정한 토큰과 일치하는 대기 PR이 없습니다.")
+        elif match_status == "MULTIPLE_PRS_NEED_TOKEN":
+            send_telegram(bot_token, chat_id, "대기 중인 PR이 여러 건입니다. 판정 토큰(#PMMDD / #AMMDD)을 포함해 답장하세요.")
+        return open_prs
+
+    is_post = target_pr["head"]["ref"].startswith("auto/post-")
+    success = False
+    try:
+        if verdict == "APPROVED":
+            if is_post:
+                success = execute_approved_post(target_pr, repo, pat)
+                if success:
+                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
+            else:
+                success = execute_approved_audit(target_pr, repo, pat)
+                if success:
+                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 감사 승인 병합 완료.")
+        elif verdict == "REJECTED":
+            success = execute_rejected(target_pr, repo, pat)
+            if success:
+                send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
+    except Exception as err:
+        raise RuntimeError(f"PR #{target_pr['number']} — {err}") from err
+
+    if success:
+        return [p for p in open_prs if p["number"] != target_pr["number"]]
+    return open_prs
+
 
 def main():
     creds_json = os.environ.get("CREDENTIALS_JSON")
@@ -196,63 +328,26 @@ def main():
         sys.exit(1)
     
     last_offset = offset_val
+    failed = False
     try:
         for up in updates:
             up_id = up["update_id"]
-            last_offset = max(last_offset, up_id + 1)
-            msg_obj = up.get("message", {})
-            up_chat_id = msg_obj.get("chat", {}).get("id")
-            
-            # C1: Strict Chat ID validation
-            if str(up_chat_id) != str(chat_id):
-                continue
-
-            msg_text = msg_obj.get("text", "")
-            
-            verdict = parse_verdict(msg_text)
-            if verdict == "AMBIGUOUS":
-                send_telegram(bot_token, chat_id, f"판정불가: '{msg_text[:40]}' — 승인 또는 반려 로 재답장하세요.")
-                continue
-                
-            target_pr, match_status = match_target_pr(up, open_prs)
-            if not target_pr:
-                if match_status == "NO_OPEN_PRS":
-                    send_telegram(bot_token, chat_id, "대기 중인 PR이 없습니다.")
-                elif match_status == "TOKEN_NOT_FOUND":
-                    send_telegram(bot_token, chat_id, "지정한 토큰과 일치하는 대기 PR이 없습니다.")
-                elif match_status == "MULTIPLE_PRS_NEED_TOKEN":
-                    send_telegram(bot_token, chat_id, "대기 중인 PR이 여러 건입니다. 판정 토큰(#PMMDD / #AMMDD)을 포함해 답장하세요.")
-                continue
-                
-            # Execute verdict
             try:
-                is_post = target_pr["head"]["ref"].startswith("auto/post-")
-                success = False
-                if verdict == "APPROVED":
-                    if is_post:
-                        success = execute_approved_post(target_pr, repo, pat)
-                        if success:
-                            send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
-                    else:
-                        success = execute_approved_audit(target_pr, repo, pat)
-                        if success:
-                            send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 감사 승인 병합 완료.")
-                elif verdict == "REJECTED":
-                    success = execute_rejected(target_pr, repo, pat)
-                    if success:
-                        send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
-                
-                if success:
-                    open_prs = [p for p in open_prs if p["number"] != target_pr["number"]]
+                open_prs = handle_update(up, open_prs, repo, pat, bot_token, chat_id)
             except Exception as err:
                 err_str = str(err)
                 if bot_token:
                     err_str = err_str.replace(bot_token, "[MASKED_BOT_TOKEN]")
-                send_telegram(bot_token, chat_id, f"❌ PR #{target_pr['number']} 처리 중 오류 발생: {err_str}")
-                sys.exit(1)
+                send_telegram(bot_token, chat_id, f"❌ 판정 처리 중 오류 발생: {err_str}")
+                # 이 업데이트는 소비하지 않는다 — 오프셋을 넘기면 판정이 통째로 사라진다.
+                failed = True
+                break
+            last_offset = max(last_offset, up_id + 1)
     finally:
         if last_offset > offset_val:
             update_telegram_offset(repo, pat, last_offset)
+    if failed:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
