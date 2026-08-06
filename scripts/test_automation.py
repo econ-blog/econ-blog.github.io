@@ -235,6 +235,14 @@ class TestProcessInbox(unittest.TestCase):
         self.assertEqual(pr["number"], 11)
         self.assertEqual(status, "TOKEN_MATCH")
 
+        # 2-1. 직접 친 토큰이 답장 대상의 토큰을 이긴다 — 대기 목록 안내에는 토큰이
+        # 여러 개 실려 있어서, 답장 우선이면 목록 첫 줄의 다른 글이 병합된다.
+        up_conflict = {"message": {"reply_to_message": {"text": "#P0730 — 포스트 PR #10\n#A0730 — 감사 PR #11"},
+                                   "text": "승인 #A0730", "chat": {"id": 12345}}}
+        pr, status = match_target_pr(up_conflict, open_prs)
+        self.assertEqual(pr["number"], 11)
+        self.assertEqual(status, "TOKEN_MATCH")
+
         # 3. Invalid token
         up_bad_token = {"message": {"text": "승인 #P9999", "chat": {"id": 12345}}}
         pr_bad, status_bad = match_target_pr(up_bad_token, open_prs)
@@ -251,6 +259,57 @@ class TestProcessInbox(unittest.TestCase):
         pr_single, status_single = match_target_pr(up_notoken, [open_prs[0]])
         self.assertEqual(pr_single["number"], 10)
         self.assertEqual(status_single, "SINGLE_PR_FALLBACK")
+
+    def test_pending_pr_lines_carry_tokens(self):
+        """토큰 형식만 알려 주고 목록을 빼면 어느 토큰을 쓸지 알 수 없다."""
+        from process_inbox import pending_pr_lines
+        lines = pending_pr_lines([
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 11, "head": {"ref": "auto/audit-2026-08-01-1824"}},
+        ])
+        self.assertIn("#P0804", lines)
+        self.assertIn("#A0801", lines)
+        self.assertIn("PR #8", lines)
+        self.assertIn("PR #11", lines)
+
+    def test_multiple_prs_message_lists_every_token(self):
+        """매칭 실패 메시지가 그대로 다음 답장의 안내가 된다."""
+        import process_inbox
+        sent = []
+        open_prs = [
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+        ]
+        up = {"message": {"chat": {"id": 1}, "text": "승인"}}
+
+        with patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            remaining = process_inbox.handle_update(up, open_prs, "o/r", "p", "tok", "1")
+
+        self.assertEqual(remaining, open_prs)  # 아무 PR도 건드리지 않았다
+        self.assertEqual(len(sent), 1)
+        self.assertIn("#P0804", sent[0])
+        self.assertIn("#P0805", sent[0])
+
+    def test_backlog_alert_fires_at_two(self):
+        """토큰 없는 답장은 2건부터 깨진다 — 경보가 3건이면 하루 늦다."""
+        import process_inbox
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        open_prs = [
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+        ]
+        sent = []
+
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
+             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+
+        self.assertEqual(len(sent), 1)
+        self.assertIn("2건", sent[0])
+        self.assertIn("#P0804", sent[0])
+        self.assertIn("#P0805", sent[0])
 
     def test_merge_retries_transient_405(self):
         """커밋을 민 직후 GitHub의 mergeable은 null이고 PUT /merge는 405를 준다 — 재시도 대상이다."""

@@ -6,8 +6,14 @@ import time
 import base64
 import requests
 
+from telegram_notify import extract_verdict_token
+
 APPROVED_SET = {"승인", "발행", "게시", "ok", "okay", "go"}
 REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
+
+# 토큰 없는 답장은 대기 PR이 **2건**부터 매칭에 실패한다(MULTIPLE_PRS_NEED_TOKEN).
+# 경보를 3건에 두면 이미 하루치 판정을 날린 뒤에 울린다.
+BACKLOG_ALERT_THRESHOLD = 2
 
 # 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
 MERGE_METHODS = ("squash", "merge")
@@ -26,15 +32,36 @@ def parse_verdict(text: str) -> str:
         return "REJECTED"
     return "AMBIGUOUS"
 
+def pr_token(pr: dict) -> str:
+    """대기 PR의 판정 토큰. 형식은 알림을 만드는 함수에서 그대로 가져온다 —
+    여기서 다시 만들면 사람이 알림에서 본 토큰과 갈린다."""
+    ref = pr["head"]["ref"]
+    return extract_verdict_token(ref, "post" if ref.startswith("auto/post-") else "audit")
+
+
+def pending_pr_lines(open_prs: list) -> str:
+    """대기 PR을 토큰과 함께 나열한다. 토큰 형식만 알려 주고 목록을 빼면 사람이
+    어느 토큰을 써야 하는지 알 수 없어 왕복이 하루씩 늘어난다."""
+    lines = []
+    for pr in open_prs:
+        ref = pr["head"]["ref"]
+        kind = "포스트" if ref.startswith("auto/post-") else "감사"
+        lines.append(f"{pr_token(pr)} — {kind} PR #{pr['number']} ({ref})")
+    return "\n".join(lines)
+
+
 def match_target_pr(update: dict, open_prs: list) -> tuple:
     msg = update.get("message", {})
     text = msg.get("text", "")
     reply_text = msg.get("reply_to_message", {}).get("text", "")
-    
+
     # 1. Check reply token
-    reply_match = re.search(r'#([paPA])(\d{4})', reply_text)
-    token_match = reply_match or re.search(r'#([paPA])(\d{4})', text)
-    
+    # 사람이 직접 친 토큰이 답장 대상의 토큰을 이긴다. 대기 목록 안내 메시지에는
+    # 토큰이 여러 개 실려 있어서, 거기에 답장하며 토큰을 치면 답장 우선일 때
+    # 목록의 첫 토큰(= 다른 글)이 병합된다.
+    text_match = re.search(r'#([paPA])(\d{4})', text)
+    token_match = text_match or re.search(r'#([paPA])(\d{4})', reply_text)
+
     if token_match:
         prefix = token_match.group(1).upper()
         mmdd = token_match.group(2)
@@ -265,9 +292,16 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
         if match_status == "NO_OPEN_PRS":
             send_telegram(bot_token, chat_id, "대기 중인 PR이 없습니다.")
         elif match_status == "TOKEN_NOT_FOUND":
-            send_telegram(bot_token, chat_id, "지정한 토큰과 일치하는 대기 PR이 없습니다.")
+            # 토큰이 붙어 있으면 대기 PR이 0건이어도 이 분기로 온다 — 목록이 비면
+            # 헤더만 남아 "대기 중:" 뒤가 공백인 메시지가 나간다.
+            tail = f"\n\n대기 중:\n{pending_pr_lines(open_prs)}" if open_prs else ""
+            send_telegram(bot_token, chat_id,
+                          f"지정한 토큰과 일치하는 대기 PR이 없습니다.{tail}")
         elif match_status == "MULTIPLE_PRS_NEED_TOKEN":
-            send_telegram(bot_token, chat_id, "대기 중인 PR이 여러 건입니다. 판정 토큰(#PMMDD / #AMMDD)을 포함해 답장하세요.")
+            send_telegram(bot_token, chat_id,
+                          f"대기 중인 PR이 {len(open_prs)}건입니다. 아래 토큰 중 하나를 붙여 다시 보내세요.\n\n"
+                          f"{pending_pr_lines(open_prs)}\n\n"
+                          f"예: 승인 {pr_token(open_prs[0])} / 반려 {pr_token(open_prs[0])}")
         return open_prs
 
     is_post = target_pr["head"]["ref"].startswith("auto/post-")
@@ -311,8 +345,11 @@ def main():
     
     # Check open PRs
     open_prs = get_open_prs(repo, pat)
-    if len(open_prs) >= 3:
-        send_telegram(bot_token, chat_id, f"⚠️ 대기 중인 PR이 {len(open_prs)}건 적체되어 있습니다.")
+    if len(open_prs) >= BACKLOG_ALERT_THRESHOLD:
+        send_telegram(bot_token, chat_id,
+                      f"⚠️ 대기 중인 PR이 {len(open_prs)}건 적체되어 있습니다. "
+                      "이제부터는 토큰 없는 답장이 처리되지 않습니다.\n\n"
+                      f"{pending_pr_lines(open_prs)}")
         
     # Poll Telegram updates (timeout 10)
     try:
