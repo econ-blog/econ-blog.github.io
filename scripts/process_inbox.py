@@ -21,11 +21,9 @@ BACKLOG_ALERT_THRESHOLD = 2
 # 정상인데, 그걸 모르면 "인식되지 않았다"고 읽고 같은 답장을 다시 보낸다.
 POLL_NOTE = "판정은 하루 한 번 새벽 정기 실행에서 처리됩니다 — 보낸 직후 조용한 것은 정상입니다."
 
-# 재질의 기준 나이. 이 시각을 넘겨서도 열려 있는 PR은 정기 회차를 최소 한 번
-# 통과한 것이다 — 사람이 아직 답을 안 했거나, 답장이 유실됐거나 둘 중 하나다.
-# 어느 쪽이든 다시 물어보는 게 맞다. 24시간 미만은 건드리지 않는다: 오늘 새벽
-# 루틴이 만든 PR까지 아침에 재질의하면 정상 운영이 매일 잔소리가 된다.
-REASK_MIN_AGE_HOURS = 24
+# 스냅샷·재질의 판정은 언제나 KST 기준이다. 워크플로가 UTC 16시대에 도는데
+# UTC 날짜를 쓰면 하루가 어긋난다.
+KST = timezone(timedelta(hours=9))
 
 # 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
 MERGE_METHODS = ("squash", "merge")
@@ -78,22 +76,27 @@ def pr_created_at(pr: dict):
         return None
 
 
-def overdue_prs(open_prs: list, now=None, min_age_hours: int = REASK_MIN_AGE_HOURS) -> list:
-    """정기 회차를 한 번 이상 통과하고도 열려 있는 PR.
+def overdue_prs(open_prs: list, now=None) -> list:
+    """어제(KST) 이전에 만들어졌는데 새벽 회차가 끝난 뒤에도 열려 있는 PR.
 
-    설계상 하루가 한 방향으로 흐르므로(글 PR 생성 → 사람 답장 → 다음 새벽 회차가
-    병합) 하루를 넘겨 열려 있는 글 PR은 정상 상태가 아니다. 답장이 없었거나
-    답장이 텔레그램 큐에서 유실됐거나인데, 시스템은 둘을 구분할 수 없다 —
+    설계상 하루가 한 방향으로 흐르므로(글 PR 05:00 생성 → 사람 답장 → 다음 새벽
+    회차가 병합) 그 회차 직후에도 어제 PR이 열려 있으면 정상 상태가 아니다.
+    답장이 없었거나 텔레그램 큐에서 유실됐거나인데, 시스템은 둘을 구분할 수 없다 —
     유실된 경우 사람은 답했다고 기억하므로 먼저 물어보지 않으면 아무도 말을
     꺼내지 않는다. 그래서 구분하지 않고 그냥 다시 묻는다.
+
+    **나이(N시간)가 아니라 KST 날짜 경계로 가른다.** 재질의는 새벽 01:3x에 도는데
+    어제 05:00에 만들어진 PR은 그 시점에 20시간대다 — "24시간 경과" 규칙을 쓰면
+    정작 물어야 할 그 PR이 걸러져 하루 더 밀린다. 반대로 날짜 경계는 오늘 05:00
+    루틴이 만든 PR을 같은 날 어떤 시각에 돌려도 건드리지 않는다(수동 실행 포함).
     """
     now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=min_age_hours)
+    today = now.astimezone(KST).date()
     out = []
     for pr in open_prs:
         created = pr_created_at(pr)
         # 생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다.
-        if created is None or created <= cutoff:
+        if created is None or created.astimezone(KST).date() < today:
             out.append(pr)
     return out
 

@@ -3,6 +3,7 @@ import sys
 import json
 import tempfile
 import unittest
+from datetime import timezone
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -313,13 +314,47 @@ class TestProcessInbox(unittest.TestCase):
         return {"number": number, "head": {"ref": ref},
                 "created_at": created.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
-    def test_reask_skips_prs_younger_than_a_day(self):
-        """오늘 새벽 루틴이 만든 PR까지 아침에 다시 물으면 정상 운영이
-        매일 잔소리가 된다. 하루를 넘긴 것만 재질의 대상이다."""
-        from process_inbox import overdue_prs
-        fresh = self._pr(11, "auto/post-2026-08-08", 3)
-        stale = self._pr(8, "auto/post-2026-08-04", 30)
-        self.assertEqual([p["number"] for p in overdue_prs([fresh, stale])], [8])
+    def _pr_at(self, number, ref, kst_iso):
+        """KST 시각으로 PR을 만든다. created_at은 API와 같은 UTC 'Z' 형식."""
+        from datetime import datetime
+        import process_inbox
+        created = datetime.fromisoformat(kst_iso).replace(tzinfo=process_inbox.KST)
+        return {"number": number, "head": {"ref": ref},
+                "created_at": created.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+    def test_reask_catches_yesterday_pr_at_0135(self):
+        """재질의는 새벽 01:3x에 돈다. 어제 05:00 PR은 그 시점에 20.6시간이라
+        '24시간 경과' 규칙이면 걸러진다 — 정작 물어야 할 PR이 하루 밀린다.
+        KST 날짜 경계로 가르는 이유가 이것이다."""
+        from datetime import datetime
+        import process_inbox
+        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
+        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
+
+        self.assertEqual(
+            [p["number"] for p in process_inbox.overdue_prs([yesterday], now=now)], [8])
+
+    def test_reask_skips_pr_made_today(self):
+        """오늘 05:00 루틴이 만든 PR은 같은 날 어느 시각에 돌려도 건드리지
+        않는다 — 수동 실행 포함. 매일 오는 알림은 곧 읽히지 않는다."""
+        from datetime import datetime
+        import process_inbox
+        today_pr = self._pr_at(11, "auto/post-2026-08-08", "2026-08-08T05:20")
+        for hhmm in ("2026-08-08T05:30", "2026-08-08T13:54", "2026-08-08T23:59"):
+            now = datetime.fromisoformat(hhmm).replace(tzinfo=process_inbox.KST)
+            self.assertEqual(process_inbox.overdue_prs([today_pr], now=now), [],
+                             f"{hhmm} 에서 오늘 PR을 재질의했다")
+
+    def test_reask_uses_kst_not_utc_day(self):
+        """워크플로는 UTC 16시대에 돈다. UTC 날짜로 가르면 하루가 어긋난다."""
+        from datetime import datetime
+        import process_inbox
+        # KST 08-08 01:35 = UTC 08-07 16:35. UTC 날짜로는 아직 07일이라
+        # 08-07 05:00 PR이 '오늘'로 잡혀 걸러진다.
+        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
+        self.assertEqual(now.astimezone(timezone.utc).day, 7)
+        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
+        self.assertEqual(len(process_inbox.overdue_prs([yesterday], now=now)), 1)
 
     def test_reask_includes_pr_with_unreadable_created_at(self):
         """생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다."""
