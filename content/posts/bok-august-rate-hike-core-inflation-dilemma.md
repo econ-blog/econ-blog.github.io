@@ -3,7 +3,7 @@ title: "소비자물가는 꺾였는데 근원물가는 치솟았다…한은 8�
 date: 2026-08-05T05:15:00+09:00
 description: "7월 소비자물가는 2%대로 내려왔지만 근원물가는 2년7개월 만에 최고치를 찍으며, 한국은행의 8월 기준금리 결정이 더 어려워졌습니다."
 tags: ["금리", "물가"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026080447701"
 related_articles:
   - title: "기준금리, 7월 이어 8월도 올리나…한은 연속 인상론에 힘"
