@@ -32,6 +32,22 @@
         "claims_total": 124,
         "claims_per_post": 10.3
       }
+    },
+    {
+      "date": "2026-08-08",
+      "snapshot": {
+        "d1_evergreen_mass_ratio": 0.2261,
+        "d2_vocab_used": 11,
+        "d3_links_per_post_median": 2,
+        "d3_self_reference": 0,
+        "d3_dead_ends": 0,
+        "d4_primary_source_links": 1,
+        "d5_aged_ratio": 0.0,
+        "d6_all_met": true,
+        "n1_count": 73,
+        "claims_total": 160,
+        "claims_per_post": 9.4
+      }
     }
   ]
 }
