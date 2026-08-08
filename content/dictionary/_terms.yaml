@@ -50,6 +50,9 @@ core-inflation:
   title: "근원물가"
   aliases: ["근원인플레이션", "핵심물가"]
 
+ltv:
+  title: "담보인정비율"
+  aliases: ["LTV", "주택담보인정비율", "이주비 LTV"]
 
 
 
