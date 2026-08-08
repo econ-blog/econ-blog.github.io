@@ -3,7 +3,7 @@ title: "이재명 대통령 '공급 속도전' 주문에 이주비·PF 대출규
 date: 2026-08-08T05:20:00+09:00
 description: "정부가 이주비 대출 LTV와 PF보증, 잔금대출까지 부동산 금융 규제를 한꺼번에 손질하기로 했습니다. 대출 문턱을 낮춰 공급 속도를 끌어올리려는 승부수를 짚어봅니다."
 tags: ["부동산", "금리"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026080715721"
 related_articles:
   - title: "금융 당국, 주택공급 막는 이주비 대출 완화 검토"
