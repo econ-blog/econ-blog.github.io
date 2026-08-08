@@ -3,7 +3,7 @@ title: "강남 아파트 오래 갖고만 있으면 손해...양도세·종부�
 date: 2026-08-04T05:14:52+09:00
 description: "정부가 양도세·종부세 공제 기준을 보유 기간에서 거주 기간으로 바꾸기로 했습니다. 집만 갖고 살지 않으면 세금이 더 늘어나는 구조로 바뀝니다."
 tags: ["부동산", "재정·세금"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026080320016"
 related_articles:
   - title: "이 대통령, 23일 부동산 정책 대토론회 주재…보유세·거래세 개편도 논의(종합)"
