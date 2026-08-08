@@ -3,7 +3,7 @@ title: "막혔던 호르무즈 해협, 이번엔 '통행료' 받고 열릴까"
 date: 2026-08-06T05:16:00+09:00
 description: "미국과 이란이 호르무즈 해협 통행료와 통제권을 놓고 협상 중입니다. 합의가 성사되면 유가와 물류비, 인플레이션 흐름까지 흔들 수 있는 소식입니다."
 tags: ["국제경제", "에너지", "공급망"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/202608057320i"
 related_articles:
   - title: "호르무즈 재개방해도…원유 공급 정상화, 최소 석달은 걸린다"
