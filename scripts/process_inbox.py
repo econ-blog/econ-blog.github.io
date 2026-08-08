@@ -6,19 +6,26 @@ import time
 import base64
 import requests
 
+from datetime import datetime, timedelta, timezone
+
 from telegram_notify import extract_verdict_token
 
 APPROVED_SET = {"승인", "발행", "게시", "ok", "okay", "go"}
 REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
 
 # 토큰 없는 답장은 대기 PR이 **2건**부터 매칭에 실패한다(MULTIPLE_PRS_NEED_TOKEN).
-# 경보를 3건에 두면 이미 하루치 판정을 날린 뒤에 울린다.
 BACKLOG_ALERT_THRESHOLD = 2
 
 # 답장이 실제로 처리되기까지 얼마나 걸리는지 사람에게 알려 주는 문장.
 # 이 루프는 웹훅이 아니라 폴링이다 — 답장 직후에 아무 일도 일어나지 않는 것이
 # 정상인데, 그걸 모르면 "인식되지 않았다"고 읽고 같은 답장을 다시 보낸다.
-POLL_NOTE = "답장은 15분마다 한 번씩 처리됩니다 — 보낸 직후 조용한 것은 정상입니다."
+POLL_NOTE = "판정은 하루 한 번 새벽 정기 실행에서 처리됩니다 — 보낸 직후 조용한 것은 정상입니다."
+
+# 재질의 기준 나이. 이 시각을 넘겨서도 열려 있는 PR은 정기 회차를 최소 한 번
+# 통과한 것이다 — 사람이 아직 답을 안 했거나, 답장이 유실됐거나 둘 중 하나다.
+# 어느 쪽이든 다시 물어보는 게 맞다. 24시간 미만은 건드리지 않는다: 오늘 새벽
+# 루틴이 만든 PR까지 아침에 재질의하면 정상 운영이 매일 잔소리가 된다.
+REASK_MIN_AGE_HOURS = 24
 
 # 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
 MERGE_METHODS = ("squash", "merge")
@@ -60,6 +67,49 @@ def pending_pr_lines(open_prs: list) -> str:
         kind = "포스트" if ref.startswith("auto/post-") else "감사"
         lines.append(f"{pr_token(pr)} — {kind} PR #{pr['number']} ({ref})")
     return "\n".join(lines)
+
+
+def pr_created_at(pr: dict):
+    """PR 생성 시각(UTC). 읽을 수 없으면 None."""
+    raw = (pr.get("created_at") or "").strip()
+    try:
+        return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def overdue_prs(open_prs: list, now=None, min_age_hours: int = REASK_MIN_AGE_HOURS) -> list:
+    """정기 회차를 한 번 이상 통과하고도 열려 있는 PR.
+
+    설계상 하루가 한 방향으로 흐르므로(글 PR 생성 → 사람 답장 → 다음 새벽 회차가
+    병합) 하루를 넘겨 열려 있는 글 PR은 정상 상태가 아니다. 답장이 없었거나
+    답장이 텔레그램 큐에서 유실됐거나인데, 시스템은 둘을 구분할 수 없다 —
+    유실된 경우 사람은 답했다고 기억하므로 먼저 물어보지 않으면 아무도 말을
+    꺼내지 않는다. 그래서 구분하지 않고 그냥 다시 묻는다.
+    """
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=min_age_hours)
+    out = []
+    for pr in open_prs:
+        created = pr_created_at(pr)
+        # 생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다.
+        if created is None or created <= cutoff:
+            out.append(pr)
+    return out
+
+
+def reask_message(prs: list) -> str:
+    """미결 판정 재질의문. 토큰을 반드시 싣는다 — 형식만 알려 주고 목록을 빼면
+    어느 토큰을 써야 하는지 알 수 없어 왕복이 하루씩 늘어난다."""
+    if len(prs) == 1:
+        how = "승인 또는 반려 로 답장하세요."
+    else:
+        how = ("2건 이상이라 토큰이 필요합니다.\n"
+               f"예: 승인 {pr_token(prs[0])} / 반려 {pr_token(prs[0])}")
+    return ("⚠️ 하루가 지나도 판정되지 않은 PR이 있습니다. "
+            "앞서 답장을 보내셨다면 전달되지 못하고 유실된 것입니다 — 다시 보내주세요.\n\n"
+            f"{pending_pr_lines(prs)}\n\n"
+            f"{how}\n\n{POLL_NOTE}")
 
 
 def match_target_pr(update: dict, open_prs: list) -> tuple:
@@ -362,19 +412,18 @@ def main():
     bot_token = creds["telegram"]["bot_token"]
     chat_id = creds["telegram"]["chat_id"]
     
-    # 적체 경보는 하루 한 번 도는 호출자(daily-collect)만 켠다. 15분 폴링이
-    # 같은 경보를 내면 하루 96통이 되어 사람이 읽기를 그만둔다.
-    alert_backlog = os.environ.get("ALERT_BACKLOG", "").strip().lower() in ("1", "true", "yes")
-
     # Check open PRs
     open_prs = get_open_prs(repo, pat)
     log(f"open auto/* PRs: {len(open_prs)} → {[p['number'] for p in open_prs]}")
-    if alert_backlog and len(open_prs) >= BACKLOG_ALERT_THRESHOLD:
-        send_telegram(bot_token, chat_id,
-                      f"⚠️ 대기 중인 PR이 {len(open_prs)}건 적체되어 있습니다. "
-                      "이제부터는 토큰 없는 답장이 처리되지 않습니다.\n\n"
-                      f"{pending_pr_lines(open_prs)}\n\n"
-                      f"{POLL_NOTE}")
+
+    # 재질의 전용 모드 — 텔레그램 큐를 읽지 않는다. 오프셋을 소비하지 않으므로
+    # 아침 재질의가 새벽 회차의 판정을 가로채는 일이 없다.
+    if "--reask" in sys.argv:
+        due = overdue_prs(open_prs)
+        log(f"재질의 대상: {len(due)} → {[p['number'] for p in due]}")
+        if due:
+            send_telegram(bot_token, chat_id, reask_message(due))
+        return
 
     # Poll Telegram updates (timeout 10)
     try:

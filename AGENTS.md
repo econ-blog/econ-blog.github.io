@@ -170,8 +170,8 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 
 | 워크플로 | 스케줄 (KST) | 트리거 | 잡 (순서) | 산출물 |
 |---|---|---|---|---|
-| `inbox.yml` | **15분마다** | cron-job.org + `workflow_call` | `inbox` | 승인/반려 판정 처리 (PR 병합·draft 플립·닫기) |
-| `daily-collect.yml` | 매일 01:30 | cron-job.org | `inbox`(호출) → `candidates` | 위 + `candidates/YYYY-MM-DD.json` |
+| `daily-collect.yml` | 매일 01:30 | cron-job.org | `inbox` → `candidates` | 승인 판정 처리 + `candidates/YYYY-MM-DD.json` |
+| `reask.yml` | 매일 08:00 | cron-job.org | `reask` | 하루 넘긴 미결 PR 재질의 (텔레그램) |
 | `weekly-collect.yml` | 일 01:20 | cron-job.org | `analytics` ∥ `linkstate` | `analytics/YYYY-MM-DD/*.json` + `linkstate/YYYY-MM-DD.json` |
 | `open-auto-pr.yml` | — | `push` on `auto/**` | — | PR (→ `notify.yml`) |
 
@@ -182,16 +182,19 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 PR 생성·텔레그램 발송)`. 인박스가 루틴보다 앞이라 어제 PR이 닫힌 뒤 오늘 PR이 열린다 —
 글 PR이 둘 동시에 열려 있는 구간이 없다.
 
-**인박스는 그와 별개로 15분마다 돈다.** 텔레그램 `getUpdates`는 오프셋으로 확인되지 않은
-업데이트를 **24시간만** 보관하고 그 뒤 영구 삭제한다. 인박스가 `daily-collect` 안에서
-하루 한 번만 돌던 동안 사람의 답장은 최대 24시간을 큐에서 버텨야 했다 — 여유가 0이고,
-폴링이 한 회차라도 걸러지면 판정이 읽히기 전에 사라진다. 2026-08-07 01:30 회차가 러너
-대기 끝에 취소되면서 실제로 그 일이 났다(`MEMORY.md` §9). **이 주기를 하루 한 번으로
-되돌리지 않는다.**
+**판정 폴링은 하루 한 번이고 그것이 유일한 회수 경로다.** 텔레그램 `getUpdates`는
+오프셋으로 확인되지 않은 업데이트를 **24시간만** 보관하고 그 뒤 영구 삭제한다. 따라서
+회차 하나가 걸러지면 그 사이에 온 판정은 되찾을 수 없다 — 2026-08-07 01:30 회차가 러너를
+배정받지 못해 취소되면서 08-06 21:29의 `승인 #P0804`가 그렇게 사라졌다(`MEMORY.md` §9).
+**유실은 막을 수 없고, 교착만 깬다**: `reask.yml`이 아침에 다시 물어본다.
 
-**적체 경보는 `daily-collect` 경로에서만 나간다**(`ALERT_BACKLOG=1`). 15분 폴링이 같은
-경보를 내면 하루 96통이 되어 경보가 소음이 된다. 두 진입점은 `concurrency: telegram-inbox`
-로 줄을 세운다 — 동시 실행은 같은 오프셋을 두 번 소비해 판정을 중복 실행시킨다.
+**재질의(`reask.yml`)는 24시간을 넘긴 미결 PR만 대상으로 한다.** 오늘 새벽 루틴이 만든
+PR까지 아침에 물으면 정상 운영이 매일 잔소리가 된다. 그리고 **재질의는 텔레그램 큐를 읽지
+않는다**(`--reask`는 `getUpdates`를 호출하지 않고 오프셋도 쓰지 않는다) — 읽으면 아침
+실행이 새벽 회차가 처리해야 할 판정을 가로채 그대로 버린다.
+
+**새벽 회차는 먼저 말을 걸지 않는다.** 적체 경보를 거기서 내면 01:30에 휴대폰이 울린다.
+게다가 옛 경보는 폴링 **전에** 나가서 방금 승인된 PR까지 목록에 실었다.
 
 **`candidates` 잡은 `needs: inbox` + `if: always()`다.** 순서만 강제하고 성공은 요구하지
 않는다. 인박스가 실패했다고 수집까지 막으면 그날 `/daily-post`가 통째로 `no_snapshot`이

@@ -1,0 +1,63 @@
+name: Telegram 미결 판정 재질의
+
+on:
+  # cron-job.org가 매일 08:00 KST에 건다 (MEMORY.md §9).
+  #
+  # **왜 필요한가.** 판정 폴링은 하루 한 번(01:30 KST)이고, 텔레그램 getUpdates는
+  # 확인되지 않은 업데이트를 24시간만 보관한다. 그래서 회차 하나가 걸러지면
+  # (2026-08-07 01:30 회차가 러너를 배정받지 못하고 취소됐다) 사람이 보낸 판정이
+  # 다음 회차 전에 영구 삭제된다. 실제로 08-06 21:29의 "승인 #P0804"가 그렇게
+  # 사라졌고, 사람은 답장했다고 기억하는데 시스템은 받은 적이 없어서 **양쪽 다
+  # 먼저 말을 꺼내지 않는 교착**이 됐다. PR 3건이 그대로 적체됐다.
+  #
+  # 폴링 주기는 하루 한 번으로 유지한다(사용자 결정). 대신 교착을 깨는 쪽을
+  # 둔다: 하루가 지나도 열려 있는 PR을 아침에 다시 물어본다.
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-reask
+  cancel-in-progress: false
+
+jobs:
+  reask:
+    name: 미결 판정 재질의
+    runs-on: ubuntu-latest
+    # 읽기만 한다 — 이 워크플로는 PR을 병합하지도 닫지도 않고, 텔레그램 큐를
+    # 읽지도 않는다(오프셋 미소비). 새벽 회차의 판정을 가로챌 수 없다.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Mask Sensitive Tokens
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Re-ask pending verdicts
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          PAT: ${{ secrets.PAT }}
+          REPO: ${{ github.repository }}
+        run: python scripts/process_inbox.py --reask
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "reask" "재질의 실패" \
+            "미결 PR 재질의가 나가지 않았다. 적체된 판정이 있다면 오늘은 알림 없이 지나간다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
