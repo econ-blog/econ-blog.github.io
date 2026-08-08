@@ -290,26 +290,81 @@ class TestProcessInbox(unittest.TestCase):
         self.assertIn("#P0804", sent[0])
         self.assertIn("#P0805", sent[0])
 
-    def test_backlog_alert_fires_at_two(self):
-        """토큰 없는 답장은 2건부터 깨진다 — 경보가 3건이면 하루 늦다."""
+    def _run_main(self, alert_backlog: str, open_prs, updates=None):
+        """main()을 한 번 돌리고 텔레그램으로 나간 메시지를 돌려준다."""
         import process_inbox
         creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        sent = []
+        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r",
+               "TELEGRAM_OFFSET": "99", "ALERT_BACKLOG": alert_backlog}
+
+        with patch.dict(os.environ, env), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
+             patch.object(process_inbox.requests, "get",
+                          lambda url, **kw: FakeResponse(200, {"result": updates or []})), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+        return sent
+
+    def test_backlog_alert_fires_at_two(self):
+        """토큰 없는 답장은 2건부터 깨진다 — 경보가 3건이면 하루 늦다."""
         open_prs = [
             {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
             {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
         ]
-        sent = []
-
-        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
+        sent = self._run_main("1", open_prs)
 
         self.assertEqual(len(sent), 1)
         self.assertIn("2건", sent[0])
         self.assertIn("#P0804", sent[0])
         self.assertIn("#P0805", sent[0])
+
+    def test_backlog_alert_silent_without_flag(self):
+        """인박스는 15분마다 돈다 — 매 회차 경보를 내면 하루 96통이 되어
+        경보가 소음이 되고, 소음이 된 경보는 없는 것과 같다. 하루 한 번
+        도는 호출자(daily-collect)만 ALERT_BACKLOG를 켠다."""
+        open_prs = [
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+        ]
+        self.assertEqual(self._run_main("0", open_prs), [])
+
+    def test_token_reply_matches_while_backlogged(self):
+        """적체 경보를 보고 사람이 토큰을 붙여 답장한 그 경로.
+
+        2026-08-06~08에 "승인 #P0804"가 처리되지 않았던 것은 이 매칭이
+        틀려서가 아니라 폴링이 하루 한 번이라 텔레그램(24시간 보관)이 그
+        메시지를 먼저 지웠기 때문이다. 매칭 자체는 여기서 고정한다."""
+        import process_inbox
+        open_prs = [
+            {"number": 10, "head": {"ref": "auto/post-2026-08-06"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+        ]
+        up = {"message": {"chat": {"id": 1}, "text": "승인 #P0804"}}
+
+        self.assertEqual(process_inbox.parse_verdict("승인 #P0804"), "APPROVED")
+        pr, status = process_inbox.match_target_pr(up, open_prs)
+        self.assertEqual(status, "TOKEN_MATCH")
+        # 08-04는 목록의 첫 줄이 아니다 — 순서가 아니라 토큰으로 골라야 한다.
+        self.assertEqual(pr["number"], 8)
+
+    def test_guidance_messages_state_poll_cadence(self):
+        """이 루프는 웹훅이 아니라 폴링이다. 답장 직후 조용한 것이 정상인데
+        그걸 모르면 '인식되지 않았다'고 읽고 같은 답장을 다시 보낸다."""
+        import process_inbox
+        open_prs = [
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+        ]
+        alert = self._run_main("1", open_prs)[0]
+        self.assertIn(process_inbox.POLL_NOTE, alert)
+
+        sent = []
+        up = {"message": {"chat": {"id": 1}, "text": "승인"}}
+        with patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.handle_update(up, open_prs, "o/r", "p", "tok", "1")
+        self.assertIn(process_inbox.POLL_NOTE, sent[0])
 
     def test_merge_retries_transient_405(self):
         """커밋을 민 직후 GitHub의 mergeable은 null이고 PUT /merge는 405를 준다 — 재시도 대상이다."""

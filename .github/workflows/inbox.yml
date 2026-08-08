@@ -1,0 +1,83 @@
+name: Telegram Inbox (승인 판정 처리)
+
+on:
+  # 짧은 주기(15분)로 cron-job.org가 REST API로 건다. MEMORY.md §9.
+  #
+  # **왜 하루 한 번이 아닌가.** 텔레그램 `getUpdates`는 오프셋으로 확인되지 않은
+  # 업데이트를 **24시간만** 보관하고 그 뒤 영구 삭제한다. 인박스가 daily-collect
+  # 안에서 하루 한 번(01:30 KST)만 돌던 동안 사람의 답장은 최대 24시간을 큐에서
+  # 버텨야 했고 — 여유가 0이었다. 폴링이 한 회차라도 걸러지면 그 답장은 읽히기
+  # 전에 사라진다. 2026-08-07 01:30 KST 회차가 러너 대기 15분 끝에 취소되면서
+  # 정확히 그 일이 났다: 08-06에 보낸 "승인 #P0804"가 08-08 회차에 도달하기 전에
+  # 텔레그램에서 삭제됐고, 오프셋(582543245)은 양쪽 회차에서 움직이지 않았다.
+  #
+  # 폴링 주기를 15분으로 줄이면 한 회차를 놓쳐도 남는 여유가 23시간 이상이다.
+  workflow_dispatch:
+    inputs:
+      alert_backlog:
+        description: '대기 PR 적체 경보를 보낼지 (하루 한 번 도는 호출자만 true)'
+        type: boolean
+        default: false
+
+  # daily-collect.yml이 candidates보다 **먼저** 돌리기 위해 호출한다.
+  # 하루의 방향(인박스 → 수집 → 루틴)은 그대로 유지된다.
+  workflow_call:
+    inputs:
+      alert_backlog:
+        type: boolean
+        default: false
+
+jobs:
+  inbox:
+    name: 어제 글 승인 판정 처리
+    runs-on: ubuntu-latest
+    # 진입점이 둘(15분 폴링 · daily-collect)이라 겹칠 수 있다. 겹치면 같은
+    # 오프셋을 두 프로세스가 읽어 판정이 두 번 실행된다 — PR 병합은 멱등하지
+    # 않다. 취소하지 않고 줄을 세운다: 폴링 회차를 버리면 24시간 시계가 다시
+    # 돌아가고, 그것이 애초에 이 워크플로를 만든 이유다.
+    concurrency:
+      group: telegram-inbox
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Mask Sensitive Tokens
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Process Inbox Updates
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          PAT: ${{ secrets.PAT }}
+          TELEGRAM_OFFSET: ${{ vars.TELEGRAM_OFFSET }}
+          REPO: ${{ github.repository }}
+          # 15분마다 적체 경보를 보내면 하루 96통이다 — 경보가 소음이 되면
+          # 사람이 읽지 않게 되고, 그러면 경보가 없는 것과 같다.
+          ALERT_BACKLOG: ${{ inputs.alert_backlog && '1' || '0' }}
+        run: python scripts/process_inbox.py
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "inbox" "판정 처리 실패" \
+            "텔레그램 답장이 처리되지 않았다. 판정은 소비되지 않았으므로 다음 회차가 다시 시도한다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

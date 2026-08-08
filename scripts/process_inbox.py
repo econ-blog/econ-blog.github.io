@@ -15,6 +15,11 @@ REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
 # 경보를 3건에 두면 이미 하루치 판정을 날린 뒤에 울린다.
 BACKLOG_ALERT_THRESHOLD = 2
 
+# 답장이 실제로 처리되기까지 얼마나 걸리는지 사람에게 알려 주는 문장.
+# 이 루프는 웹훅이 아니라 폴링이다 — 답장 직후에 아무 일도 일어나지 않는 것이
+# 정상인데, 그걸 모르면 "인식되지 않았다"고 읽고 같은 답장을 다시 보낸다.
+POLL_NOTE = "답장은 15분마다 한 번씩 처리됩니다 — 보낸 직후 조용한 것은 정상입니다."
+
 # 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
 MERGE_METHODS = ("squash", "merge")
 # GitHub는 `mergeable`을 비동기로 계산한다. 방금 커밋을 민 직후에는 null이고,
@@ -23,6 +28,13 @@ MERGEABLE_POLL_ATTEMPTS = 8
 MERGEABLE_POLL_DELAY = 3
 MERGE_RETRY_ATTEMPTS = 3
 MERGE_RETRY_DELAY = 3
+
+def log(msg: str):
+    """실행 로그. 이 스크립트는 오랫동안 아무것도 출력하지 않았고, 그래서
+    '판정이 왜 처리되지 않았나'를 Actions 로그만으로는 답할 수 없었다 —
+    성공한 회차와 업데이트가 0건이던 회차가 로그상 구분되지 않았다."""
+    print(msg, flush=True)
+
 
 def parse_verdict(text: str) -> str:
     cleaned = re.sub(r'#([paPA])\d{4}', '', text).strip().lower()
@@ -277,17 +289,23 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
     up_chat_id = msg_obj.get("chat", {}).get("id")
 
     # C1: Strict Chat ID validation
+    # 조용히 버리되 로그에는 남긴다 — 설정된 chat_id가 틀리면 모든 답장이
+    # 아무 반응 없이 사라지고, 로그가 없으면 그 사실을 알 방법이 없다.
     if str(up_chat_id) != str(chat_id):
+        log(f"  update {up.get('update_id')}: chat_id 불일치 — 무시")
         return open_prs
 
     msg_text = msg_obj.get("text", "")
 
     verdict = parse_verdict(msg_text)
+    log(f"  update {up.get('update_id')}: text={msg_text[:40]!r} verdict={verdict}")
     if verdict == "AMBIGUOUS":
         send_telegram(bot_token, chat_id, f"판정불가: '{msg_text[:40]}' — 승인 또는 반려 로 재답장하세요.")
         return open_prs
 
     target_pr, match_status = match_target_pr(up, open_prs)
+    log(f"  update {up.get('update_id')}: match={match_status} "
+        f"pr={target_pr['number'] if target_pr else None}")
     if not target_pr:
         if match_status == "NO_OPEN_PRS":
             send_telegram(bot_token, chat_id, "대기 중인 PR이 없습니다.")
@@ -301,7 +319,8 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
             send_telegram(bot_token, chat_id,
                           f"대기 중인 PR이 {len(open_prs)}건입니다. 아래 토큰 중 하나를 붙여 다시 보내세요.\n\n"
                           f"{pending_pr_lines(open_prs)}\n\n"
-                          f"예: 승인 {pr_token(open_prs[0])} / 반려 {pr_token(open_prs[0])}")
+                          f"예: 승인 {pr_token(open_prs[0])} / 반려 {pr_token(open_prs[0])}\n\n"
+                          f"{POLL_NOTE}")
         return open_prs
 
     is_post = target_pr["head"]["ref"].startswith("auto/post-")
@@ -343,20 +362,27 @@ def main():
     bot_token = creds["telegram"]["bot_token"]
     chat_id = creds["telegram"]["chat_id"]
     
+    # 적체 경보는 하루 한 번 도는 호출자(daily-collect)만 켠다. 15분 폴링이
+    # 같은 경보를 내면 하루 96통이 되어 사람이 읽기를 그만둔다.
+    alert_backlog = os.environ.get("ALERT_BACKLOG", "").strip().lower() in ("1", "true", "yes")
+
     # Check open PRs
     open_prs = get_open_prs(repo, pat)
-    if len(open_prs) >= BACKLOG_ALERT_THRESHOLD:
+    log(f"open auto/* PRs: {len(open_prs)} → {[p['number'] for p in open_prs]}")
+    if alert_backlog and len(open_prs) >= BACKLOG_ALERT_THRESHOLD:
         send_telegram(bot_token, chat_id,
                       f"⚠️ 대기 중인 PR이 {len(open_prs)}건 적체되어 있습니다. "
                       "이제부터는 토큰 없는 답장이 처리되지 않습니다.\n\n"
-                      f"{pending_pr_lines(open_prs)}")
-        
+                      f"{pending_pr_lines(open_prs)}\n\n"
+                      f"{POLL_NOTE}")
+
     # Poll Telegram updates (timeout 10)
     try:
         updates_url = f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset_val}&allowed_updates=[\"message\"]"
         u_resp = requests.get(updates_url, timeout=10)
         u_resp.raise_for_status()
         updates = u_resp.json().get("result", [])
+        log(f"getUpdates offset={offset_val} → {len(updates)}건")
     except Exception as e:
         err_msg = str(e)
         if bot_token:
@@ -382,7 +408,10 @@ def main():
             last_offset = max(last_offset, up_id + 1)
     finally:
         if last_offset > offset_val:
+            log(f"offset {offset_val} → {last_offset}")
             update_telegram_offset(repo, pat, last_offset)
+        else:
+            log(f"offset 유지 {offset_val} (소비한 업데이트 없음)")
     if failed:
         sys.exit(1)
 
