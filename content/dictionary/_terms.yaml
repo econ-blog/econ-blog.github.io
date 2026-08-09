@@ -54,6 +54,10 @@ ltv:
   title: "담보인정비율"
   aliases: ["LTV", "주택담보인정비율", "이주비 LTV"]
 
+free-cash-flow:
+  title: "잉여현금흐름"
+  aliases: ["FCF", "잉여 현금흐름", "자유현금흐름"]
+
 
 
 
