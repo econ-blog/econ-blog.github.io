@@ -12,6 +12,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from kstdate import kst_today
 from mdtext import split_front_matter, strip_code_spans
 
 DRAFT = re.compile(r"^draft:\s*(true|false)\s*$", re.MULTILINE)
@@ -116,5 +117,5 @@ def is_notice(doc: dict) -> bool:
 
 
 if __name__ == "__main__":
-    today = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
+    today = sys.argv[1] if len(sys.argv) > 1 else kst_today()
     print(json.dumps(gate_stats(CONTENT_ROOT, today), ensure_ascii=False, indent=2))

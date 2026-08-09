@@ -52,9 +52,12 @@ SUMMARY_LINE = re.compile(r'^(?:' + '|'.join(SUMMARY_KEYS) + r')\s*:\s*\S')
 DECISION_DIVIDER = re.compile(r'^[─-]+\s*결정 필요\s*[─-]*$')
 
 
-def format_audit_notification(title: str, body: str, branch: str, url: str) -> str:
-    token = extract_verdict_token(branch, "audit")
+def summarize_audit_body(body: str) -> str:
+    """§9-1 블록에서 알림에 실을 줄만 남긴다.
 
+    PR 경로(`auto/audit-*`)와 리포트 경로(`main` 직행) 둘이 같은 커밋 메시지
+    계약을 쓰므로 필터도 하나다. 한쪽만 고치면 두 알림의 요약이 갈린다.
+    """
     filtered_lines = []
     in_decision_block = False
     for raw in body.splitlines():
@@ -71,13 +74,37 @@ def format_audit_notification(title: str, body: str, branch: str, url: str) -> s
             filtered_lines.append(line)
 
     # 계약을 지키지 않은 본문은 조용히 반쪽 요약을 내지 않고 그렇다고 말한다.
-    # PR 링크는 아래에 그대로 붙으므로 사람이 열어볼 경로는 남는다.
-    summary_block = "\n".join(filtered_lines[:12]) if filtered_lines else "요약 정보 없음"
+    # 링크는 아래에 그대로 붙으므로 사람이 열어볼 경로는 남는다.
+    return "\n".join(filtered_lines[:12]) if filtered_lines else "요약 정보 없음"
+
+
+def format_audit_notification(title: str, body: str, branch: str, url: str) -> str:
+    token = extract_verdict_token(branch, "audit")
     return (
         f"{token} 주간 감사\n\n"
-        f"{summary_block}\n\n"
+        f"{summarize_audit_body(body)}\n\n"
         f"PR: {url}\n\n"
         f"승인 / 반려 로 답장."
+    )
+
+
+def format_audit_report_notification(body: str, report_path: str, url: str) -> str:
+    """감사 리포트가 `main`에 올라갔을 때의 알림.
+
+    **판정 토큰(`#A0808`)을 넣지 않고 승인/반려를 묻지도 않는다.** 리포트와
+    원장은 2026-08-01 결정에 따라 승인 없이 `main`으로 직행하는 관측치라
+    사람이 반려할 대상이 아니다. 토큰을 넣으면 사용자가 무심코 답장했을 때
+    `process_inbox.py`가 열려 있지도 않은 `auto/audit-*` PR을 찾는다.
+
+    콘텐츠 수정이 딸린 주에는 이 알림과 별개로 `auto/audit-*` PR 알림
+    (`format_audit_notification`)이 따로 가며, 승인 대상은 그쪽뿐이다.
+    """
+    name = os.path.basename(report_path) if report_path else "audit report"
+    return (
+        f"📋 주간 감사 리포트 — {name}\n\n"
+        f"{summarize_audit_body(body)}\n\n"
+        f"리포트: {url}\n\n"
+        f"확인만 하면 된다 — 승인 대상이 아니다."
     )
 
 
@@ -195,6 +222,15 @@ def main():
         workflow, reason, detail, run_url = sys.argv[2:6]
         send_telegram_message(bot_token, chat_id,
                               format_automation_alert(workflow, reason, detail, run_url))
+        return
+
+    if mode == "audit-report":
+        # `main` 직행 리포트 경로. PR이 없으므로 PR_* 환경변수를 쓰지 않는다.
+        send_telegram_message(bot_token, chat_id, format_audit_report_notification(
+            os.environ.get("COMMIT_BODY", ""),
+            os.environ.get("REPORT_PATH", ""),
+            os.environ.get("REPORT_URL", ""),
+        ))
         return
 
     branch = os.environ.get("PR_BRANCH", "")

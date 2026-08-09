@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contracts import WRITING_STYLES_PATH, count_self_review_items  # noqa: E402
 from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
+from kstdate import kst_today  # noqa: E402
 from mdtext import inventory, split_front_matter, strip_code_spans  # noqa: E402
 
 DESC_MIN, DESC_MAX = 50, 160
@@ -175,7 +176,7 @@ def term_candidates(
 
 
 if __name__ == "__main__":
-    today = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
+    today = sys.argv[1] if len(sys.argv) > 1 else kst_today()
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
     files = sorted((CONTENT_ROOT / "posts").glob("*.md")) + \
         sorted((CONTENT_ROOT / "dictionary").glob("*.md"))

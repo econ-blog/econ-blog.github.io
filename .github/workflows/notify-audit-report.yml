@@ -1,0 +1,78 @@
+name: Telegram Audit Report Notification
+
+# 주간 감사 리포트는 `main`으로 직행한다(2026-08-01 결정 — 감사 산출물은 관측치라
+# 반려 대상이 아니다). 그 경로에는 PR이 없어 `notify.yml`(pull_request: opened)이
+# 반응하지 않으므로, 리포트가 올라온 것을 알리는 경로가 따로 필요하다.
+#
+# `auto/audit-*` 콘텐츠 PR은 여전히 `notify.yml`이 맡는다. 콘텐츠 수정이 있는 주에는
+# 두 알림이 각각 가며, 승인 대상은 PR 쪽뿐이다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'report/audit-*.md'
+
+concurrency:
+  group: notify-audit-report-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # HEAD~1과 비교해 이번 push가 추가한 리포트를 고른다.
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Mask Sensitive Tokens
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
+          echo "::add-mask::$BOT_TOKEN"
+
+      - name: Resolve report and commit message
+        id: report
+        run: |
+          # 무인 감사는 리포트를 단일 커밋으로 민다 — HEAD~1..HEAD면 충분하다.
+          REPORT=$(git diff --name-only HEAD~1 HEAD -- 'report/audit-*.md' 2>/dev/null | tail -1 || true)
+          # 얕은 클론이거나 첫 커밋이면 diff가 비어 있다. 디스크의 최신 리포트로 뒤를 받친다.
+          if [ -z "$REPORT" ]; then
+            REPORT=$(ls -1 report/audit-*.md 2>/dev/null | sort | tail -1 || true)
+          fi
+          if [ -z "$REPORT" ]; then
+            echo "리포트 파일을 찾지 못했다 — 알림을 보내지 않는다." >&2
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "path=$REPORT" >> "$GITHUB_OUTPUT"
+          echo "url=${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/$REPORT" >> "$GITHUB_OUTPUT"
+          {
+            echo 'body<<COMMIT_BODY_EOF'
+            git log -1 --format=%b
+            echo 'COMMIT_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Notification
+        if: steps.report.outputs.found == 'true'
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          COMMIT_BODY: ${{ steps.report.outputs.body }}
+          REPORT_PATH: ${{ steps.report.outputs.path }}
+          REPORT_URL: ${{ steps.report.outputs.url }}
+        run: python scripts/telegram_notify.py audit-report

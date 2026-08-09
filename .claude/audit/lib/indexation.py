@@ -126,16 +126,16 @@ def main() -> None:
     fetch_gsc.py 결과를 넘겨 판정한다."""
     import json
     import subprocess
-    from datetime import date as _today
     import os as _os
     import sys as _sys
 
     _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
     from corpus import published, site_age  # noqa: E402
+    from kstdate import kst_today  # noqa: E402
 
     content, public = Path("content"), Path("public")
     posts = published(content)
-    age = site_age(content, _today.today().isoformat())
+    age = site_age(content, kst_today())
     remote = subprocess.run(["git", "remote", "get-url", "origin"],
                             capture_output=True, text=True).stdout.strip()
     hugo_toml = Path("hugo.toml").read_text(encoding="utf-8")

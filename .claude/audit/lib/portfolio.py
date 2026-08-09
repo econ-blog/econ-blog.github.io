@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from corpus import documents, is_notice  # noqa: E402
 from internal_links import load_terms  # noqa: E402
+from kstdate import kst_today  # noqa: E402
 from mdtext import MD_LINK, strip_code_spans  # noqa: E402
 
 EVERGREEN_RULE = (
@@ -508,7 +509,6 @@ def snapshot(axes: dict) -> dict:
 def main() -> None:
     """D1–D6을 한 JSON으로. 스테이지는 이 출력만 소비한다. (AC #45)"""
     import json
-    from datetime import date as _today
 
     content = Path("content")
     docs = documents(content)
@@ -520,7 +520,7 @@ def main() -> None:
     )
     public = Path("public")
 
-    today = _today.today().isoformat()
+    today = kst_today()
     axes = {
         "D1": d1_composition(docs),
         "D2": d2_vocabulary(docs, vocab),

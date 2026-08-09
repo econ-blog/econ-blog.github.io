@@ -10,9 +10,13 @@ import json
 import sys
 import time
 from datetime import date
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kstdate import kst_today  # noqa: E402
 
 
 def classify(result: dict) -> str:
@@ -177,7 +181,7 @@ def check_all(ledger: dict, urls: list[str], today: str, min_interval: float = 1
 if __name__ == "__main__":
     ledger_path = sys.argv[1]
     urls = sys.argv[2:]
-    today = date.today().isoformat()
+    today = kst_today()
     try:
         with open(ledger_path, encoding="utf-8") as fh:
             ledger = json.load(fh)

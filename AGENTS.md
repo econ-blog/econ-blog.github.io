@@ -74,6 +74,8 @@ for f in scripts/test_*.py; do .venv/bin/python "$f"; done
 - **git 쓰기는 시퀀서 §10에서만** 한다. 스테이지는 읽기·분석·문자열 반환까지다.
 - **②가 침묵하는 것이 정상이다.** 데이터 충분성 게이트(발행 20건·28일·신호 충족 주제군 3개) 미달이면 `topic-report.md`를 생성·수정·삭제하지 **않는다.** 2026-07-30 기준 세 조건 전부 미달이다.
 - **`topic-report.md` 부재는 정상이다.** `rank.md`가 조용히 건너뛴다.
+- **감사가 찍는 날짜는 전부 KST다.** 리포트 파일명·브랜치명·커밋 제목은 시퀀서 §1이 `.claude/audit/lib/kstdate.py`로 한 번 구해 돌려 쓰고, 원장에 들어가는 날짜도 같은 헬퍼에서 나온다. `date.today()`를 쓰면 UTC 러너에서 일요일 05:00 KST 실행이 전날로 찍힌다 — 2026-08-09 실행이 `audit-2026-08-08.md`를 낸 사고가 그것이다.
+- **리포트가 `main`에 올라가면 텔레그램 알림이 간다**(`notify-audit-report.yml`). 커밋 메시지 §9-1 블록이 그대로 요약이 되므로 그 형식을 깨면 알림이 "요약 정보 없음"으로 나간다. 이 알림은 승인 대상이 아니며 판정 토큰이 붙지 않는다 — 승인 루프는 `auto/audit-*` PR 쪽뿐이다.
 - **산출물은 다섯 개뿐이다**: `report/audit-YYYY-MM-DD.md` · `.claude/audit/link-state.json` · `.claude/audit/topic-history.json` · `.claude/audit/direction-log.json` · `.claude/audit/topic-report.md`(게이트 통과 시에만). 여섯 번째 파일을 만들지 않는다.
 - **리포트는 `report/`에, 원장은 `.claude/audit/`에 쓴다.** 리포트(`audit-*.md`)는 매 실행이 새로 만드는 읽을거리이고, 원장 JSON 셋은 다음 실행이 되읽는 상태다 — 그래서 자리가 다르다. `.claude/audit/`에 `audit-*.md`를 만들지 않는다.
 - **쓰기 금지**: `.claude/daily-post/` 전체 · `hugo.toml` · `CLAUDE.md` · `MEMORY.md` · `layouts/` · `content/` 본문 산문. `content/`에서 허용되는 유일한 변경은 확정 사망 링크 수정과 내부링크 백필이다.
@@ -175,6 +177,7 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 | `daily-collect.yml` | 매일 01:30 | cron-job.org | `inbox` → `candidates` | 승인 판정 처리 + `candidates/YYYY-MM-DD.json` |
 | `weekly-collect.yml` | 일 01:20 | cron-job.org | `analytics` ∥ `linkstate` | `analytics/YYYY-MM-DD/*.json` + `linkstate/YYYY-MM-DD.json` |
 | `open-auto-pr.yml` | — | `push` on `auto/**` | — | PR (→ `notify.yml`) |
+| `notify-audit-report.yml` | — | `push` on `main`의 `report/audit-*.md` | — | 감사 리포트 텔레그램 알림 |
 
 루틴은 `/daily-post` 매일 05:00 KST, `/weekly-audit` 일 05:00 KST. 수집은 루틴보다 최소
 3시간 앞에 둔다.

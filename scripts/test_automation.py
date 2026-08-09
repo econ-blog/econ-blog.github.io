@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import tempfile
@@ -129,6 +130,48 @@ PR 리포트: .claude/audit/audit-2026-07-30.md"""
                                         "auto/audit-2026-07-30",
                                         "https://github.com/org/repo/pull/2")
         self.assertIn("요약 정보 없음", msg)
+
+    def test_format_audit_report_notification(self):
+        """`main` 직행 리포트 알림. 같은 §9-1 본문에서 같은 줄이 살아남는다."""
+        from telegram_notify import format_audit_report_notification
+        msg = format_audit_report_notification(
+            self.AUDIT_PR_BODY, "report/audit-2026-08-09.md",
+            "https://github.com/org/repo/blob/abc123/report/audit-2026-08-09.md")
+        self.assertIn("audit-2026-08-09.md", msg)
+        for line in ("계약 위반: 1건",
+                     "확정 사망 링크: 0건 / 사람 점검 필요: 2건",
+                     "데이터 충분성: 미달 (발행 5 / 20건)",
+                     "색인 건전성: 정상",
+                     "소견: 1건 (④ 1, ⑥ 0)",
+                     "새 가설 제안: 1건",
+                     "─ 결정 필요 ─"):
+            self.assertIn(line, msg, f"§9-1 계약 줄이 필터를 통과하지 못했다: {line}")
+        self.assertIn("blob/abc123", msg)
+
+    def test_audit_report_notification_carries_no_verdict_token(self):
+        """리포트는 승인 대상이 아니다 — `#A0809` 토큰도 승인 문구도 넣지 않는다.
+
+        토큰이 들어가면 사용자가 답장했을 때 `process_inbox.py`가 열려 있지도
+        않은 `auto/audit-*` PR을 찾아 '대기 중인 PR이 없습니다'로 튄다.
+        """
+        from telegram_notify import format_audit_report_notification
+        from process_inbox import parse_verdict
+        msg = format_audit_report_notification(
+            self.AUDIT_PR_BODY, "report/audit-2026-08-09.md",
+            "https://github.com/org/repo/blob/abc123/report/audit-2026-08-09.md")
+        self.assertIsNone(re.search(r'#[paPA]\d{4}', msg),
+                          "리포트 알림에 판정 토큰이 들어갔다")
+        self.assertNotIn("승인 / 반려 로 답장", msg)
+        # 본문이 그 자체로 승인 판정처럼 파싱되지 않는지도 본다.
+        self.assertEqual(parse_verdict(msg), "AMBIGUOUS")
+
+    def test_audit_report_notification_survives_broken_body(self):
+        """계약을 어긴 본문에도 조용히 반쪽 요약을 내지 않는다."""
+        from telegram_notify import format_audit_report_notification
+        msg = format_audit_report_notification(
+            "## ⚠ 계약 위반\n1건", "report/audit-2026-08-09.md", "https://x/y")
+        self.assertIn("요약 정보 없음", msg)
+        self.assertIn("audit-2026-08-09.md", msg)
 
 
 class TestSelectInspectUrls(unittest.TestCase):

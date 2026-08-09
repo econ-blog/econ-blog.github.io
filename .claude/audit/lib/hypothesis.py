@@ -8,8 +8,12 @@
 """
 import json
 import re
+import sys
 from datetime import date as _date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kstdate import kst_today  # noqa: E402
 
 FIELDS = ("주장", "지표", "예측", "확인시점", "기각기준")
 STATES = ("제안", "채택", "확인대기", "확증", "반증", "기각")
@@ -256,7 +260,7 @@ def _emit(ledger: dict, **info) -> None:
 def _today_or(args: list[str], index: int) -> str:
     if len(args) > index and args[index]:
         return args[index]
-    return _date.today().isoformat()
+    return kst_today()
 
 
 def _coerce(text: str):
