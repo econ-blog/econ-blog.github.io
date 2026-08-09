@@ -147,6 +147,7 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 - 로컬 push는 저장소 전용 SSH 키(`~/.ssh/id_ed25519_econblog`)로 인증한다 — 자격증명 프롬프트가 뜨지 않는다.
 - **포스트·사전 초안을 사용자 승인 없이 커밋·푸시하지 않는다.** 이미 작성된 콘텐츠의 사소해 보이는 수정에도 적용된다.
 - **`/docs/`와 `/.superpowers/`는 통째로 gitignored다.** 스펙·계획·리뷰 diff는 2026-08-01에 삭제했고 git 이력에도 없다 — 거기에만 있던 운영 지식은 이 파일과 `MEMORY.md`로 옮겼다. **그 디렉터리에 새 문서를 만들지 않는다.** 남길 것이 생기면 `AGENTS.md`(매 실행 필요)나 `MEMORY.md`(근거·이력)에 직접 쓴다.
+- **루트의 `PLAN.md`는 한시 문서다**(2026-08-09 추가). 색인·AEO·자동화 개선 작업 목록이며 여러 세션에 걸쳐 소비된다. **구현이 끝나면 파일째 삭제하고 남길 결론만 `MEMORY.md`로 옮긴다.** 감사 ④는 이것을 결함으로 보지 않는다 — Hugo가 읽지 않는 경로이고 의도된 예외다.
 - **자격증명은 `credentials.json` 하나다**(저장소 루트, gitignored). 스키마는 GitHub Secret `CREDENTIALS_JSON`과 **동일**하다: `{"telegram": {bot_token, chat_id}, "ga4": {"service_account": {…}}}`. 시크릿을 갱신할 때 이 파일을 그대로 올린다:
 
   ```bash
