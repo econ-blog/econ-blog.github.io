@@ -1,0 +1,31 @@
+{{- /* 사전 항목 = DefinedTerm. 테마가 내는 BlogPosting 은 그대로 두고 라벨만 더한다.
+       테마의 templates/schema_json.html 을 오버라이드하지 않는 것은 의도적이다 —
+       128줄 벤더링은 PaperMod 업그레이드마다 수동 병합을 만든다. */ -}}
+{{- if and .IsPage (eq .Section "dictionary") }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "DefinedTerm",
+  "name": {{ .Title | plainify }},
+  "description": {{ with .Description | plainify }}{{ . }}{{ else }}{{ .Summary | plainify }}{{ end }},
+  "url": {{ .Permalink | safeHTML }},
+  "inLanguage": {{ .Language.Lang | default "ko" }},
+  "inDefinedTermSet": {
+    "@type": "DefinedTermSet",
+    "name": "경제 용어 사전",
+    "url": {{ (site.GetPage "/dictionary").Permalink | safeHTML }}
+  }
+}
+</script>
+{{- end }}
+{{- if and .IsSection (eq .Section "dictionary") }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "DefinedTermSet",
+  "name": "경제 용어 사전",
+  "url": {{ .Permalink | safeHTML }},
+  "inLanguage": {{ .Language.Lang | default "ko" }}
+}
+</script>
+{{- end }}
