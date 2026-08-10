@@ -54,6 +54,10 @@ ltv:
   title: "담보인정비율"
   aliases: ["LTV", "주택담보인정비율", "이주비 LTV"]
 
+leading-indicator:
+  title: "경기선행지표"
+  aliases: ["선행지표", "경기 선행지표"]
+
 
 
 
