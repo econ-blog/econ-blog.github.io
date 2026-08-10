@@ -253,10 +253,14 @@ description: "회사가 벌어들이는 이익에 비해 지금 주가가 얼마
 
 ```bash
 rm -rf public && hugo --gc --minify
-grep -c '<meta name="description"' public/dictionary/base-rate/index.html
+grep -cE '<meta name="?description"?' public/dictionary/base-rate/index.html
 ```
 
 기대: 빌드 성공 · `Non-page files` 1 · grep 결과 `1`.
+
+**속성 따옴표를 고정 문자열로 찾지 않는다.** `--minify`가 `name="description"`을 `name=description`으로
+줄이므로 따옴표를 박아 넣은 grep은 빌드가 멀쩡해도 `0`을 낸다. `public/`을 검사하는 모든 grep에
+같은 규칙이 적용된다.
 
 - [ ] **Step 7: 승인을 받고 커밋한다**
 
@@ -368,22 +372,27 @@ grep -c 'DefinedTerm' public/posts/tsmc-foundry-price-hike-10-percent/index.html
 ```bash
 .venv/bin/python - <<'EOF'
 import json, re, glob, sys
-bad = []
+bad, n = [], 0
 for f in glob.glob("public/dictionary/*/index.html") + glob.glob("public/posts/*/index.html"):
-    for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>',
+    for block in re.findall(r'<script type="?application/ld\+json"?>(.*?)</script>',
                             open(f, encoding="utf-8").read(), re.DOTALL):
+        n += 1
         try:
             json.loads(block)
         except json.JSONDecodeError as e:
             bad.append((f, str(e)))
-print(f"깨진 JSON-LD {len(bad)}건")
+print(f"검사한 블록 {n}개 / 깨진 JSON-LD {len(bad)}건")
 for f, e in bad[:5]:
     print(" ", f, e)
-sys.exit(1 if bad else 0)
+sys.exit(1 if (bad or n == 0) else 0)
 EOF
 ```
 
-기대: `깨진 JSON-LD 0건`, 종료 코드 0. 이 스크립트는 저장하지 않는다 — 일회성 검증이다.
+기대: `검사한 블록 87개 / 깨진 JSON-LD 0건`, 종료 코드 0. 이 스크립트는 저장하지 않는다 — 일회성 검증이다.
+
+**블록 수를 반드시 함께 본다.** 정규식이 하나도 못 맞히면 깨진 것이 없어서가 아니라 검사를 안 해서
+`0건`이 나온다 — 그것은 통과가 아니라 실패다. 그래서 `n == 0`도 종료 코드 1로 낸다. `--minify`가
+`type="application/ld+json"`의 따옴표를 지우므로 따옴표를 고정한 정규식은 이 함정에 그대로 빠진다.
 
 - [ ] **Step 6: 커밋**
 
