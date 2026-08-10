@@ -204,7 +204,7 @@ description: "호르무즈와 홍해가 동시에 막히면 원유 수송로 두
 
 `content/dictionary/base-rate.md`:
 ```yaml
-description: "한국은행이 정하는 돈값의 기준으로, 예금·대출 금리가 여기서부터 줄줄이 정해집니다. 기준금리가 한 번 움직이면 내 이자와 자산 가격이 어떤 순서로 따라 움직입니다."
+description: "한국은행이 정하는 돈값의 기준으로, 예금·대출 금리가 여기서부터 줄줄이 정해집니다. 기준금리가 한 번 움직이면 내 이자와 자산 가격이 어떤 순서로 따라 움직이는지 짚었습니다."
 ```
 
 `content/dictionary/circuit-breaker.md`:
