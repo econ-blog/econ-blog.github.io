@@ -3,7 +3,7 @@ title: "상용차 판매 28년 만에 최저, 자영업·건설 침체가 보내
 date: 2026-08-11T05:19:00+09:00
 description: "상용차 판매량이 외환위기 이후 최저로 떨어졌습니다. 자영업자 대출 연체율 상승과 건설 경기 부진이 겹치며 하반기 내수 흐름에 경고음이 커지고 있습니다."
 tags: ["고용", "부동산"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026081051041"
 related_articles:
   - title: "빚도 연체액도 역대 최대…자영업자 초유의 경고등"
