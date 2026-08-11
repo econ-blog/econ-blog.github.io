@@ -29,3 +29,28 @@
 }
 </script>
 {{- end }}
+{{- /* FAQPage. faq.html 이 같은 데이터를 화면에 렌더한다 — 보이지 않는 FAQ 마크업은
+       구조화 데이터 정책 위반이라 둘을 떼어 놓지 않는다.
+       리치 결과는 기대하지 않는다(2023-08 이후 권위 사이트 한정). 목적은 답변엔진 추출이다. */ -}}
+{{- if and .IsPage (eq .Section "posts") }}
+{{- with .Params.faq }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {{- range $i, $e := . }}{{ if $i }},{{ end }}
+    {
+      "@type": "Question",
+      "name": {{ $e.q }},
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": {{ $e.a }}
+      }
+    }
+    {{- end }}
+  ]
+}
+</script>
+{{- end }}
+{{- end }}

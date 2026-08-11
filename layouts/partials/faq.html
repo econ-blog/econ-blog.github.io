@@ -1,0 +1,15 @@
+{{- /* 화면에 보이는 FAQ. extend_head.html 의 FAQPage JSON-LD 와 같은 front matter 를
+       읽는다 — 한쪽만 고치면 보이지 않는 구조화 데이터가 되어 규정 위반이 된다. */ -}}
+{{- if eq .Section "posts" }}
+{{- with .Params.faq }}
+<section class="post-faq">
+  <h2 class="post-faq-title">자주 묻는 질문</h2>
+  {{- range . }}
+  <div class="post-faq-item">
+    <h3 class="post-faq-q">{{ .q }}</h3>
+    <p class="post-faq-a">{{ .a }}</p>
+  </div>
+  {{- end }}
+</section>
+{{- end }}
+{{- end }}
