@@ -48,7 +48,7 @@ GitHub Actions · schema.org JSON-LD.
   `extend_head.html`은 **모든 환경에서** 불린다 — 우리가 넣는 JSON-LD는 `hugo server`에서도
   보인다. 검증은 `public/`을 grep해서 한다.
 - **`hugo.toml`·`CLAUDE.md`·`MEMORY.md`는 이 계획의 수정 대상이 아니다.** `AGENTS.md`는
-  계약이 바뀌는 태스크(4·5·7)에서만, 그 태스크가 명시한 줄만 고친다.
+  계약이 바뀌는 태스크(4·5·7·8)에서만, 그 태스크가 명시한 줄만 고친다.
 
 ---
 
@@ -156,7 +156,11 @@ Search Console API가 제공하는 것은 `searchanalytics`(조회) · `sitemaps
 | `.claude/audit/system-scan.md` | 수정 | Q1을 소견이 아니라 수정안으로 낸다 | 7 |
 | `.claude/commands/weekly-audit.md` | 수정 | §9-1 여덟째 줄 · §10-4 적용 범위 | 7 |
 | `scripts/telegram_notify.py` | 수정 | 요약 키 하나 추가 | 7 |
-| `AGENTS.md` | 수정 | 계약이 바뀐 줄만 (태스크 4·5·7) | 4·5·7 |
+| `scripts/housekeeping.py` | 생성 | 유지보수 오케스트레이터 (LLM 없음) | 7 |
+| `scripts/test_housekeeping.py` | 생성 | 위 모듈의 스탠드얼론 테스트 | 7 |
+| `.github/workflows/weekly-housekeeping.yml` | 생성 | 주간 유지보수 실행 (알림 없음) | 7 |
+| `.claude/commands/weekly-audit.md` | 이름변경 | → `audit-improvement.md` (②·⑤·Q3, 수동 전용) | 7 |
+| `AGENTS.md` | 수정 | 계약이 바뀐 줄만 (태스크 4·5·7·8) | 4·5·7·8 |
 
 **책임 분리의 기준:** JSON-LD는 전부 `extend_head.html` 하나가 낸다(테마의
 `schema_json.html`을 통째로 복사해 오버라이드하지 않는다 — 128줄짜리 테마 파일을
@@ -1551,7 +1555,174 @@ git commit -m "collect: I6 색인 조회를 표본 5건에서 전수로 확대"
 
 ---
 
-## Task 7: 감사 소견을 커밋으로 바꾸는 경로
+## Task 7: 감사를 유지보수(무인 · LLM 없음)와 개선(수동 · LLM)으로 가른다
+
+지금 `/weekly-audit` 한 명령이 여섯 축을 다 짊어진다. 그런데 축의 성격이 둘로 갈린다 —
+**있는 것이 맞는지 보는 축**(① 링크 · ③ 색인 · ④ E/Q · ⑥ 수치)과 **무엇을 더할지 정하는
+축**(② 성과 · ⑤ 방향 · ④ Q3)이다. 앞쪽은 전부 결정론이고 뒤쪽만 LLM이 필요하다.
+
+**설계 판단 (2026-08-11): 유지보수 절반은 LLM 없이 GitHub Actions로 돌린다.** 근거는 추정이
+아니라 저장소가 이미 갖고 있는 사실이다.
+
+- 유지보수 네 축은 전부 `.claude/audit/lib/`의 결정론 모듈이 판정한다. `AGENTS.md`
+  「`.claude/audit/lib/` 규약」이 못박은 대로 **"LLM은 여기의 어떤 값도 산출하지 않는다."**
+- 쓰기 경로 둘도 기계적이다. 확정 사망 링크는 `link-check.md` §4의 (a)(b)(c) 규칙이
+  문자열 조작으로 끝나고, 백필은 `backfill.py`가 `{term, line, slug, kind}`로 위치까지
+  주며 규칙은 "그 줄 첫 등장 1회, 문서당 ≤3, 전체 ≤20"이다. 양쪽 다 **"문장·단락을
+  재작성하지 않는다"**(AC #12).
+- 소견의 `제안` 문자열은 검사 ID마다 고정이다 — `numeric-integrity.md`·`indexation.md`가
+  이미 표로 갖고 있다.
+- 네트워크 수집은 이미 Actions에서 돈다(`weekly-collect.yml`의 `analytics`·`linkstate`).
+
+즉 지금 LLM이 하는 일은 **측정이 아니라 오케스트레이션과 한국어 리포트 조립**이다. 그것을
+스크립트로 옮기면 주간 무인 루틴에서 LLM이 통째로 빠진다 — 비재현성·토큰비용·샌드박스
+의존이 한꺼번에 사라진다.
+
+**대가를 숨기지 않는다.** 리포트 산문이 합성되지 않고 표 + 고정 문구가 된다. 지금 리포트의
+읽는 맛 일부는 잃는다. 잃지 않는 것은 판정값이다 — 그것은 원래 전부 결정론이었다.
+
+**Task 8보다 먼저 한다.** Task 8은 Q1 `description` **제안값을 LLM이 쓰게** 하는데 그 값은
+무인 유지보수 실행에 들어갈 수 없다. 순서를 뒤집으면 Task 8을 구현한 뒤 곧바로 옮기는
+헛일이 된다. 이 태스크를 먼저 넣고, Task 8은 처음부터 **개선 명령 쪽에** 쓴다 — Q1
+**탐지**는 유지보수에 남고 **제안값 생성**만 개선으로 간다. Task 8의 §9-1·`SUMMARY_KEYS`
+작업도 `audit-improvement.md` 기준으로 쓴다(유지보수는 알림을 보내지 않으므로).
+
+**Files:**
+- Create: `scripts/housekeeping.py` — 유지보수 오케스트레이터(①③④E/Q⑥ + 기계적 수정 적용 + 리포트 렌더)
+- Create: `scripts/test_housekeeping.py`
+- Create: `.github/workflows/weekly-housekeeping.yml`
+- Rename: `.claude/commands/weekly-audit.md` → `.claude/commands/audit-improvement.md` (②·⑤·Q3 전용, **수동만**)
+- Modify: `.claude/audit/system-scan.md` (Q3를 개선 쪽으로, E/Q 나머지는 유지보수 쪽으로 표시)
+- Modify: `AGENTS.md` (`/weekly-audit` 절 → 두 절로, 산출물 목록, 자동화 평면 표)
+
+**Interfaces:**
+- Consumes: 기존 `lib/*.py` 전부. **`lib/`는 한 줄도 고치지 않는다** — 이 태스크는 배선
+  변경이지 판정 변경이 아니다.
+- Produces:
+  - 유지보수 → `report/housekeeping-YYYY-MM-DD.md` + `.claude/audit/link-state.json`.
+    **알림을 보내지 않는다** — 아래 「알림은 개선 쪽에만」 참조.
+  - 개선 → `report/audit-YYYY-MM-DD.md`(경로 **유지** — `notify-audit-report.yml`이 이
+    경로에 걸려 있다) + `topic-history.json` · `topic-report.md` · `direction-log.json`
+
+**알림은 개선 쪽에만 (2026-08-11 결정).** 유지보수는 **저장만 한다.** 리포트도 원장도
+텔레그램으로 보내지 않는다 — 매주 자동으로 도는 관측치라 사람이 즉시 볼 것이 없고, 알림이
+잦으면 정작 판단이 필요한 알림이 묻힌다. 개선 명령이 수동 실행 때 유지보수 산출물을
+**읽어서** 처리한다.
+
+기술적으로는 **파일명 하나로 갈린다.** `notify-audit-report.yml`은 `report/audit-*.md`
+경로에만 걸려 있으므로 유지보수가 `report/housekeeping-*.md`로 쓰면 워크플로를 손대지
+않고도 조용해진다. **`notify-audit-report.yml`을 수정하지 않는다.**
+
+- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
+
+`scripts/test_housekeeping.py`에 최소 넷을 담는다. **리포트 산문이 아니라 판정과 편집을
+검증한다.**
+
+1. 확정 사망 내부 링크 → 대상 없으면 `[기준금리](/x/)` → `기준금리` (앵커 텍스트 보존)
+2. `related_articles` 항목 제거 후 목록이 비면 **키 자체가 사라진다**(빈 리스트 금지)
+3. `source_url`은 죽어도 **바뀌지 않는다**
+4. 백필 적용이 문서당 3건·전체 20건에서 멈춘다
+
+- [ ] **Step 2: `scripts/housekeeping.py`를 쓴다**
+
+한 함수가 한 축이다. 전부 기존 lib 호출 + 문자열 조립이며 새 판정 로직을 만들지 않는다.
+
+```
+run_links()      → ① + 백필      (linkcheck.py, backfill.py, internal_links.py)
+run_indexation() → ③ I1–I7       (indexation.py, fetch_gsc.py 스냅샷)
+run_scan()       → ④ E/Q (Q3 제외) (quality.py, contracts.py, corpus.py)
+run_numerics()   → ⑥ N1–N5       (numerics.py)
+render_report()  → report/housekeeping-YYYY-MM-DD.md
+apply_edits()    → 확정 사망 + 백필만
+```
+
+- 날짜는 **반드시** `kstdate.py`에서 받는다. `date.today()`를 쓰지 않는다.
+- 어떤 헬퍼든 exit != 0 이면 그 결과를 해석하지 말고 리포트 최상단 '계약 위반 및 시스템
+  에러' 섹션에 원문을 싣는다(I5 에러 가드). **`측정 불가`를 `통과`로 접지 않는다.**
+- Hugo 부트스트랩 실패 시 ④E1·E4·③I1은 `측정 불가`다.
+
+- [ ] **Step 3: 테스트를 통과시킨다**
+
+```bash
+.venv/bin/python scripts/test_housekeeping.py
+for f in scripts/test_*.py; do echo "== $f"; .venv/bin/python "$f" || break; done
+for f in .claude/audit/lib/test_*.py; do echo "== $f"; .venv/bin/python "$f" || break; done
+```
+
+기대: 전부 OK. **`lib/` 테스트가 하나도 바뀌지 않아야 한다** — 판정을 안 건드렸다는 증거다.
+
+- [ ] **Step 4: 지난주 리포트와 대조한다 (회귀의 핵심)**
+
+```bash
+.venv/bin/python scripts/housekeeping.py --dry-run > /tmp/hk.md
+diff <(grep -oE "(E[0-9]|I[0-9]|N[0-9]|Q[0-9]) [^|]*\| *[가-힣]+" report/audit-2026-08-08.md | sort) \
+     <(grep -oE "(E[0-9]|I[0-9]|N[0-9]|Q[0-9]) [^|]*\| *[가-힣]+" /tmp/hk.md | sort)
+```
+
+기대: **판정 토큰(통과/관찰/소견/측정 불가)이 축별로 일치한다.** 산문은 달라도 되지만
+판정이 달라지면 배선 중에 로직이 새로 들어간 것이다 — 멈추고 원인을 찾는다.
+
+- [ ] **Step 5: 워크플로를 만든다**
+
+`.github/workflows/weekly-housekeeping.yml` — `workflow_dispatch`만 둔다(**`schedule:`을
+넣지 않는다**, cron-job.org가 건다). `weekly-collect.yml`보다 **뒤**에 걸어 그 주 스냅샷을
+읽게 한다.
+
+- 리포트·원장은 `main` 직행, `content/` 수정이 있을 때만 `auto/audit-YYYY-MM-DD` 브랜치 +
+  PR(2026-08-01 결정 유지).
+- **알림 스텝을 넣지 않는다.** 리포트가 `report/housekeeping-*.md`라 `notify-audit-report.yml`
+  (경로 `report/audit-*.md`)이 애초에 발화하지 않는다. `telegram_notify.py`를 부르는 스텝도
+  만들지 않는다 — 유지보수는 저장까지가 끝이다.
+- 다만 **워크플로 자체가 실패했을 때의 경보는 남긴다**(`weekly-collect.yml`의
+  `Alert on workflow failure`와 같은 형태). 조용한 것과 죽은 것을 구분할 수 없으면
+  유지보수가 몇 주째 안 돌아도 아무도 모른다.
+- 커밋 메시지는 사람이 읽을 수 있게 축별 판정 요약을 담되, **§9-1 블록 형식에 묶이지
+  않는다** — 그 형식은 텔레그램 요약 파서를 위한 것이었고 유지보수는 알림을 보내지 않는다.
+
+- [ ] **Step 6: 개선 명령을 분리한다**
+
+`.claude/commands/weekly-audit.md`를 `audit-improvement.md`로 옮기고 ②·⑤·Q3만 남긴다.
+
+- **수동 전용**이다. 무인 모드 분기를 지운다.
+- ②의 데이터 충분성 게이트는 그대로. 미달이면 여전히 침묵한다.
+- ⑤는 `published_count`·`site_age`를 이제 `housekeeping.py --json`에서 받는다.
+- ⑥의 `n1_count`·`claims_total`·`claims_per_post` 세 값도 같은 경로로 받는다.
+
+- [ ] **Step 7: 교차 참조와 계약을 확인한다**
+
+```bash
+.venv/bin/python .claude/audit/lib/contracts.py
+grep -rn "weekly-audit" .claude/ .github/ AGENTS.md
+rm -rf public && hugo --gc --minify
+```
+
+기대: `contracts.py`가 `[]` · `weekly-audit`를 가리키는 죽은 참조가 없다 · 빌드 성공 ·
+`Non-page files` 1.
+
+- [ ] **Step 8: `AGENTS.md`를 갱신한다**
+
+`/weekly-audit` 절을 두 절로 가르고, 산출물 목록을 명령별로 나누고, 자동화 평면 표에
+`weekly-housekeeping.yml` 행을 넣는다. **로드맵의 Agent3 여섯 축 문장은 그대로 둔다** —
+축은 그대로이고 실행 주체만 갈렸다.
+
+- [ ] **Step 9: 커밋**
+
+```bash
+git add scripts/housekeeping.py scripts/test_housekeeping.py \
+        .github/workflows/weekly-housekeeping.yml \
+        .claude/commands/audit-improvement.md .claude/audit/system-scan.md AGENTS.md
+git commit -m "audit: 유지보수(무인·LLM 없음)와 개선(수동·LLM)을 두 명령으로 분리"
+```
+
+- [ ] **Step 10: 다음 일요일 실행을 확인한다 (사람)**
+
+`report/housekeeping-*.md`가 `main`에 올라왔는지, **그리고 텔레그램이 조용한지** 본다
+(알림이 왔다면 경로가 `audit-*`로 새어 `notify-audit-report.yml`이 물린 것이다). 판정이 지난주와
+크게 다르면 Step 4의 대조를 다시 돌린다.
+
+---
+
+## Task 8: 감사 소견을 커밋으로 바꾸는 경로
 
 2026-08-08 감사가 소견 23건을 냈고 그중 7건이 S비용 front matter 결함인데 지금까지 아무것도
 처리되지 않았다. 감사는 잘 돌아간다 — `hormuz-red-sea`의 description 누락도 사람보다 먼저
@@ -1774,156 +1945,6 @@ git commit -m "audit: Q1 front matter 결함을 소견이 아니라 수정 PR로
 
 ---
 
-## Task 8: 감사를 유지보수(무인 · LLM 없음)와 개선(수동 · LLM)으로 가른다
-
-지금 `/weekly-audit` 한 명령이 여섯 축을 다 짊어진다. 그런데 축의 성격이 둘로 갈린다 —
-**있는 것이 맞는지 보는 축**(① 링크 · ③ 색인 · ④ E/Q · ⑥ 수치)과 **무엇을 더할지 정하는
-축**(② 성과 · ⑤ 방향 · ④ Q3)이다. 앞쪽은 전부 결정론이고 뒤쪽만 LLM이 필요하다.
-
-**설계 판단 (2026-08-11): 유지보수 절반은 LLM 없이 GitHub Actions로 돌린다.** 근거는 추정이
-아니라 저장소가 이미 갖고 있는 사실이다.
-
-- 유지보수 네 축은 전부 `.claude/audit/lib/`의 결정론 모듈이 판정한다. `AGENTS.md`
-  「`.claude/audit/lib/` 규약」이 못박은 대로 **"LLM은 여기의 어떤 값도 산출하지 않는다."**
-- 쓰기 경로 둘도 기계적이다. 확정 사망 링크는 `link-check.md` §4의 (a)(b)(c) 규칙이
-  문자열 조작으로 끝나고, 백필은 `backfill.py`가 `{term, line, slug, kind}`로 위치까지
-  주며 규칙은 "그 줄 첫 등장 1회, 문서당 ≤3, 전체 ≤20"이다. 양쪽 다 **"문장·단락을
-  재작성하지 않는다"**(AC #12).
-- 소견의 `제안` 문자열은 검사 ID마다 고정이다 — `numeric-integrity.md`·`indexation.md`가
-  이미 표로 갖고 있다.
-- 네트워크 수집은 이미 Actions에서 돈다(`weekly-collect.yml`의 `analytics`·`linkstate`).
-
-즉 지금 LLM이 하는 일은 **측정이 아니라 오케스트레이션과 한국어 리포트 조립**이다. 그것을
-스크립트로 옮기면 주간 무인 루틴에서 LLM이 통째로 빠진다 — 비재현성·토큰비용·샌드박스
-의존이 한꺼번에 사라진다.
-
-**대가를 숨기지 않는다.** 리포트 산문이 합성되지 않고 표 + 고정 문구가 된다. 지금 리포트의
-읽는 맛 일부는 잃는다. 잃지 않는 것은 판정값이다 — 그것은 원래 전부 결정론이었다.
-
-**Task 7과 충돌한다 — 같이 고친다.** Task 7은 Q1 `description` **제안값을 LLM이 쓰게**
-한다. 그 값은 무인 유지보수 실행에 들어갈 수 없다. Q1 **탐지**는 유지보수에 남기고
-**제안값 생성**은 개선 명령으로 옮긴다. Task 7을 이미 구현했다면 그 부분만 이동시키고,
-아직이면 Task 7 Step 7의 §2 Q1 불릿을 개선 명령 쪽에 쓴다.
-
-**Files:**
-- Create: `scripts/housekeeping.py` — 유지보수 오케스트레이터(①③④E/Q⑥ + 기계적 수정 적용 + 리포트 렌더)
-- Create: `scripts/test_housekeeping.py`
-- Create: `.github/workflows/weekly-housekeeping.yml`
-- Rename: `.claude/commands/weekly-audit.md` → `.claude/commands/audit-improvement.md` (②·⑤·Q3 전용, **수동만**)
-- Modify: `.claude/audit/system-scan.md` (Q3를 개선 쪽으로, E/Q 나머지는 유지보수 쪽으로 표시)
-- Modify: `AGENTS.md` (`/weekly-audit` 절 → 두 절로, 산출물 목록, 자동화 평면 표)
-
-**Interfaces:**
-- Consumes: 기존 `lib/*.py` 전부. **`lib/`는 한 줄도 고치지 않는다** — 이 태스크는 배선
-  변경이지 판정 변경이 아니다.
-- Produces:
-  - 유지보수 → `report/audit-YYYY-MM-DD.md`(경로 **유지** — `notify-audit-report.yml`이
-    이 경로에 걸려 있다) + `.claude/audit/link-state.json`
-  - 개선 → `report/direction-YYYY-MM-DD.md` + `topic-history.json` · `topic-report.md` ·
-    `direction-log.json`
-
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
-
-`scripts/test_housekeeping.py`에 최소 넷을 담는다. **리포트 산문이 아니라 판정과 편집을
-검증한다.**
-
-1. 확정 사망 내부 링크 → 대상 없으면 `[기준금리](/x/)` → `기준금리` (앵커 텍스트 보존)
-2. `related_articles` 항목 제거 후 목록이 비면 **키 자체가 사라진다**(빈 리스트 금지)
-3. `source_url`은 죽어도 **바뀌지 않는다**
-4. 백필 적용이 문서당 3건·전체 20건에서 멈춘다
-
-- [ ] **Step 2: `scripts/housekeeping.py`를 쓴다**
-
-한 함수가 한 축이다. 전부 기존 lib 호출 + 문자열 조립이며 새 판정 로직을 만들지 않는다.
-
-```
-run_links()      → ① + 백필      (linkcheck.py, backfill.py, internal_links.py)
-run_indexation() → ③ I1–I7       (indexation.py, fetch_gsc.py 스냅샷)
-run_scan()       → ④ E/Q (Q3 제외) (quality.py, contracts.py, corpus.py)
-run_numerics()   → ⑥ N1–N5       (numerics.py)
-render_report()  → report/audit-YYYY-MM-DD.md
-apply_edits()    → 확정 사망 + 백필만
-```
-
-- 날짜는 **반드시** `kstdate.py`에서 받는다. `date.today()`를 쓰지 않는다.
-- 어떤 헬퍼든 exit != 0 이면 그 결과를 해석하지 말고 리포트 최상단 '계약 위반 및 시스템
-  에러' 섹션에 원문을 싣는다(I5 에러 가드). **`측정 불가`를 `통과`로 접지 않는다.**
-- Hugo 부트스트랩 실패 시 ④E1·E4·③I1은 `측정 불가`다.
-
-- [ ] **Step 3: 테스트를 통과시킨다**
-
-```bash
-.venv/bin/python scripts/test_housekeeping.py
-for f in scripts/test_*.py; do echo "== $f"; .venv/bin/python "$f" || break; done
-for f in .claude/audit/lib/test_*.py; do echo "== $f"; .venv/bin/python "$f" || break; done
-```
-
-기대: 전부 OK. **`lib/` 테스트가 하나도 바뀌지 않아야 한다** — 판정을 안 건드렸다는 증거다.
-
-- [ ] **Step 4: 지난주 리포트와 대조한다 (회귀의 핵심)**
-
-```bash
-.venv/bin/python scripts/housekeeping.py --dry-run > /tmp/hk.md
-diff <(grep -oE "(E[0-9]|I[0-9]|N[0-9]|Q[0-9]) [^|]*\| *[가-힣]+" report/audit-2026-08-08.md | sort) \
-     <(grep -oE "(E[0-9]|I[0-9]|N[0-9]|Q[0-9]) [^|]*\| *[가-힣]+" /tmp/hk.md | sort)
-```
-
-기대: **판정 토큰(통과/관찰/소견/측정 불가)이 축별로 일치한다.** 산문은 달라도 되지만
-판정이 달라지면 배선 중에 로직이 새로 들어간 것이다 — 멈추고 원인을 찾는다.
-
-- [ ] **Step 5: 워크플로를 만든다**
-
-`.github/workflows/weekly-housekeeping.yml` — `workflow_dispatch`만 둔다(**`schedule:`을
-넣지 않는다**, cron-job.org가 건다). `weekly-collect.yml`보다 **뒤**에 걸어 그 주 스냅샷을
-읽게 한다.
-
-- 리포트·원장은 `main` 직행, `content/` 수정이 있을 때만 `auto/audit-YYYY-MM-DD` 브랜치 +
-  PR(2026-08-01 결정 유지).
-- `notify-audit-report.yml`이 그대로 물린다 — 리포트 경로를 바꾸지 않았으므로.
-- 커밋 메시지 §9-1 블록 형식을 **그대로** 낸다. 깨지면 알림이 "요약 정보 없음"이 된다.
-
-- [ ] **Step 6: 개선 명령을 분리한다**
-
-`.claude/commands/weekly-audit.md`를 `audit-improvement.md`로 옮기고 ②·⑤·Q3만 남긴다.
-
-- **수동 전용**이다. 무인 모드 분기를 지운다.
-- ②의 데이터 충분성 게이트는 그대로. 미달이면 여전히 침묵한다.
-- ⑤는 `published_count`·`site_age`를 이제 `housekeeping.py --json`에서 받는다.
-- ⑥의 `n1_count`·`claims_total`·`claims_per_post` 세 값도 같은 경로로 받는다.
-
-- [ ] **Step 7: 교차 참조와 계약을 확인한다**
-
-```bash
-.venv/bin/python .claude/audit/lib/contracts.py
-grep -rn "weekly-audit" .claude/ .github/ AGENTS.md
-rm -rf public && hugo --gc --minify
-```
-
-기대: `contracts.py`가 `[]` · `weekly-audit`를 가리키는 죽은 참조가 없다 · 빌드 성공 ·
-`Non-page files` 1.
-
-- [ ] **Step 8: `AGENTS.md`를 갱신한다**
-
-`/weekly-audit` 절을 두 절로 가르고, 산출물 목록을 명령별로 나누고, 자동화 평면 표에
-`weekly-housekeeping.yml` 행을 넣는다. **로드맵의 Agent3 여섯 축 문장은 그대로 둔다** —
-축은 그대로이고 실행 주체만 갈렸다.
-
-- [ ] **Step 9: 커밋**
-
-```bash
-git add scripts/housekeeping.py scripts/test_housekeeping.py \
-        .github/workflows/weekly-housekeeping.yml \
-        .claude/commands/audit-improvement.md .claude/audit/system-scan.md AGENTS.md
-git commit -m "audit: 유지보수(무인·LLM 없음)와 개선(수동·LLM)을 두 명령으로 분리"
-```
-
-- [ ] **Step 10: 다음 일요일 실행을 확인한다 (사람)**
-
-리포트가 `main`에 올라오고 텔레그램 요약이 예전 형식 그대로인지 본다. 판정이 지난주와
-크게 다르면 Step 4의 대조를 다시 돌린다.
-
----
-
 ## 자기 검토 (계획 작성자가 이미 돌린 것)
 
 **1. 스펙 커버리지.** 원래 PLAN.md의 다섯 단계 중:
@@ -1932,7 +1953,9 @@ git commit -m "audit: 유지보수(무인·LLM 없음)와 개선(수동·LLM)을
   제목 길이는 Task 4에 흡수했다(같은 두 파일의 같은 줄을 건드려 태스크를 나누면 충돌한다).
 - 3단계(H2 구조) → Task 4. 소급 수정 없음으로 확정.
 - 4단계(주제 집중) → Task 5. 금리·물가·부동산·반도체로 확정.
-- 5단계(소견 소비) 세 항목 → 자동 수정과 판단 소견 분리는 Task 7, I6 확대는 Task 6.
+- 5단계(소견 소비) 세 항목 → 자동 수정과 판단 소견 분리는 Task 8, I6 확대는 Task 6.
+  감사를 유지보수/개선 두 명령으로 가르는 Task 7은 2026-08-11에 추가했다 — Task 8보다
+  **먼저** 한다(Q1 제안값이 LLM 산출물이라 무인 유지보수에 들어갈 수 없다).
 
 **2. 남은 결정.** 없다. 3·4단계의 "합의 필요" 두 건은 2026-08-10에 확정했고 해당 태스크
 본문에 근거와 대가를 함께 적었다.
@@ -1949,7 +1972,9 @@ Task 3의 front matter 키는 `q`·`a` 소문자로 `related_articles`의 `title
 - `faq` front matter ↔ `faq.html`(화면) ↔ `extend_head.html`(JSON-LD) — Task 3.
   한쪽만 고치면 보이지 않는 구조화 데이터가 되어 정책 위반이 된다.
 - `topics.yaml`의 `focus` ↔ `rank.md` 가점 — Task 5. Step 4가 `load_vocab` 회귀를 잡는다.
-- §9-1 여덟째 줄 ↔ `SUMMARY_KEYS` — Task 7. Step 1의 테스트가 그것 하나를 본다.
+- §9-1 여덟째 줄 ↔ `SUMMARY_KEYS` — Task 8. Step 1의 테스트가 그것 하나를 본다.
+  (Task 7 뒤에는 이 계약이 `audit-improvement.md` 쪽에만 걸린다 — 유지보수는 알림을
+  보내지 않으므로 요약 파서를 타지 않는다.)
 
 ---
 
