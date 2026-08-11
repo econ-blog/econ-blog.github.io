@@ -3,7 +3,7 @@ title: "\"150조 풀까\"…삼전닉스 주주환원에 코스피 반등 열쇠
 date: 2026-08-10T05:18:00+09:00
 description: "코스피가 7주 연속 하락한 가운데, 삼성전자·SK하이닉스의 주주환원 규모가 증시 반등의 최대 변수로 떠올랐습니다."
 tags: ["증시", "반도체", "기업실적"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026080928621"
 related_articles:
   - title: "상반기 250조 벌었다…삼성전자·SK하이닉스 '대규모 주주환원' 기대감↑"
