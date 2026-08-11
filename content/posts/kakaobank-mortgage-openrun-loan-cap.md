@@ -3,7 +3,7 @@ title: "새벽 5시 대출 오픈런…카카오뱅크마저 총량규제 벽에
 date: 2026-08-09T05:17:07+09:00
 description: "시중은행이 대출을 조이자 자금이 카카오뱅크로 몰려 새벽부터 대출 신청 경쟁이 벌어지고 있습니다. 마지막 숨통까지 막히면 어떤 일이 벌어질지 짚어봅니다."
 tags: ["부동산", "금리"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026080713441"
 related_articles:
   - title: "카카오·토스뱅크 한도 줄이고 케이뱅크는 중단...인터넷은행 신용대출 빗장"
