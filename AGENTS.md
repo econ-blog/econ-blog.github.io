@@ -132,10 +132,10 @@ Claude Code는 `.claude/commands/` **하위 디렉터리까지** 모든 `.md`를
 
 ## 콘텐츠 모델
 
-- `content/posts/` — 포스트 1건 = 파일 1개. front matter: `title`·`date`·`tags`·`draft`·`source_url`(원문 URL 축자), 선택 `related_articles`(`{title, url, source}` 목록).
+- `content/posts/` — 포스트 1건 = 파일 1개. front matter: `title`·`date`·`tags`·`draft`·`source_url`(원문 URL 축자), 선택 `faq`(`{q, a}` 목록)·`related_articles`(`{title, url, source}` 목록).
   - **파일명은 날짜 접두어 없는 슬러그다**(`tsmc-foundry-price-hike-10-percent.md`). 발행 순서가 필요하면 front matter `date`를 파싱한다 — 파일명·경로 정렬은 알파벳 정렬이다.
   - `related_articles`는 오래된 순, 같은 날 기사 제외, 배경 기사 우선. 살아남는 항목이 없으면 **키를 통째로 생략**한다 — 빈 리스트를 남기지 않는다.
-  - 푸터 순서는 `layouts/partials/extend_post_content.html`: 내부 관련글 → 외부 `related_articles` → 출처 링크 → 면책. 내부가 먼저인 것은 체류시간이 pre-AdSense 유일 신호이기 때문이다. 외부 링크는 `rel="nofollow"`.
+  - 푸터 순서는 `layouts/partials/extend_post_content.html`: FAQ → 내부 관련글 → 외부 `related_articles` → 출처 링크 → 면책. FAQ가 맨 앞인 것은 본문의 연장이기 때문이고, 내부 관련글이 외부보다 먼저인 것은 체류시간이 pre-AdSense 유일 신호이기 때문이다. 외부 링크는 `rel="nofollow"`.
 - `content/dictionary/` — 용어 1건 = 파일 1개, `tags: ["용어사전"]`.
 - `content/dictionary/_terms.yaml` — **Hugo 페이지가 아니다**(`_` 시작 파일을 건너뛴다. "Non-page files"로 집계된다). slug → `{title, aliases}`이며 위키링크 매칭의 단일 진리원이다. `draft.md`와 `rank.md`가 사전 디렉터리를 스캔하는 대신 이 파일을 읽는다. **항목을 추가할 때 여기에도 append한다.** `aliases`는 다른 글이 실제로 쓸 동의어이며 문법적 활용형이 아니다.
 - 위키링크는 평범한 Hugo/Goldmark 상대 링크(`[기준금리](/dictionary/base-rate/)`)다. **`[[...]]`를 쓰지 않는다** — shortcode가 없고 추가하지 않기로 한 결정이다.
