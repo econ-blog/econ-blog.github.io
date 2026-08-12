@@ -6,14 +6,24 @@ import time
 import base64
 import requests
 
+from datetime import datetime, timedelta, timezone
+
 from telegram_notify import extract_verdict_token
 
 APPROVED_SET = {"승인", "발행", "게시", "ok", "okay", "go"}
 REJECTED_SET = {"반려", "보류", "취소", "폐기", "no"}
 
 # 토큰 없는 답장은 대기 PR이 **2건**부터 매칭에 실패한다(MULTIPLE_PRS_NEED_TOKEN).
-# 경보를 3건에 두면 이미 하루치 판정을 날린 뒤에 울린다.
 BACKLOG_ALERT_THRESHOLD = 2
+
+# 답장이 실제로 처리되기까지 얼마나 걸리는지 사람에게 알려 주는 문장.
+# 이 루프는 웹훅이 아니라 폴링이다 — 답장 직후에 아무 일도 일어나지 않는 것이
+# 정상인데, 그걸 모르면 "인식되지 않았다"고 읽고 같은 답장을 다시 보낸다.
+POLL_NOTE = "판정은 하루 한 번 새벽 정기 실행에서 처리됩니다 — 보낸 직후 조용한 것은 정상입니다."
+
+# 스냅샷·재질의 판정은 언제나 KST 기준이다. 워크플로가 UTC 16시대에 도는데
+# UTC 날짜를 쓰면 하루가 어긋난다.
+KST = timezone(timedelta(hours=9))
 
 # 병합 방식 우선순위. 저장소가 squash를 막아 두면 405가 영구로 돌아오므로 다음 방식으로 내린다.
 MERGE_METHODS = ("squash", "merge")
@@ -23,6 +33,13 @@ MERGEABLE_POLL_ATTEMPTS = 8
 MERGEABLE_POLL_DELAY = 3
 MERGE_RETRY_ATTEMPTS = 3
 MERGE_RETRY_DELAY = 3
+
+def log(msg: str):
+    """실행 로그. 이 스크립트는 오랫동안 아무것도 출력하지 않았고, 그래서
+    '판정이 왜 처리되지 않았나'를 Actions 로그만으로는 답할 수 없었다 —
+    성공한 회차와 업데이트가 0건이던 회차가 로그상 구분되지 않았다."""
+    print(msg, flush=True)
+
 
 def parse_verdict(text: str) -> str:
     cleaned = re.sub(r'#([paPA])\d{4}', '', text).strip().lower()
@@ -48,6 +65,54 @@ def pending_pr_lines(open_prs: list) -> str:
         kind = "포스트" if ref.startswith("auto/post-") else "감사"
         lines.append(f"{pr_token(pr)} — {kind} PR #{pr['number']} ({ref})")
     return "\n".join(lines)
+
+
+def pr_created_at(pr: dict):
+    """PR 생성 시각(UTC). 읽을 수 없으면 None."""
+    raw = (pr.get("created_at") or "").strip()
+    try:
+        return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def overdue_prs(open_prs: list, now=None) -> list:
+    """어제(KST) 이전에 만들어졌는데 새벽 회차가 끝난 뒤에도 열려 있는 PR.
+
+    설계상 하루가 한 방향으로 흐르므로(글 PR 05:00 생성 → 사람 답장 → 다음 새벽
+    회차가 병합) 그 회차 직후에도 어제 PR이 열려 있으면 정상 상태가 아니다.
+    답장이 없었거나 텔레그램 큐에서 유실됐거나인데, 시스템은 둘을 구분할 수 없다 —
+    유실된 경우 사람은 답했다고 기억하므로 먼저 물어보지 않으면 아무도 말을
+    꺼내지 않는다. 그래서 구분하지 않고 그냥 다시 묻는다.
+
+    **나이(N시간)가 아니라 KST 날짜 경계로 가른다.** 재질의는 새벽 01:3x에 도는데
+    어제 05:00에 만들어진 PR은 그 시점에 20시간대다 — "24시간 경과" 규칙을 쓰면
+    정작 물어야 할 그 PR이 걸러져 하루 더 밀린다. 반대로 날짜 경계는 오늘 05:00
+    루틴이 만든 PR을 같은 날 어떤 시각에 돌려도 건드리지 않는다(수동 실행 포함).
+    """
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(KST).date()
+    out = []
+    for pr in open_prs:
+        created = pr_created_at(pr)
+        # 생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다.
+        if created is None or created.astimezone(KST).date() < today:
+            out.append(pr)
+    return out
+
+
+def reask_message(prs: list) -> str:
+    """미결 판정 재질의문. 토큰을 반드시 싣는다 — 형식만 알려 주고 목록을 빼면
+    어느 토큰을 써야 하는지 알 수 없어 왕복이 하루씩 늘어난다."""
+    if len(prs) == 1:
+        how = "승인 또는 반려 로 답장하세요."
+    else:
+        how = ("2건 이상이라 토큰이 필요합니다.\n"
+               f"예: 승인 {pr_token(prs[0])} / 반려 {pr_token(prs[0])}")
+    return ("⚠️ 하루가 지나도 판정되지 않은 PR이 있습니다. "
+            "앞서 답장을 보내셨다면 전달되지 못하고 유실된 것입니다 — 다시 보내주세요.\n\n"
+            f"{pending_pr_lines(prs)}\n\n"
+            f"{how}\n\n{POLL_NOTE}")
 
 
 def match_target_pr(update: dict, open_prs: list) -> tuple:
@@ -277,17 +342,23 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
     up_chat_id = msg_obj.get("chat", {}).get("id")
 
     # C1: Strict Chat ID validation
+    # 조용히 버리되 로그에는 남긴다 — 설정된 chat_id가 틀리면 모든 답장이
+    # 아무 반응 없이 사라지고, 로그가 없으면 그 사실을 알 방법이 없다.
     if str(up_chat_id) != str(chat_id):
+        log(f"  update {up.get('update_id')}: chat_id 불일치 — 무시")
         return open_prs
 
     msg_text = msg_obj.get("text", "")
 
     verdict = parse_verdict(msg_text)
+    log(f"  update {up.get('update_id')}: text={msg_text[:40]!r} verdict={verdict}")
     if verdict == "AMBIGUOUS":
         send_telegram(bot_token, chat_id, f"판정불가: '{msg_text[:40]}' — 승인 또는 반려 로 재답장하세요.")
         return open_prs
 
     target_pr, match_status = match_target_pr(up, open_prs)
+    log(f"  update {up.get('update_id')}: match={match_status} "
+        f"pr={target_pr['number'] if target_pr else None}")
     if not target_pr:
         if match_status == "NO_OPEN_PRS":
             send_telegram(bot_token, chat_id, "대기 중인 PR이 없습니다.")
@@ -301,7 +372,8 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
             send_telegram(bot_token, chat_id,
                           f"대기 중인 PR이 {len(open_prs)}건입니다. 아래 토큰 중 하나를 붙여 다시 보내세요.\n\n"
                           f"{pending_pr_lines(open_prs)}\n\n"
-                          f"예: 승인 {pr_token(open_prs[0])} / 반려 {pr_token(open_prs[0])}")
+                          f"예: 승인 {pr_token(open_prs[0])} / 반려 {pr_token(open_prs[0])}\n\n"
+                          f"{POLL_NOTE}")
         return open_prs
 
     is_post = target_pr["head"]["ref"].startswith("auto/post-")
@@ -345,18 +417,24 @@ def main():
     
     # Check open PRs
     open_prs = get_open_prs(repo, pat)
-    if len(open_prs) >= BACKLOG_ALERT_THRESHOLD:
-        send_telegram(bot_token, chat_id,
-                      f"⚠️ 대기 중인 PR이 {len(open_prs)}건 적체되어 있습니다. "
-                      "이제부터는 토큰 없는 답장이 처리되지 않습니다.\n\n"
-                      f"{pending_pr_lines(open_prs)}")
-        
+    log(f"open auto/* PRs: {len(open_prs)} → {[p['number'] for p in open_prs]}")
+
+    # 재질의 전용 모드 — 텔레그램 큐를 읽지 않는다. 오프셋을 소비하지 않으므로
+    # 아침 재질의가 새벽 회차의 판정을 가로채는 일이 없다.
+    if "--reask" in sys.argv:
+        due = overdue_prs(open_prs)
+        log(f"재질의 대상: {len(due)} → {[p['number'] for p in due]}")
+        if due:
+            send_telegram(bot_token, chat_id, reask_message(due))
+        return
+
     # Poll Telegram updates (timeout 10)
     try:
         updates_url = f"https://api.telegram.org/bot{bot_token}/getUpdates?offset={offset_val}&allowed_updates=[\"message\"]"
         u_resp = requests.get(updates_url, timeout=10)
         u_resp.raise_for_status()
         updates = u_resp.json().get("result", [])
+        log(f"getUpdates offset={offset_val} → {len(updates)}건")
     except Exception as e:
         err_msg = str(e)
         if bot_token:
@@ -382,7 +460,10 @@ def main():
             last_offset = max(last_offset, up_id + 1)
     finally:
         if last_offset > offset_val:
+            log(f"offset {offset_val} → {last_offset}")
             update_telegram_offset(repo, pat, last_offset)
+        else:
+            log(f"offset 유지 {offset_val} (소비한 업데이트 없음)")
     if failed:
         sys.exit(1)
 
