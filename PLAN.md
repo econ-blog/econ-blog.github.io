@@ -1945,6 +1945,115 @@ git commit -m "audit: Q1 front matter 결함을 소견이 아니라 수정 PR로
 
 ---
 
+## Task 9: `_terms.yaml` 병합 충돌을 구조적으로 없앤다
+
+**2026-08-12에 실제로 터진 사고다.** PR #15(P0811)가 승인됐는데 병합되지 않고
+`❌ 판정 처리 중 오류 발생: PR #15 — 병합 불가 (mergeable_state=dirty)`만 반복됐다.
+
+원인은 스크립트가 아니다. `process_inbox.py`는 `mergeable=false`를 정상적으로 감지해 보고했고
+판정도 소비하지 않았다(:379). **해소 경로가 없었을 뿐이다.**
+
+진짜 원인은 `draft.md` §3이 새 용어를 `content/dictionary/_terms.yaml` **파일 끝에 append**한다는
+것이다. 포스트 PR 두 건이 각자 표제어를 추가하면 둘 다 같은 지점(파일 끝)을 고치므로, 그 사이에
+main이 전진하는 순간 git이 "changed in both"로 판정한다. #15는 base `9dacb8f`에서 열렸고
+#13·#14가 08-11T16:30에 병합되며 main이 `b385707`로 갔다 — 그 순간 #15가 dirty가 됐다.
+
+**`AGENTS.md`의 「글 PR이 둘 동시에 열려 있는 구간이 없다」는 이미 사실이 아니다.** 인박스가
+매일 도는 것을 전제한 문장인데, 사람이 며칠치 판정을 몰아서 답하면 #13·#14·#15처럼 셋이 함께
+열린다. 그 상태가 이 충돌의 필요조건이다.
+
+**설계 판단: 두 겹으로 막는다.** 하나만으로는 부족하다.
+
+1. **정렬 삽입(발생 확률을 낮춘다).** 표제어를 슬러그 사전순 위치에 넣으면 서로 다른 슬러그는
+   대개 다른 줄에 들어가 충돌하지 않는다. 인접 슬러그는 여전히 부딪히므로 이것만으로는 부족하다.
+2. **인박스 자동 해소(남은 것을 처리한다).** `mergeable_state=dirty`이고 충돌 파일이
+   `_terms.yaml` **하나뿐일 때만**, main을 브랜치에 병합해 양쪽 표제어를 모두 보존하고 다시 민 뒤
+   병합을 1회 재시도한다. 2026-08-12에 사람이 손으로 한 것과 같은 절차다.
+
+**`.gitattributes`의 `merge=union`은 쓰지 않는다.** git 내장 드라이버지만 GitHub 서버측 병합이
+이것을 존중하는지 문서로 보장되지 않고, 존중하더라도 같은 슬러그가 양쪽에 들어오면 중복 키를
+조용히 만든다. 우리 코드 안에서 검증 가능한 경로를 택한다.
+
+**범위 밖(하지 않는다).** `_terms.yaml`을 사전 파일 front matter에서 파생시키는 방식은 근본적이지만
+`aliases`가 사전 `.md`에 없어서 스키마 변경이 먼저다. 이 태스크에서 하지 않는다.
+
+**Files:**
+- Modify: `scripts/process_inbox.py` (dirty 자동 해소 경로)
+- Modify: `scripts/test_automation.py` (새 테스트)
+- Modify: `.claude/daily-post/draft.md` (§3 정렬 삽입 규칙)
+- Modify: `.claude/audit/lib/contracts.py` + `test_contracts.py` (중복 키 검사)
+- Modify: `AGENTS.md` (「글 PR이 둘 동시에」 문장 정정)
+
+**Interfaces:**
+- Consumes: `process_inbox.py`의 `wait_until_mergeable`(현행 유지), GitHub PR API의
+  `mergeable_state`.
+- Produces: 없음. 다른 태스크가 이 결과에 의존하지 않는다.
+
+- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
+
+`scripts/test_automation.py`에 넷을 담는다. **네트워크를 타지 않는다** — 병합 결과 문자열을
+만드는 순수 함수를 테스트한다.
+
+1. 서로 다른 표제어 두 건 → 양쪽 모두 살아남고 중복 0
+2. **같은 슬러그가 양쪽에 있으면 → 병합하지 않고 실패로 낸다**(사람이 봐야 한다)
+3. 충돌 파일이 `_terms.yaml` 외에 하나라도 더 있으면 → 자동 해소하지 않는다
+4. 해소 결과가 표제어 사이 빈 줄 규약을 지킨다
+
+- [ ] **Step 2: 중복 키 검사를 `contracts.py`에 넣는다**
+
+`check_terms_sync`는 slug ↔ 파일 대응만 본다. **같은 키가 두 번 나오는 경우를 보지 않는다** —
+자동 해소가 만들 수 있는 유일한 오염이므로 여기서 막는다. `test_contracts.py`에 테스트를 함께 낸다.
+
+- [ ] **Step 3: 인박스에 자동 해소 경로를 넣는다**
+
+`wait_until_mergeable`이 `BLOCKED (mergeable_state=dirty)`를 돌려줄 때만 탄다.
+
+```
+1. PR의 충돌 파일 목록을 얻는다
+2. `content/dictionary/_terms.yaml` 하나뿐이 아니면 → 종전대로 BLOCKED 보고하고 멈춘다
+3. 맞으면 main을 PR 브랜치에 병합하고 _terms.yaml 을 양쪽 보존으로 해소한다
+4. 중복 키가 생기면 되돌리고 BLOCKED 보고 (Step 2의 검사를 쓴다)
+5. push 하고 병합을 **1회만** 재시도한다
+```
+
+- **재시도는 1회다.** 무한 루프를 만들지 않는다.
+- **판정은 여전히 소비하지 않는다.** 실패하면 다음 회차가 다시 시도한다(:379 규약 유지).
+- 자동 해소를 했으면 텔레그램에 **한 줄로 알린다** — 사람이 모르는 사이에 콘텐츠 브랜치가
+  바뀌는 일이 없어야 한다.
+
+- [ ] **Step 4: `draft.md` §3을 정렬 삽입으로 바꾼다**
+
+"파일 끝에 append"를 "슬러그 사전순 위치에 삽입"으로 바꾼다. 기존 항목 순서를 재정렬하지
+**않는다** — 한 번에 전부 정렬하면 그 커밋 자체가 거대한 충돌이 된다. 새 항목만 제자리에 넣는다.
+
+- [ ] **Step 5: `AGENTS.md`의 사실과 다른 문장을 고친다**
+
+「하루는 한 방향으로 흐른다」 절의 "글 PR이 둘 동시에 열려 있는 구간이 없다"를 바꾼다 —
+사람이 며칠치를 몰아 답하면 여러 건이 함께 열리며, 그것이 정상 운영 범위임을 적는다.
+
+- [ ] **Step 6: 검증**
+
+```bash
+.venv/bin/python scripts/test_automation.py
+.venv/bin/python .claude/audit/lib/test_contracts.py
+.venv/bin/python .claude/audit/lib/contracts.py     # []
+for f in scripts/test_*.py; do .venv/bin/python "$f" || break; done
+```
+
+**회귀 재현**: `9dacb8f`(#15 base)와 `b385707`(당시 main)로 2026-08-12 충돌을 그대로 재현해
+자동 해소가 표제어 19개·중복 0·고아 0을 내는지 확인한다. 그 값이 사람이 손으로 낸 결과다.
+
+- [ ] **Step 7: 커밋**
+
+```bash
+git add scripts/process_inbox.py scripts/test_automation.py \
+        .claude/audit/lib/contracts.py .claude/audit/lib/test_contracts.py \
+        .claude/daily-post/draft.md AGENTS.md
+git commit -m "inbox: _terms.yaml 단독 충돌을 자동 해소하고 중복 키를 막는다"
+```
+
+---
+
 ## 자기 검토 (계획 작성자가 이미 돌린 것)
 
 **1. 스펙 커버리지.** 원래 PLAN.md의 다섯 단계 중:
