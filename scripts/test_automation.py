@@ -4,6 +4,7 @@ import sys
 import json
 import tempfile
 import unittest
+from datetime import timezone
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -333,26 +334,162 @@ class TestProcessInbox(unittest.TestCase):
         self.assertIn("#P0804", sent[0])
         self.assertIn("#P0805", sent[0])
 
-    def test_backlog_alert_fires_at_two(self):
-        """토큰 없는 답장은 2건부터 깨진다 — 경보가 3건이면 하루 늦다."""
+    def _run_main(self, open_prs, argv, updates=None):
+        """main()을 한 번 돌리고 텔레그램으로 나간 메시지를 돌려준다."""
         import process_inbox
         creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        sent = []
+        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r",
+               "TELEGRAM_OFFSET": "99"}
+
+        with patch.dict(os.environ, env), \
+             patch.object(sys, "argv", argv), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
+             patch.object(process_inbox.requests, "get",
+                          lambda url, **kw: FakeResponse(200, {"result": updates or []})), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+        return sent
+
+    def _pr(self, number, ref, age_hours):
+        from datetime import datetime, timedelta, timezone
+        created = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+        return {"number": number, "head": {"ref": ref},
+                "created_at": created.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+    def _pr_at(self, number, ref, kst_iso):
+        """KST 시각으로 PR을 만든다. created_at은 API와 같은 UTC 'Z' 형식."""
+        from datetime import datetime
+        import process_inbox
+        created = datetime.fromisoformat(kst_iso).replace(tzinfo=process_inbox.KST)
+        return {"number": number, "head": {"ref": ref},
+                "created_at": created.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+    def test_reask_catches_yesterday_pr_at_0135(self):
+        """재질의는 새벽 01:3x에 돈다. 어제 05:00 PR은 그 시점에 20.6시간이라
+        '24시간 경과' 규칙이면 걸러진다 — 정작 물어야 할 PR이 하루 밀린다.
+        KST 날짜 경계로 가르는 이유가 이것이다."""
+        from datetime import datetime
+        import process_inbox
+        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
+        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
+
+        self.assertEqual(
+            [p["number"] for p in process_inbox.overdue_prs([yesterday], now=now)], [8])
+
+    def test_reask_skips_pr_made_today(self):
+        """오늘 05:00 루틴이 만든 PR은 같은 날 어느 시각에 돌려도 건드리지
+        않는다 — 수동 실행 포함. 매일 오는 알림은 곧 읽히지 않는다."""
+        from datetime import datetime
+        import process_inbox
+        today_pr = self._pr_at(11, "auto/post-2026-08-08", "2026-08-08T05:20")
+        for hhmm in ("2026-08-08T05:30", "2026-08-08T13:54", "2026-08-08T23:59"):
+            now = datetime.fromisoformat(hhmm).replace(tzinfo=process_inbox.KST)
+            self.assertEqual(process_inbox.overdue_prs([today_pr], now=now), [],
+                             f"{hhmm} 에서 오늘 PR을 재질의했다")
+
+    def test_reask_uses_kst_not_utc_day(self):
+        """워크플로는 UTC 16시대에 돈다. UTC 날짜로 가르면 하루가 어긋난다."""
+        from datetime import datetime
+        import process_inbox
+        # KST 08-08 01:35 = UTC 08-07 16:35. UTC 날짜로는 아직 07일이라
+        # 08-07 05:00 PR이 '오늘'로 잡혀 걸러진다.
+        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
+        self.assertEqual(now.astimezone(timezone.utc).day, 7)
+        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
+        self.assertEqual(len(process_inbox.overdue_prs([yesterday], now=now)), 1)
+
+    def test_reask_includes_pr_with_unreadable_created_at(self):
+        """생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다."""
+        from process_inbox import overdue_prs
+        broken = {"number": 9, "head": {"ref": "auto/post-2026-08-05"}, "created_at": ""}
+        self.assertEqual([p["number"] for p in overdue_prs([broken])], [9])
+
+    def test_reask_mode_does_not_touch_telegram_queue(self):
+        """재질의는 오프셋을 소비하지 않는다. 소비하면 아침 실행이 새벽
+        회차가 읽어야 할 판정을 가로채 그대로 버린다."""
+        import process_inbox
+        stale = self._pr(8, "auto/post-2026-08-04", 30)
+        polled = []
+
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        sent = []
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r"}), \
+             patch.object(sys, "argv", ["process_inbox.py", "--reask"]), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [stale]), \
+             patch.object(process_inbox.requests, "get",
+                          lambda url, **kw: polled.append(url) or FakeResponse(200, {"result": []})), \
+             patch.object(process_inbox, "update_telegram_offset",
+                          lambda *a: self.fail("재질의가 오프셋을 썼다")), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+
+        self.assertEqual(polled, [])            # getUpdates 호출 없음
+        self.assertEqual(len(sent), 1)
+        self.assertIn("#P0804", sent[0])
+        self.assertIn("유실", sent[0])
+
+    def test_reask_silent_when_nothing_overdue(self):
+        """정상 운영에서는 아침에 아무 말도 하지 않는다."""
+        fresh = self._pr(11, "auto/post-2026-08-08", 3)
+        self.assertEqual(
+            self._run_main([fresh], ["process_inbox.py", "--reask"]), [])
+
+    def test_reask_demands_token_only_when_ambiguous(self):
+        """1건이면 토큰 없이 '승인'만으로 되는데 토큰을 요구하면 사람이
+        괜히 한 왕복을 더 쓴다."""
+        from process_inbox import reask_message
+        one = [self._pr(8, "auto/post-2026-08-04", 30)]
+        two = one + [self._pr(9, "auto/post-2026-08-05", 30)]
+        self.assertNotIn("토큰이 필요", reask_message(one))
+        self.assertIn("토큰이 필요", reask_message(two))
+        self.assertIn("#P0805", reask_message(two))
+
+    def test_token_reply_matches_while_backlogged(self):
+        """적체 경보를 보고 사람이 토큰을 붙여 답장한 그 경로.
+
+        2026-08-06~08에 "승인 #P0804"가 처리되지 않았던 것은 이 매칭이
+        틀려서가 아니라 폴링이 하루 한 번이라 텔레그램(24시간 보관)이 그
+        메시지를 먼저 지웠기 때문이다. 매칭 자체는 여기서 고정한다."""
+        import process_inbox
+        open_prs = [
+            {"number": 10, "head": {"ref": "auto/post-2026-08-06"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+        ]
+        up = {"message": {"chat": {"id": 1}, "text": "승인 #P0804"}}
+
+        self.assertEqual(process_inbox.parse_verdict("승인 #P0804"), "APPROVED")
+        pr, status = process_inbox.match_target_pr(up, open_prs)
+        self.assertEqual(status, "TOKEN_MATCH")
+        # 08-04는 목록의 첫 줄이 아니다 — 순서가 아니라 토큰으로 골라야 한다.
+        self.assertEqual(pr["number"], 8)
+
+    def test_guidance_messages_state_poll_cadence(self):
+        """이 루프는 웹훅이 아니라 폴링이다. 답장 직후 조용한 것이 정상인데
+        그걸 모르면 '인식되지 않았다'고 읽고 같은 답장을 다시 보낸다."""
+        import process_inbox
         open_prs = [
             {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
             {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
         ]
+        self.assertIn(process_inbox.POLL_NOTE, process_inbox.reask_message(open_prs))
+
         sent = []
+        up = {"message": {"chat": {"id": 1}, "text": "승인"}}
+        with patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.handle_update(up, open_prs, "o/r", "p", "tok", "1")
+        self.assertIn(process_inbox.POLL_NOTE, sent[0])
 
-        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
-
-        self.assertEqual(len(sent), 1)
-        self.assertIn("2건", sent[0])
-        self.assertIn("#P0804", sent[0])
-        self.assertIn("#P0805", sent[0])
+    def test_normal_run_sends_no_unsolicited_alert(self):
+        """새벽 회차는 판정만 처리한다. 적체 경보를 여기서 내면 01:30에
+        휴대폰이 울리고, 게다가 폴링 **전에** 나가던 옛 경보는 방금 승인된
+        PR까지 목록에 실어 '승인했는데 또 물어본다'가 됐다."""
+        open_prs = [
+            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
+            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
+        ]
+        self.assertEqual(self._run_main(open_prs, ["process_inbox.py"]), [])
 
     def test_merge_retries_transient_405(self):
         """커밋을 민 직후 GitHub의 mergeable은 null이고 PUT /merge는 405를 준다 — 재시도 대상이다."""
