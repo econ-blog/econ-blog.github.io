@@ -58,6 +58,10 @@ free-cash-flow:
   title: "잉여현금흐름"
   aliases: ["FCF", "잉여 현금흐름", "자유현금흐름"]
 
+fomc:
+  title: "연방공개시장위원회"
+  aliases: ["FOMC", "연방시장공개위원회"]
+
 
 
 
