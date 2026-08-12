@@ -63,7 +63,7 @@ baseURL이 어긋나면 색인이 원천 차단되고, 미제출은 대기해도
 | I3 baseURL 3자 정합 | `check_baseurl(hugo_toml, git_remote, gsc_site_url)` | **예** |
 | I4 sitemap 제출 상태 | `sitemap_submission(payload["sitemaps"])` | **예**(미제출 시) |
 | I5 noindex 유출 | `check_noindex(public_root)` | 아니오 |
-| I6 색인 커버리지 표본 | `fetch_gsc.py --inspect <url…>` (최대 5건) | 아니오 |
+| I6 색인 커버리지 | `fetch_gsc.py --inspect <url…>` (전수, 상한 60건) | 아니오 |
 | I7 GSC 속성 유형 | `check_property_type(gsc_site_url, hugo_host)` | 아니오 |
 
 **I1은 `<loc>` 태그 개수를 센다.** Hugo가 sitemap XML을 한 줄로 minify하므로 줄 수를 세면
@@ -73,8 +73,10 @@ baseURL이 어긋나면 색인이 원천 차단되고, 미제출은 대기해도
 아예 없다(2026-07-26 실측: 제출 후 7일, `isPending: true`). **없는 것을 실패로 보고하지
 않는다** — 제출은 됐다. `isPending`과 `errors`를 그대로 옮긴다.
 
-**I6은 표본이다.** 일일 할당량 때문에 발행글 중 최대 5건만 조회한다(Known limits #8 —
-색인 안 된 글이 표본 밖이면 놓친다). 표본은 **최신 발행글 우선**으로 고른다.
+**I6은 2026-08-10부터 전수다.** 발행 URL 전부와 진입점 세 개(홈·`/posts/`·`/dictionary/`)를
+조회한다. 쿼터는 속성당 하루 2,000회라 여유가 크고, 상한 60건은 발행글이 크게 늘었을 때를
+위한 보호선이다. 상한에 걸리면 응답의 `truncated`가 `true`가 되며, 그때는 **조용히 표본으로
+퇴화한 것이므로** 리포트에 그 사실을 적는다.
 
 ## 4. I3의 `git_remote` 얻는 법
 
@@ -85,28 +87,23 @@ git remote get-url origin
 읽기 전용이다. `gsc_site_url`은 §1의 `payload["site_url"]`을 쓴다. **GSC를 조회하지
 못했으면 `None`을 넘긴다** — `check_baseurl`이 2자만 비교하고 그 사실을 리포트에 적는다.
 
-## 5. I6 표본 선택과 조회
+## 5. I6 전수 목록과 조회
 
-**표본 선택은 `scripts/select_inspect_urls.py`가 유일한 주체다.** 여기에 목록을
-직접 만들지 않는다 — 이 절과 스크립트가 각자 표본을 정하던 동안 둘이 어긋났고,
-수집 워크플로(당시 `analytics.yml`, 현 `weekly-collect.yml`)가 스크립트 쪽을 쓰는
-바람에 **홈페이지가 한 번도 조회되지 않았다.**
-그래서 2026-08-01까지 홈페이지가 이미 색인돼 있다는 사실(`Submitted and indexed`,
-크롤 2026-07-19)을 13일간 놓쳤다.
-
-```
-.venv/bin/python scripts/select_inspect_urls.py content/posts
+.venv/bin/python scripts/select_inspect_urls.py --all content
 ```
 
-돌려주는 5건은 **최신순 상위 5건이 아니다.** 크롤이 멈춘 지점을 찾는 혼합 표본이다:
+돌려주는 목록의 **순서가 우선순위다**(상한에 걸리면 앞이 살아남는다):
 
 | 자리 | 무엇 | 무엇에 답하나 |
 |---|---|---|
 | 1 | 홈페이지 | 크롤 진입점이 살아 있는가. 여기가 죽으면 나머지는 볼 필요도 없다 |
-| 2–3 | 최신 2건 | 새 글이 수집되고 있는가 |
-| 4–5 | 최고령 2건 | 시간이 지나면 색인되기는 하는가 |
+| 2–3 | `/posts/` · `/dictionary/` 목록 | 여기가 수집되면 개별 글로 퍼진다 |
+| 4– | 발행 글·사전 항목 전부, 오래된 순 | 어느 URL이 아직 색인 안 됐는가 |
 
-발행글이 적으면 최신과 최고령이 겹쳐 표본이 줄어든다 — 정상이다.
+**목록 생성은 `scripts/select_inspect_urls.py`가 유일한 주체다.** 여기에 목록을 직접 만들지
+않는다 — 이 절과 스크립트가 각자 목록을 정하던 동안 둘이 어긋났고, 수집 워크플로가 스크립트
+쪽을 쓰는 바람에 홈페이지가 한 번도 조회되지 않아 2026-08-01까지 13일간 홈이 이미 색인돼
+있다는 사실을 놓쳤다.
 
 이 URL 목록을 `scripts/fetch_gsc.py --inspect <url1> <url2> ...` 에 넘긴다.
 표본 해석은 **자리별로** 한다: 홈페이지가 `PASS`인데 나머지가 전부
@@ -172,6 +169,15 @@ git remote get-url origin
 
 **即시 소견(I3·I4)은 단계와 무관하게 위 소견 형식으로 낸다.** 단계가 "정상"이어도
 낸다 — 그 경우 한 줄 대신 소견 섹션이 나온다.
+
+### 색인 요청 대상 (사람이 GSC·네이버에 넣을 목록)
+
+`verdict`가 `PASS`가 아닌 URL을 **그대로** 나열한다. 상한 20건, 초과분은 "외 N건".
+`coverage_state` 문자열을 번역하거나 요약하지 않는다 — Search Console UI와 같아야 사람이
+대조할 수 있다. 전부 색인돼 있으면 `- 없음` 한 줄로 끝낸다.
+
+| URL | coverage_state | 마지막 크롤 |
+|---|---|---|
 
 자격증명·서비스 계정 이메일을 리포트에 쓰지 않는다. `permission_level` 같은 필드는
 판정에만 쓰고 옮기지 않는다(AC #41).

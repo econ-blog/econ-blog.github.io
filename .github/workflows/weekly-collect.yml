@@ -55,7 +55,7 @@ jobs:
           python scripts/fetch_gsc.py --json --days 28 --dimensions page > snapshot_output/gsc_page_28d.json
           python scripts/fetch_gsc.py --json --sitemaps > snapshot_output/gsc_sitemaps.json
 
-          INSPECT_URLS=$(python scripts/select_inspect_urls.py content/posts)
+          INSPECT_URLS=$(python scripts/select_inspect_urls.py --all content)
           if [ -n "$INSPECT_URLS" ]; then
             python scripts/fetch_gsc.py --json --inspect $INSPECT_URLS > snapshot_output/gsc_inspect.json
           fi

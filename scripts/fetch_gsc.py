@@ -21,14 +21,17 @@ SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 DEFAULT_DAYS = 90
 # ②는 page 차원 합계로 n_g·m_g를 만든다 — 절삭되면 조용히 틀린 수치가 나온다.
 DEFAULT_LIMIT = 200
-INSPECT_CAP = 5
+# URL Inspection API 쿼터는 속성당 하루 2,000회 · 분당 600회다. 주 1회 40건 남짓이면
+# 여유가 크지만 상한은 남긴다 — 발행글이 수백 건이 되는 날 조용히 절삭되는 대신
+# `truncated: true`로 드러나게 하기 위해서다. (2026-08-10, I6 표본 → 전수 전환)
+DEFAULT_INSPECT_CAP = 60
 
 
 def parse_args(argv):
-    """[--json] [--days N] [--limit N] [--dimensions a,b] [--sitemaps] [--inspect url…]"""
+    """[--json] [--days N] [--limit N] [--dimensions a,b] [--sitemaps] [--inspect-cap N] [--inspect url…]"""
     opts = {"json": False, "days": DEFAULT_DAYS, "limit": DEFAULT_LIMIT,
             "dimensions": ["query", "page"], "explicit_dimensions": False,
-            "sitemaps": False, "inspect": [], "unknown": []}
+            "sitemaps": False, "inspect_cap": DEFAULT_INSPECT_CAP, "inspect": [], "unknown": []}
     i = 0
     while i < len(argv):
         token = argv[i]
@@ -48,6 +51,9 @@ def parse_args(argv):
         elif token == "--sitemaps":
             opts["sitemaps"] = True
             i += 1
+        elif token == "--inspect-cap" and i + 1 < len(argv):
+            opts["inspect_cap"] = max(1, int(argv[i + 1]))
+            i += 2
         elif token == "--inspect":
             i += 1
             while i < len(argv) and not argv[i].startswith("--"):
@@ -81,11 +87,11 @@ def fetch_sitemaps(site_url):
     } for s in response.get("sitemap", [])]
 
 
-def inspect_urls(site_url, urls):
-    """AC #28 I6 — 일일 할당량 때문에 최대 INSPECT_CAP건만. coverageState는 가공하지 않는다."""
+def inspect_urls(site_url, urls, cap=DEFAULT_INSPECT_CAP):
+    """I6 — coverageState는 가공하지 않는다. 상한은 쿼터 보호용이며 표본 설계가 아니다."""
     service = get_search_console_service()
     out = []
-    for url in urls[:INSPECT_CAP]:
+    for url in urls[:cap]:
         body = {"inspectionUrl": url, "siteUrl": site_url}
         result = service.urlInspection().index().inspect(body=body).execute()
         status = result.get("inspectionResult", {}).get("indexStatusResult", {})
@@ -203,8 +209,9 @@ def main():
             if opts["sitemaps"]:
                 payload["sitemaps"] = fetch_sitemaps(site_url)
             if opts["inspect"]:
-                payload["inspections"] = inspect_urls(site_url, opts["inspect"])
-                if len(opts["inspect"]) > INSPECT_CAP:
+                payload["inspections"] = inspect_urls(site_url, opts["inspect"],
+                                                      cap=opts["inspect_cap"])
+                if len(opts["inspect"]) > opts["inspect_cap"]:
                     payload["truncated"] = True
             print(json.dumps(payload, ensure_ascii=False, indent=2))
             return

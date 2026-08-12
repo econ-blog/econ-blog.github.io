@@ -486,5 +486,76 @@ class TestAutomationAlert(unittest.TestCase):
         self.assertIn("https://example.com/run/1", args[2])
 
 
+class TestSelectAllUrls(unittest.TestCase):
+    """I6 전수 목록. 표본이 아니라 '아직 색인 안 된 URL'의 완전한 목록을 만든다."""
+
+    def _fixture(self):
+        root = tempfile.mkdtemp()
+        posts = os.path.join(root, "posts")
+        dicts = os.path.join(root, "dictionary")
+        os.makedirs(posts)
+        os.makedirs(dicts)
+
+        def w(path, name, date, draft):
+            with open(os.path.join(path, name), "w", encoding="utf-8") as f:
+                f.write(f'---\ntitle: "t"\ndate: {date}\ndraft: {str(draft).lower()}\n---\n본문\n')
+
+        w(posts, "old-post.md", "2026-07-01T09:00:00+09:00", False)
+        w(posts, "new-post.md", "2026-08-01T09:00:00+09:00", False)
+        w(posts, "hidden-post.md", "2026-08-02T09:00:00+09:00", True)
+        w(posts, "welcome.md", "2026-06-01T09:00:00+09:00", False)
+        w(dicts, "base-rate.md", "2026-07-15T09:00:00+09:00", False)
+        w(dicts, "_index.md", "2026-07-01T09:00:00+09:00", False)
+        return root
+
+    def test_includes_entry_points_first(self):
+        from select_inspect_urls import select_all_urls
+        urls = select_all_urls(self._fixture(), base_url="https://example.com")
+        self.assertEqual(urls[:3], [
+            "https://example.com/",
+            "https://example.com/posts/",
+            "https://example.com/dictionary/",
+        ])
+
+    def test_covers_posts_and_dictionary(self):
+        from select_inspect_urls import select_all_urls
+        urls = select_all_urls(self._fixture(), base_url="https://example.com")
+        self.assertIn("https://example.com/posts/old-post/", urls)
+        self.assertIn("https://example.com/posts/new-post/", urls)
+        self.assertIn("https://example.com/dictionary/base-rate/", urls)
+
+    def test_excludes_draft_welcome_and_underscore(self):
+        from select_inspect_urls import select_all_urls
+        urls = select_all_urls(self._fixture(), base_url="https://example.com")
+        self.assertNotIn("https://example.com/posts/hidden-post/", urls)
+        self.assertNotIn("https://example.com/posts/welcome/", urls)
+        self.assertNotIn("https://example.com/dictionary/_index/", urls)
+
+    def test_oldest_first_after_entry_points(self):
+        from select_inspect_urls import select_all_urls
+        urls = select_all_urls(self._fixture(), base_url="https://example.com")
+        body = urls[3:]
+        self.assertEqual(body[0], "https://example.com/posts/old-post/")
+        self.assertEqual(body[-1], "https://example.com/posts/new-post/")
+
+    def test_sample_mode_unchanged(self):
+        """전수 모드를 더해도 기존 표본 함수는 그대로여야 한다."""
+        from select_inspect_urls import select_top_published_urls
+        urls = select_top_published_urls(
+            os.path.join(self._fixture(), "posts"), base_url="https://example.com")
+        self.assertEqual(urls[0], "https://example.com/")
+        self.assertLessEqual(len(urls), 5)
+
+
+class TestInspectCap(unittest.TestCase):
+    def test_cap_default_and_override(self):
+        import fetch_gsc
+        self.assertEqual(fetch_gsc.DEFAULT_INSPECT_CAP, 60)
+        opts = fetch_gsc.parse_args(["--json", "--inspect-cap", "3",
+                                     "--inspect", "https://a/", "https://b/"])
+        self.assertEqual(opts["inspect_cap"], 3)
+        self.assertEqual(opts["inspect"], ["https://a/", "https://b/"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -46,7 +46,7 @@ https://econ-blog.github.io/dictionary/
 그다음 개별 포스트. 현재 발행 목록은 이 명령으로 얻는다(추측하지 않는다):
 
 ```bash
-.venv/bin/python scripts/select_inspect_urls.py content/posts
+.venv/bin/python scripts/select_inspect_urls.py --all content
 ```
 
 전체 목록이 필요하면 사이트맵을 읽는다:

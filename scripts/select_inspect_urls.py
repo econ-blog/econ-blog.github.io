@@ -4,6 +4,53 @@ import re
 import sys
 from typing import List, Dict, Any
 
+
+def _root(base_url: str = None) -> str:
+    if not base_url:
+        base_url = os.environ.get("GSC_SITE_URL") or "https://econ-blog.github.io"
+    if base_url.startswith("sc-domain:"):
+        base_url = "https://" + base_url.removeprefix("sc-domain:")
+    return base_url.rstrip("/")
+
+
+def _published(md_dir: str, url_prefix: str, root: str) -> List[tuple]:
+    """(발행일, URL) 목록. draft·welcome·`_` 시작 파일은 뺀다."""
+    out = []
+    if not os.path.isdir(md_dir):
+        return out
+    for fpath in sorted(glob.glob(os.path.join(md_dir, "*.md"))):
+        name = os.path.basename(fpath)
+        if name.startswith("_") or name == "welcome.md":
+            continue
+        with open(fpath, "r", encoding="utf-8") as f:
+            meta = parse_post_metadata(f.read())
+        if meta["draft"] or not meta["date"]:
+            continue
+        out.append((meta["date"], f"{root}/{url_prefix}/{name.removesuffix('.md')}/"))
+    return out
+
+
+def select_all_urls(content_dir: str = "content", base_url: str = None) -> List[str]:
+    """I6 전수 목록. **표본이 아니다** — '아직 색인 안 된 URL'의 완전한 목록을 만든다.
+
+    순서가 곧 우선순위다. `fetch_gsc.py`가 cap 에서 자르므로 앞에 둔 것이 살아남는다:
+      1. 홈 — 크롤 진입점
+      2. 섹션 목록 두 개 — 여기가 수집되면 개별 글로 퍼진다
+      3. 발행 글·사전 항목을 **오래된 순으로** — 오래된 글은 색인될 시간을 이미 받았으므로
+         그것마저 미색인이면 신호가 세다. 최신순으로 두면 정의상 가장 색인 안 됐을 URL만
+         앞에 오고, cap 에 걸렸을 때 정보량이 가장 적은 쪽이 살아남는다.
+    """
+    root = _root(base_url)
+    urls = [f"{root}/", f"{root}/posts/", f"{root}/dictionary/"]
+    rows = _published(os.path.join(content_dir, "posts"), "posts", root)
+    rows += _published(os.path.join(content_dir, "dictionary"), "dictionary", root)
+    rows.sort(key=lambda x: x[0])
+    for _, url in rows:
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
 def parse_post_metadata(content: str) -> Dict[str, Any]:
     meta = {"draft": True, "date": ""}
     match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
@@ -35,11 +82,7 @@ def select_top_published_urls(posts_dir: str, base_url: str = None, limit: int =
 
     `limit`이 5보다 작으면 위 순서대로 잘린다(홈페이지가 가장 먼저 살아남는다).
     """
-    if not base_url:
-        base_url = os.environ.get("GSC_SITE_URL") or "https://econ-blog.github.io"
-    if base_url.startswith("sc-domain:"):
-        base_url = "https://" + base_url.removeprefix("sc-domain:")
-    root = base_url.rstrip("/")
+    root = _root(base_url)
 
     pattern = os.path.join(posts_dir, "**", "*.md")
     files = glob.glob(pattern, recursive=True)
@@ -67,6 +110,11 @@ def select_top_published_urls(posts_dir: str, base_url: str = None, limit: int =
     return out[:limit]
 
 if __name__ == "__main__":
-    p_dir = sys.argv[1] if len(sys.argv) > 1 else "content/posts"
-    urls = select_top_published_urls(p_dir)
-    print(" ".join(urls))
+    argv = sys.argv[1:]
+    if argv[:1] == ["--all"]:
+        # 인자를 조용히 흘리면 워크플로가 표본을 전수로 오독한다.
+        print(" ".join(select_all_urls(argv[1] if len(argv) > 1 else "content")))
+    elif argv[:1] and argv[0].startswith("--"):
+        sys.exit("usage: select_inspect_urls.py [--all <content_dir> | <posts_dir>]")
+    else:
+        print(" ".join(select_top_published_urls(argv[0] if argv else "content/posts")))
