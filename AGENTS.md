@@ -80,6 +80,7 @@ GitHub Actions(`.github/workflows/weekly-housekeeping.yml`, 외부 cron-job.org 
 - **산출물**: `report/audit-YYYY-MM-DD.md` · `.claude/audit/topic-history.json` · `.claude/audit/direction-log.json` · `.claude/audit/topic-report.md`(데이터 충분성 게이트 통과 시에만).
 - **알림**: `report/audit-YYYY-MM-DD.md` 커밋 시 `notify-audit-report.yml`에 의해 텔레그램 알림 발송.
 - **기타**: ② 성과 분석 데이터 미달 시 `topic-report.md` 부재 유지는 기존과 동일.
+- **쓰기 금지**: `.claude/daily-post/` 전체 · `hugo.toml` · `CLAUDE.md` · `MEMORY.md` · `layouts/` · `content/` 본문 산문. `content/`에서 허용되는 변경은 셋뿐이다 — 확정 사망 링크 수정 · 내부링크 백필 · **Q1 front matter 결함 수정**(description 누락·길이. 2026-08-10 추가). 셋 다 `auto/audit-*` PR로만 나가며 승인 없이 `main`에 가지 않는다. **본문 산문은 여전히 손대지 않는다.**
 
 ## 조용히 깨지는 계약 셋
 
