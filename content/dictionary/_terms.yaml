@@ -1,36 +1,47 @@
 base-rate:
   title: "기준금리"
   aliases: ["정책금리", "기준 금리"]
+
 supply-shock:
   title: "공급충격"
   aliases: ["공급 충격", "공급망 충격"]
+
 per:
   title: "주가수익비율"
   aliases: ["PER", "선행 PER", "P/E"]
+
 brent-crude:
   title: "브렌트유"
   aliases: ["브렌트", "북해산 브렌트유"]
+
 cofix:
   title: "코픽스"
   aliases: ["COFIX", "자금조달비용지수"]
+
 foundry:
   title: "파운드리"
   aliases: ["반도체 파운드리", "반도체 위탁생산"]
+
 gdi:
   title: "실질 국민총소득"
   aliases: ["GDI", "실질 GDI", "국민총소득"]
+
 aggregate-loan-cap:
   title: "가계대출 총량규제"
   aliases: ["가계대출 총량 규제", "총량규제", "대출 총량규제"]
+
 lng:
   title: "액화천연가스"
   aliases: ["LNG", "천연가스", "액화 천연가스"]
+
 real-effective-exchange-rate:
   title: "실질실효환율"
   aliases: ["REER", "실질 실효 환율", "실효환율"]
+
 subrogated-payment:
   title: "대위변제"
   aliases: ["대위 변제", "대위변제율"]
+
 circular-financing:
   title: "순환금융"
   aliases: ["AI 순환금융", "순환 금융"]
@@ -38,6 +49,7 @@ circular-financing:
 circuit-breaker:
   title: "서킷브레이커"
   aliases: ["circuit breaker", "매매 중단", "거래 정지", "시장 안정 장치"]
+
 comprehensive-real-estate-tax:
   title: "종합부동산세"
   aliases: ["종부세"]
@@ -53,6 +65,10 @@ core-inflation:
 ltv:
   title: "담보인정비율"
   aliases: ["LTV", "주택담보인정비율", "이주비 LTV"]
+
+leading-indicator:
+  title: "경기선행지표"
+  aliases: ["선행지표", "경기 선행지표"]
 
 free-cash-flow:
   title: "잉여현금흐름"
