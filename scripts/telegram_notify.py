@@ -47,7 +47,7 @@ def format_post_notification(title: str, body: str, branch: str, url: str) -> st
 # 리포트 본문의 H2(`## ⚠ 계약 위반`)는 콜론이 없어 의도적으로 탈락한다 — 리포트를
 # 통째로 복사하면 값이 빠진 헤딩만 늘어서 요약처럼 보이는 빈 메시지가 된다.
 SUMMARY_KEYS = ("계약 위반", "확정 사망 링크", "데이터 충분성",
-                "색인 건전성", "소견", "새 가설 제안")
+                "색인 건전성", "소견", "front matter 수정", "새 가설 제안")
 SUMMARY_LINE = re.compile(r'^(?:' + '|'.join(SUMMARY_KEYS) + r')\s*:\s*\S')
 DECISION_DIVIDER = re.compile(r'^[─-]+\s*결정 필요\s*[─-]*$')
 

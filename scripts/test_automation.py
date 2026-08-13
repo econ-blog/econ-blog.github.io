@@ -38,6 +38,25 @@ class TestScriptWireup(unittest.TestCase):
 
 
 class TestTelegramNotify(unittest.TestCase):
+    def test_front_matter_fix_line_survives_filter(self):
+        from telegram_notify import summarize_audit_body
+        body = (
+            "## 감사 요약\n"
+            "계약 위반: 0건\n"
+            "확정 사망 링크: 0건 / 사람 점검 필요: 1건\n"
+            "데이터 충분성: 미달 (발행 17 / 20건)\n"
+            "색인 건전성: 관찰\n"
+            "소견: 12건 (④ 5, ⑥ 7)\n"
+            "front matter 수정: 3건\n"
+            "새 가설 제안: 0건\n"
+            "─ 결정 필요 ─\n"
+            "* description 3건 수정안 승인 필요\n"
+        )
+        out = summarize_audit_body(body)
+        self.assertIn("front matter 수정: 3건", out)
+        self.assertIn("소견: 12건 (④ 5, ⑥ 7)", out)
+        self.assertIn("* description 3건 수정안 승인 필요", out)
+
     def test_extract_verdict_token(self):
         from telegram_notify import extract_verdict_token
         self.assertEqual(extract_verdict_token("auto/post-2026-07-30", "post"), "#P0730")
