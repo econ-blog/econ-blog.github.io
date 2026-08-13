@@ -522,3 +522,26 @@ push 실패 시 5회까지 rebase 후 재시도한다(3·6·9·12초 백오프).
   워크플로가 하루 두 번 돌고 사이드카에 같은 날짜 스냅샷이 중복 커밋된다.
 - **fine-grained PAT는 만료된다.** 만료일을 캘린더에 남긴다 — 만료되면 401이 나고 잡은
   조용히 실패한다(cron-job.org 알림이 유일한 감지 수단).
+
+---
+
+## 10. 색인·AEO·자동화 개선 (Task 1~9, 2026-08-13 완료)
+
+Task 1~9 개편으로 사이트 구조·검사 평면·자동화 유지보수가 다음 결정으로 정리되었다:
+
+1. **AEO & 구조화 데이터 (Task 2·3)**:
+   - 용어사전에 `DefinedTerm` JSON-LD를 적용하고, FAQ 블록과 `FAQPage` JSON-LD를 통합했다 (`extend_head.html`, `faq.html`).
+2. **제목 규율 & 쓰기시점 검사 (Task 1·4)**:
+   - `headings.py` 쓰기시점 전용 검사(T1~T4)를 도입하여 제목 길이·옛 고정 제목 사용 금지·주제어 일치(양방향 매칭 및 동적 floor)를 발행 전에 확인한다. 감사시점에는 소견 재발을 막기 위해 배선하지 않는다.
+3. **주제 집중도 (Task 5)**:
+   - `topics.yaml`에 `focus: true` 4개 주제(금리·물가·부동산·반도체)를 명시하고 `rank.md`에서 +1 가점을 부여한다.
+4. **색인 검사 전수 전환 (Task 6)**:
+   - I6 검사를 표본 5건에서 전수(cap 60)로 전환하여 Google Search Console 커버리지 상태를 빠짐없이 점검한다.
+5. **감사의 유지보수/개선 2분할 (Task 7)**:
+   - 결정론적 측정(링크·색인·E/Q/수치)은 pure Python `scripts/housekeeping.py`와 GitHub Actions(`weekly-housekeeping.yml`) 무인 유지보수로 분리했다(LLM 불필요, 텔레그램 알림 미발송).
+   - LLM/판단이 필요한 분석(성과·방향·Q3 용어후보)만 `.claude/commands/audit-improvement.md` 수동 명령으로 수행한다.
+6. **Q1 front matter 결함 수정 PR 자동화 (Task 8)**:
+   - Q1 description 누락/길이 결함은 단순 소견이 아니라 `auto/audit-*` PR로 자동 생성하여 텔레그램 승인을 통해 수정되도록 연동했다.
+7. **`_terms.yaml` 충돌 자동 해소 & 중복 방지 (Task 9)**:
+   - `draft.md` §3을 슬러그 사전순 정렬 삽입으로 바꿔 충돌 빈도를 낮추고, `process_inbox.py`에서 `_terms.yaml` 단독 충돌 시 자동 해소 및 1회 재시도 경로를 구현했다. `contracts.py`에 중복 키 검사를 추가해 오염을 방지한다.
+
