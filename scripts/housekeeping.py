@@ -123,7 +123,7 @@ def render_report(date, links, idx, scan, num):
         lines.append("| I3 baseURL 3자 정합 | 측정 불가 | Hugo/스냅샷 실패 |")
         lines.append("| I4 sitemap 제출 | 측정 불가 | Hugo/스냅샷 실패 |")
         lines.append("| I5 noindex 유출 | 측정 불가 | Hugo/스냅샷 실패 |")
-        lines.append("| I6 색인 커버리지 표본 | 측정 불가 | Hugo/스냅샷 실패 |")
+        lines.append("| I6 색인 커버리지 | 측정 불가 | Hugo/스냅샷 실패 |")
         lines.append("| I7 GSC 속성 유형 | 측정 불가 | Hugo/스냅샷 실패 |")
     else:
         i1 = "통과" if idx.get("I1_sitemap", {}).get("met") else "소견"
@@ -143,7 +143,7 @@ def render_report(date, links, idx, scan, num):
         i5_cnt = len(idx.get("I5_noindex", {}).get("files", []))
         lines.append(f"| I5 noindex 유출 | {i5} | 유출 {i5_cnt}건 |")
         
-        lines.append(f"| I6 색인 커버리지 표본 | 관찰 | GSC 표본 검사 |")
+        lines.append(f"| I6 색인 커버리지 | 관찰 | GSC 전수 검사 |")
         lines.append(f"| I7 GSC 속성 유형 | 통과 | url-prefix, 호스트 일치 |")
         
     # ④ 시스템 스캔 (Q3 제외)

@@ -90,12 +90,13 @@ def check_file(path: Path) -> dict:
             })
         if heads:
             keys = stems(title)
-            topical = sum(1 for h in heads if any(k in h for k in keys))
-            if topical < TOPICAL_FLOOR:
+            topical = sum(1 for h in heads if any(k in h or h in k for k in keys))
+            floor = min(TOPICAL_FLOOR, len(keys)) if keys else TOPICAL_FLOOR
+            if topical < floor:
                 issues.append({
                     "check": "T4",
                     "detail": f"title 의 주제어를 담은 H2가 {topical}개 — "
-                              f"최소 {TOPICAL_FLOOR}개여야 한다",
+                              f"최소 {floor}개여야 한다",
                 })
 
     return {"file": path.as_posix(), "issues": issues, "total": len(issues)}
