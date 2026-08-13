@@ -65,22 +65,21 @@ for f in scripts/test_*.py; do .venv/bin/python "$f"; done
 
 **무인 불변조건** (각 스테이지 파일에서 각각 강제한다): `auto/post-YYYY-MM-DD`에만 푸시 · 단일 커밋만 푸시 (`git commit --cleanup=verbatim` 1건) · 항상 `draft: true` · 대화형 도구 호출 금지 · 1위가 8/15 미달이면 산출물 없이 중단.
 
-## `/weekly-audit`
+## `/weekly-housekeeping` (무인 유지보수 · LLM 없음)
 
-인자 없음 = 무인, `manual` = 대화형. **무인은 리포트·원장을 `main`에 직접 푸시하고, `content/` 수정이 있을 때만 `auto/audit-YYYY-MM-DD` 브랜치 + PR로 분리한다**(2026-08-01 결정 — 감사 산출물은 관측치라 반려 대상이 아니다. `content/` 수정은 여전히 승인 대상). 시퀀서 `.claude/commands/weekly-audit.md`가 `.claude/audit/` 아래 6개 스테이지를 `Read`한다: ① 링크 + 백필 → ② 성과 → ③ 색인 → ④ 시스템 스캔 → ⑥ 수치 → ⑤ 방향.
+GitHub Actions(`.github/workflows/weekly-housekeeping.yml`, 외부 cron-job.org 호출)로 자동 실행된다. ① 링크+백필 · ③ 색인 · ④ E/Q(결정론 규칙) · ⑥ 수치 축을 순수 Python(`scripts/housekeeping.py`)으로 판정하고 기계적 정정을 적용한다.
 
-**실행 중 알아야 할 것:**
+- **산출물**: `report/housekeeping-YYYY-MM-DD.md` · `.claude/audit/link-state.json`.
+- **알림**: 텔레그램 알림을 보내지 않는다 (`report/housekeeping-*.md` 경로 사용으로 `notify-audit-report.yml` 미발화). 워크플로 실행 실패 시에만 실패 경보를 보낸다.
+- **git**: 리포트·원장은 `main` 직행, `content/` 정정(확정 사망 링크 제거 · 백필)이 발생할 때만 `auto/audit-YYYY-MM-DD` 브랜치 + PR 생성.
 
-- **git 쓰기는 시퀀서 §10에서만** 한다. 스테이지는 읽기·분석·문자열 반환까지다.
-- **②가 침묵하는 것이 정상이다.** 데이터 충분성 게이트(발행 20건·28일·신호 충족 주제군 3개) 미달이면 `topic-report.md`를 생성·수정·삭제하지 **않는다.** 2026-07-30 기준 세 조건 전부 미달이다.
-- **`topic-report.md` 부재는 정상이다.** `rank.md`가 조용히 건너뛴다.
-- **감사가 찍는 날짜는 전부 KST다.** 리포트 파일명·브랜치명·커밋 제목은 시퀀서 §1이 `.claude/audit/lib/kstdate.py`로 한 번 구해 돌려 쓰고, 원장에 들어가는 날짜도 같은 헬퍼에서 나온다. `date.today()`를 쓰면 UTC 러너에서 일요일 05:00 KST 실행이 전날로 찍힌다 — 2026-08-09 실행이 `audit-2026-08-08.md`를 낸 사고가 그것이다.
-- **리포트가 `main`에 올라가면 텔레그램 알림이 간다**(`notify-audit-report.yml`). 커밋 메시지 §9-1 블록이 그대로 요약이 되므로 그 형식을 깨면 알림이 "요약 정보 없음"으로 나간다. 이 알림은 승인 대상이 아니며 판정 토큰이 붙지 않는다 — 승인 루프는 `auto/audit-*` PR 쪽뿐이다.
-- **산출물은 다섯 개뿐이다**: `report/audit-YYYY-MM-DD.md` · `.claude/audit/link-state.json` · `.claude/audit/topic-history.json` · `.claude/audit/direction-log.json` · `.claude/audit/topic-report.md`(게이트 통과 시에만). 여섯 번째 파일을 만들지 않는다.
-- **리포트는 `report/`에, 원장은 `.claude/audit/`에 쓴다.** 리포트(`audit-*.md`)는 매 실행이 새로 만드는 읽을거리이고, 원장 JSON 셋은 다음 실행이 되읽는 상태다 — 그래서 자리가 다르다. `.claude/audit/`에 `audit-*.md`를 만들지 않는다.
-- **쓰기 금지**: `.claude/daily-post/` 전체 · `hugo.toml` · `CLAUDE.md` · `MEMORY.md` · `layouts/` · `content/` 본문 산문. `content/`에서 허용되는 유일한 변경은 확정 사망 링크 수정과 내부링크 백필이다.
-- **리포트가 공개 저장소에 커밋된다.** 자격증명·서비스 계정 이메일·토큰을 리포트에 쓰지 않는다.
-- **`writing-styles.md`는 `.claude/daily-post/`가 소유한다.** 감사는 읽기만 하며 항목 **수만** 센다. (문체 루프가 이 파일의 "40~60자" 문자열을 반증 테스트용 load-bearing으로 지정했었으나, 2026-08-01에 루프를 삭제해 그 근거는 사라졌다. 문자열 자체는 여전히 살아 있는 작성 규칙이므로 감사가 고치지 않는다.)
+## `/audit-improvement` (수동 개선 · LLM 사용)
+
+`.claude/commands/audit-improvement.md`로 사람이 필요 시 수동 실행한다. ② 성과 · ⑤ 방향 · ④ Q3(미등재 용어 후보 선별) 등 판단과 LLM이 필요한 축을 담당한다.
+
+- **산출물**: `report/audit-YYYY-MM-DD.md` · `.claude/audit/topic-history.json` · `.claude/audit/direction-log.json` · `.claude/audit/topic-report.md`(데이터 충분성 게이트 통과 시에만).
+- **알림**: `report/audit-YYYY-MM-DD.md` 커밋 시 `notify-audit-report.yml`에 의해 텔레그램 알림 발송.
+- **기타**: ② 성과 분석 데이터 미달 시 `topic-report.md` 부재 유지는 기존과 동일.
 
 ## 조용히 깨지는 계약 셋
 
@@ -175,6 +174,7 @@ WebSearch는 동작하고 **WebFetch는 동작하지 않는다.**
 |---|---|---|---|---|
 | `daily-collect.yml` | 매일 01:30 | cron-job.org | `inbox` → (`reask` ∥ `candidates`) | 승인 판정 처리 + 미결 재질의 + `candidates/YYYY-MM-DD.json` |
 | `weekly-collect.yml` | 일 01:20 | cron-job.org | `analytics` ∥ `linkstate` | `analytics/YYYY-MM-DD/*.json` + `linkstate/YYYY-MM-DD.json` |
+| `weekly-housekeeping.yml` | 일 01:40 | cron-job.org | `housekeeping` | `report/housekeeping-YYYY-MM-DD.md` + `.claude/audit/link-state.json` |
 | `open-auto-pr.yml` | — | `push` on `auto/**` | — | PR (→ `notify.yml`) |
 | `notify-audit-report.yml` | — | `push` on `main`의 `report/audit-*.md` | — | 감사 리포트 텔레그램 알림 |
 

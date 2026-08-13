@@ -1,0 +1,72 @@
+name: Weekly Housekeeping (무인 유지보수)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-housekeeping
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  housekeeping:
+    name: 유지보수 실행 (무인)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: '0.164.0'
+          extended: true
+
+      - name: Run Housekeeping
+        id: hk
+        env:
+          TZ: Asia/Seoul
+        run: |
+          python scripts/housekeeping.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "bjh7790"
+          git config --global user.email "bjh7790@gmail.com"
+          
+          # 1. Commit and push reports/ledger directly to main
+          git add report/housekeeping-*.md .claude/audit/link-state.json
+          git commit -m "audit: 무인 유지보수 (${{ steps.hk.outputs.summary }})" || echo "No report changes to commit"
+          git push origin main
+          
+          # 2. If content/ has edits (dead links removed, backfills), branch and push to trigger open-auto-pr.yml
+          if [ -n "$(git status --porcelain content/)" ]; then
+            BRANCH="auto/audit-${{ steps.hk.outputs.date }}"
+            git checkout -b "$BRANCH"
+            git add content/
+            git commit -m "audit: 유지보수 content 정정 (${{ steps.hk.outputs.summary }})" -m "확정 사망 링크 제거 및 내부 링크 백필 정정"
+            git push origin "$BRANCH"
+          fi
+
+      - name: Alert on workflow failure
+        if: failure()
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: |
+          python scripts/telegram_notify.py alert \
+            "weekly-housekeeping" "워크플로 실패" \
+            "유지보수 스크립트 실행이 실패했습니다." \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
