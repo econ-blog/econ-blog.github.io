@@ -126,8 +126,12 @@ with tempfile.TemporaryDirectory() as tmp:
     check("포스트 0건 → 중앙값 0.0", empty["median"], 0.0)
     check("포스트 0건 → 무링크 목록 빈 것", empty["zero_link_posts"], [])
 
-print("term_candidates (Q3)")
-from quality import term_candidates  # noqa: E402
+print("trim_josa (Q3)")
+from quality import term_candidates, trim_josa  # noqa: E402
+check("조사 제거 - 가", trim_josa("기준금리가"), "기준금리")
+check("조사 제거 - 를", trim_josa("기준금리를"), "기준금리")
+check("조사 제거 - 에서", trim_josa("미국에서"), "미국")
+check("2자 이하 보존", trim_josa("물가"), "물가")
 
 TERMS_Q3 = {"base-rate": {"title": "기준금리", "aliases": ["정책금리"]}}
 with tempfile.TemporaryDirectory() as tmp:

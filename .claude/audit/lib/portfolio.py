@@ -279,6 +279,7 @@ PRIMARY_SOURCE_HOSTS = (
     "dart.fss.or.kr",
     "kosis.kr",
     "bok.or.kr",
+    "kfb.or.kr",
 )
 
 # 속성 순서를 가정하지 않는다 — <meta> 태그를 먼저 잡고 그 안에서 속성을 읽는다.

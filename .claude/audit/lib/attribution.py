@@ -149,29 +149,39 @@ def save_history(path: Path, history: dict) -> None:
                     encoding="utf-8")
 
 
+POS_DECAY_DAYS = 90
+
+
 def decay(history: dict, tag: str, adj: int, today: str,
-          days: int = DECAY_DAYS) -> tuple[int, dict]:
-    """음수 조정치가 최초부여일로부터 days일 이상 유지되면 절대값을 1 줄인다.
-    양수는 감쇄하지 않는다 — 래칫을 만드는 것은 감점뿐이다. (AC #20)
+          days: int = DECAY_DAYS, pos_days: int = POS_DECAY_DAYS) -> tuple[int, dict]:
+    """음수 조정치가 최초부여일로부터 days(60)일 이상 유지되면 절대값을 1 줄인다.
+    양수 조정치가 최초부여일로부터 pos_days(90)일 이상 유지되면 1 줄인다 (대칭 감쇄).
 
-    이 상태를 topic-report.md 밖에 두는 이유: 계약 형식에 필드를 추가하면
-    rank.md가 깨진다. README.md의 90일 신선도 규칙은 매주 재생성하면
-    생성일이 영원히 최신이라 무력하다.
-
-    최초부여일은 "지금 이어지는 음수 구간"의 시작일이다. 음수가 풀리면 지워지고,
-    다시 음수가 되면 그날부터 새로 센다 — 안 그러면 지난 감점의 경과일이 남아
-    재진입 첫 주에 곧바로 감쇄되어 60일 유지 요건이 무너진다.
+    최초부여일은 "지금 이어지는 구간"의 시작일이다. 구간이 해제되면 지워지고,
+    다시 진입하면 그날부터 새로 센다.
     """
     entry = history.get(tag)
     if entry is None:
-        entry = {"조정치": adj, "최초부여일": today if adj < 0 else None,
-                 "마지막감쇄일": None}
+        entry = {
+            "조정치": adj,
+            "최초부여일": today if adj != 0 else None,
+            "마지막감쇄일": None
+        }
         history[tag] = entry
         return adj, entry
 
+    prev_adj = entry.get("조정치", 0)
     entry["조정치"] = adj
-    if adj >= 0:
+
+    # 0이면 모든 감쇄 이력 초기화
+    if adj == 0:
         entry["최초부여일"] = None
+        entry["마지막감쇄일"] = None
+        return adj, entry
+
+    # 부호가 바뀌면 최초부여일 리셋
+    if (prev_adj < 0 and adj > 0) or (prev_adj > 0 and adj < 0):
+        entry["최초부여일"] = today
         entry["마지막감쇄일"] = None
         return adj, entry
 
@@ -182,8 +192,14 @@ def decay(history: dict, tag: str, adj: int, today: str,
 
     since = entry.get("마지막감쇄일") or entry["최초부여일"]
     elapsed = (_date.fromisoformat(today) - _date.fromisoformat(since)).days
-    if elapsed >= days:
+
+    if adj < 0 and elapsed >= days:
         adj = min(0, adj + 1)
         entry["조정치"] = adj
         entry["마지막감쇄일"] = today
+    elif adj > 0 and pos_days and elapsed >= pos_days:
+        adj = max(0, adj - 1)
+        entry["조정치"] = adj
+        entry["마지막감쇄일"] = today
+
     return adj, entry

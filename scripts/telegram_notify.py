@@ -210,13 +210,16 @@ def send_draft_files(bot_token: str, chat_id: str, paths: list):
         send_telegram_document(bot_token, chat_id, path, caption=name)
 
 def main():
-    creds_json = os.environ.get("CREDENTIALS_JSON")
-    if not creds_json:
-        print("Error: CREDENTIALS_JSON missing", file=sys.stderr)
-        sys.exit(1)
-    creds = json.loads(creds_json)
-    bot_token = creds["telegram"]["bot_token"]
-    chat_id = creds["telegram"]["chat_id"]
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not (bot_token and chat_id):
+        creds_json = os.environ.get("CREDENTIALS_JSON")
+        if not creds_json:
+            print("Error: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID or CREDENTIALS_JSON missing", file=sys.stderr)
+            sys.exit(1)
+        creds = json.loads(creds_json)
+        bot_token = creds["telegram"]["bot_token"]
+        chat_id = creds["telegram"]["chat_id"]
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "alert":
         workflow, reason, detail, run_url = sys.argv[2:6]

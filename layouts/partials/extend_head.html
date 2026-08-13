@@ -1,3 +1,51 @@
+{{- /* Open Graph & Twitter Card Metadata */ -}}
+<meta property="og:image" content="{{ "images/og-default.png" | absURL }}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="{{ "images/og-default.png" | absURL }}" />
+
+{{- /* WebSite SearchAction & Author Person Schema */ -}}
+{{- if .IsHome }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": {{ site.Title }},
+  "url": {{ site.BaseURL }},
+  "description": {{ site.Params.description }},
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {{ printf "%ssearch/?q={search_term_string}" site.BaseURL }},
+    "query-input": "required name=search_term_string"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": {{ site.Title }},
+    "url": {{ site.BaseURL }},
+    "logo": {{ "images/og-default.png" | absURL }},
+    "publishingPrinciples": {{ (site.GetPage "/about").Permalink | default site.BaseURL }}
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "쉽게 읽는 경제뉴스 편집진",
+  "description": "연세대학교 경영학 전공 편집진이 어려운 경제·금융 뉴스를 비전공자도 이해하기 쉬운 말로 풀어서 해설합니다.",
+  "alumniOf": {
+    "@type": "EducationalOrganization",
+    "name": "연세대학교 (Yonsei University)",
+    "department": "경영학과"
+  },
+  "worksFor": {
+    "@type": "Organization",
+    "name": {{ site.Title }},
+    "url": {{ site.BaseURL }}
+  }
+}
+</script>
+{{- end }}
+
 {{- /* 사전 항목 = DefinedTerm. 테마가 내는 BlogPosting 은 그대로 두고 라벨만 더한다.
        테마의 templates/schema_json.html 을 오버라이드하지 않는 것은 의도적이다 —
        128줄 벤더링은 PaperMod 업그레이드마다 수동 병합을 만든다. */ -}}
@@ -54,3 +102,4 @@
 </script>
 {{- end }}
 {{- end }}
+

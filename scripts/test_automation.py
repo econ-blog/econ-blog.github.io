@@ -718,12 +718,12 @@ class TestSelectAllUrls(unittest.TestCase):
         self.assertNotIn("https://example.com/posts/welcome/", urls)
         self.assertNotIn("https://example.com/dictionary/_index/", urls)
 
-    def test_oldest_first_after_entry_points(self):
+    def test_newest_first_after_entry_points(self):
         from select_inspect_urls import select_all_urls
         urls = select_all_urls(self._fixture(), base_url="https://example.com")
         body = urls[3:]
-        self.assertEqual(body[0], "https://example.com/posts/old-post/")
-        self.assertEqual(body[-1], "https://example.com/posts/new-post/")
+        self.assertEqual(body[0], "https://example.com/posts/new-post/")
+        self.assertEqual(body[-1], "https://example.com/posts/old-post/")
 
     def test_sample_mode_unchanged(self):
         """전수 모드를 더해도 기존 표본 함수는 그대로여야 한다."""

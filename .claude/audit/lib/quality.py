@@ -123,16 +123,24 @@ def internal_link_density(content_root: Path) -> dict:
 
 HANGUL_TOKEN = re.compile(r"[가-힣]{2,10}|[A-Z]{2,6}")
 
-# 경제 용어가 아닌 고빈도 일반어. SEED에 이 목록의 근거는 없다 — AC #30이 못박은
-# "닫힌 목록"은 E/Q/P 점검 축 자체를 가리키며, 이 불용어 집합은 구현 판단이다.
-# 자유롭게 조정 가능하다(SEED 개정 불필요). 값은 2026-07-28 실행에서 LLM 선별이
-# 잡음을 정확히 걸러낸 것으로 검증됨(대출·반도체·달러·경기·물가 전부 진짜 경제 용어).
 STOPWORDS = {
     "그리고", "하지만", "그러나", "때문에", "이라고", "합니다", "입니다", "있습니다",
     "없습니다", "됩니다", "습니다", "경우에", "우리나라", "이번에", "지난해", "올해",
     "다음과", "이라는", "라는", "정도로", "만큼", "가운데", "사람들", "이야기",
     "무슨", "의미", "관점", "지표", "상황", "영향", "수준", "가능성", "이유",
 }
+
+JOSA_SUFFIXES = ("에서", "으로", "보다", "에게", "부터", "까지", "인가", "이다", "가", "을", "를", "의", "은", "는", "이", "에", "로", "도", "와", "과")
+
+
+def trim_josa(tok: str) -> str:
+    """한국어 조사 접미사를 잘라내어 동일 명사의 격변화를 통합한다."""
+    if len(tok) <= 2:
+        return tok
+    for j in JOSA_SUFFIXES:
+        if tok.endswith(j) and len(tok) - len(j) >= 2:
+            return tok[:-len(j)]
+    return tok
 
 
 def term_candidates(
@@ -141,8 +149,7 @@ def term_candidates(
     """Q3 — 반복 등장하지만 _terms.yaml에 없는 토큰의 결정론적 빈도표.
 
     경제 용어인지는 판정하지 않는다 — 그 선별은 스테이지의 LLM이 하며 재현되지
-    않는다. 형태소 분석기를 쓰지 않으므로 조사가 붙은 형태는 표면형이 달라져
-    자연히 탈락하고, 살아남는 토큰은 조사 없이 쓰인 명사·복합어에 치우친다.
+    않는다. 형태소 분석기 대신 조사 접미사 제거(trim_josa)로 체언을 정규화한다.
     """
     known = set()
     for t in terms.values():
@@ -158,7 +165,8 @@ def term_candidates(
             continue
         _, body = split_front_matter(md.read_text(encoding="utf-8"))
         seen_here = set()
-        for tok in HANGUL_TOKEN.findall(strip_code_spans(body)):
+        for raw_tok in HANGUL_TOKEN.findall(strip_code_spans(body)):
+            tok = trim_josa(raw_tok)
             if tok in known or tok in STOPWORDS:
                 continue
             total[tok] = total.get(tok, 0) + 1

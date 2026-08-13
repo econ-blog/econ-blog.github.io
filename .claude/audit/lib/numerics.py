@@ -129,12 +129,20 @@ def claims(raw: str) -> list[dict]:
     return out
 
 
+STATIC_PARAM_CONTEXT = re.compile(
+    r"(?:[1-3]\s*단계|단계|서킷브레이커|수수료|상한선?|하한선?|한도|규제|배율|LTV|DSR|DTI|COFIX|부과|적용|비율)"
+)
+
 def n1_missing_asof(raw: str) -> list[dict]:
     """N1 — 같은 문장/표 행에 기준일이 없는 수치 주장. (AC #55)
 
     writing-styles.md가 기준일 병기를 이미 요구하므로 규칙 위반이지 취향이 아니다.
+    단, 제도적 규정·고정 수수료·상한선 등 정적 파라미터는 예외로 다룬다.
     """
-    return [c for c in claims(raw) if not ASOF.search(c["scope"])]
+    return [
+        c for c in claims(raw)
+        if not ASOF.search(c["scope"]) and not STATIC_PARAM_CONTEXT.search(c["scope"])
+    ]
 
 
 def is_primary(host: str) -> bool:

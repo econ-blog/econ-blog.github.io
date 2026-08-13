@@ -36,15 +36,13 @@ def select_all_urls(content_dir: str = "content", base_url: str = None) -> List[
     순서가 곧 우선순위다. `fetch_gsc.py`가 cap 에서 자르므로 앞에 둔 것이 살아남는다:
       1. 홈 — 크롤 진입점
       2. 섹션 목록 두 개 — 여기가 수집되면 개별 글로 퍼진다
-      3. 발행 글·사전 항목을 **오래된 순으로** — 오래된 글은 색인될 시간을 이미 받았으므로
-         그것마저 미색인이면 신호가 세다. 최신순으로 두면 정의상 가장 색인 안 됐을 URL만
-         앞에 오고, cap 에 걸렸을 때 정보량이 가장 적은 쪽이 살아남는다.
+      3. 발행 글·사전 항목을 **최신순으로** — 최신 글이 색인 검사 cap 내에 우선 포함되도록 함.
     """
     root = _root(base_url)
     urls = [f"{root}/", f"{root}/posts/", f"{root}/dictionary/"]
     rows = _published(os.path.join(content_dir, "posts"), "posts", root)
     rows += _published(os.path.join(content_dir, "dictionary"), "dictionary", root)
-    rows.sort(key=lambda x: x[0])
+    rows.sort(key=lambda x: x[0], reverse=True)
     for _, url in rows:
         if url not in urls:
             urls.append(url)

@@ -211,14 +211,16 @@ with tempfile.TemporaryDirectory() as tmp:
 print("d4_eeat")
 from portfolio import d4_eeat, PRIMARY_SOURCE_HOSTS  # noqa: E402
 
-check("1차 출처 호스트 다섯", len(PRIMARY_SOURCE_HOSTS), 5)
+check("1차 출처 호스트 여섯", len(PRIMARY_SOURCE_HOSTS), 6)
 check("bok.or.kr 포함", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+check("kfb.or.kr 포함", "kfb.or.kr" in PRIMARY_SOURCE_HOSTS, True)
 
 from portfolio import _is_primary_source  # noqa: E402
 
 check("정확 일치", _is_primary_source("kosis.kr"), True)
 check("www. 접미 일치", _is_primary_source("www.kosis.kr"), True)
 check("서브도메인 접미 일치", _is_primary_source("ecos.bok.or.kr"), True)
+check("서브도메인 접미 일치 (kfb)", _is_primary_source("portal.kfb.or.kr"), True)
 check("포트 제거", _is_primary_source("kosis.kr:443"), True)
 check("남의 도메인 접미 오탐 없음", _is_primary_source("notkosis.kr"), False)
 check("무관 호스트", _is_primary_source("hankyung.com"), False)

@@ -35,6 +35,11 @@ jobs:
           hugo-version: '0.164.0'
           extended: true
 
+      - name: Run Unit Tests
+        run: |
+          for f in .claude/audit/lib/test_*.py; do python "$f" || exit 1; done
+          for f in scripts/test_*.py; do python "$f" || exit 1; done
+
       - name: Run Housekeeping
         id: hk
         env:
@@ -50,6 +55,7 @@ jobs:
           # 1. Commit and push reports/ledger directly to main
           git add report/housekeeping-*.md .claude/audit/link-state.json
           git commit -m "audit: 무인 유지보수 (${{ steps.hk.outputs.summary }})" || echo "No report changes to commit"
+          git pull --rebase origin main || true
           git push origin main
           
           # 2. If content/ has edits (dead links removed, backfills), branch and push to trigger open-auto-pr.yml
@@ -64,7 +70,8 @@ jobs:
       - name: Alert on workflow failure
         if: failure()
         env:
-          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python scripts/telegram_notify.py alert \
             "weekly-housekeeping" "워크플로 실패" \

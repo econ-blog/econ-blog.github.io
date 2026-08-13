@@ -26,7 +26,6 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
             return f.read()
 
     def test_dead_internal_link_preserves_anchor(self):
-        # 1. 확정 사망 내부 링크 → 대상 없으면 `[기준금리](/x/)` → `기준금리` (앵커 텍스트 보존)
         content = textwrap.dedent("""\
             ---
             title: Test
@@ -46,7 +45,6 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
         self.assertNotIn("[기준금리]", updated)
 
     def test_related_articles_empty_list_key_deleted(self):
-        # 2. `related_articles` 항목 제거 후 목록이 비면 **키 자체가 사라진다**(빈 리스트 금지)
         content = textwrap.dedent("""\
             ---
             title: Test
@@ -67,8 +65,35 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
         self.assertNotIn("related_articles:", updated)
         self.assertNotIn("- https://example.com/dead", updated)
 
+    def test_related_articles_structured_dict_deleted(self):
+        content = textwrap.dedent("""\
+            ---
+            title: Test Struct
+            related_articles:
+              - title: "Dead Article"
+                url: "https://example.com/dead"
+                source: "News"
+              - title: "Alive Article"
+                url: "https://example.com/alive"
+                source: "News2"
+            ---
+            본문
+            """)
+        self._write_file("content/test_struct.md", content)
+
+        dead_links = [
+            {"file": "content/test_struct.md", "target": "https://example.com/dead", "kind": "external"}
+        ]
+
+        housekeeping.apply_edits(self.root, dead_links, [])
+
+        updated = self._read_file("content/test_struct.md")
+        self.assertNotIn("Dead Article", updated)
+        self.assertNotIn("https://example.com/dead", updated)
+        self.assertIn("Alive Article", updated)
+        self.assertIn("https://example.com/alive", updated)
+
     def test_source_url_never_changes(self):
-        # 3. `source_url`은 죽어도 **바뀌지 않는다**
         content = textwrap.dedent("""\
             ---
             title: Test
@@ -91,8 +116,6 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
         self.assertNotIn("related_articles:", updated)
 
     def test_backfill_limits(self):
-        # 4. 백필 적용이 문서당 3건·전체 20건에서 멈춘다
-        # Single document max 3 test
         content = "---\ntitle: Test\n---\n" + "기준금리\n" * 10
         self._write_file("content/test_backfill.md", content)
         
@@ -101,7 +124,6 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
             for i in range(10)
         ]
         
-        # Test global limit of 20 using 8 files (each requesting 3 backfills = 24 candidates total)
         for f_idx in range(1, 9):
             path = f"content/file_{f_idx}.md"
             self._write_file(path, "---\ntitle: Test\n---\n" + f"단어_{f_idx}\n" * 5)
@@ -113,7 +135,6 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
         housekeeping.apply_edits(self.root, [], backfills)
         
         updated1 = self._read_file("content/test_backfill.md")
-        # File 1 has local limit 3
         self.assertEqual(updated1.count("[기준금리](/dictionary/base-rate/)"), 3)
         
         total_backfills_applied = 0
@@ -122,9 +143,49 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
             cnt = self._read_file(path).count(f"(/dictionary/slug-{f_idx}/)")
             total_backfills_applied += cnt
             
-        # Total across files should be capped at 20 (including file 1's 3, so total 20)
-        # file 1 (3) + files 1..8 = 20 total replacements
         self.assertEqual(total_backfills_applied + 3, 20)
+
+    def test_apply_edits_handles_error_dicts_safely(self):
+        # Passing error dict or non-list should not raise exception
+        housekeeping.apply_edits(self.root, {"error": True}, {"error": True})
+        housekeeping.apply_edits(self.root, ["invalid"], ["invalid"])
+
+    def test_backfill_masks_existing_links_code_headings(self):
+        # Ensure terms inside existing links, code spans, headings, and comments are protected
+        content = textwrap.dedent("""\
+            ---
+            title: 기준금리 분석
+            ---
+            ## 기준금리 헤더
+            [한국의 기준금리 동향](/posts/123/)
+            `기준금리`
+            <!-- 기준금리 주석 -->
+            본문에서 기준금리가 중요하다.
+            """)
+        self._write_file("content/masked_test.md", content)
+        backfills = [{"file": "content/masked_test.md", "term": "기준금리", "slug": "base-rate"}]
+        
+        housekeeping.apply_edits(self.root, [], backfills)
+        updated = self._read_file("content/masked_test.md")
+        
+        # Front matter title, header, code span, comment, and existing link must be unchanged!
+        self.assertIn("title: 기준금리 분석", updated)
+        self.assertIn("## 기준금리 헤더", updated)
+        self.assertIn("[한국의 기준금리 동향](/posts/123/)", updated)
+        self.assertIn("`기준금리`", updated)
+        self.assertIn("<!-- 기준금리 주석 -->", updated)
+        # Plain text should be backfilled
+        self.assertIn("본문에서 [기준금리](/dictionary/base-rate/)가 중요하다.", updated)
+
+    def test_render_report_handles_helper_errors(self):
+        links = {"link": {"error": True}, "backfill": {"error": True}, "internal": None}
+        idx = {"error": True}
+        scan = {"quality": {"error": True}, "contracts": []}
+        num = {"error": True}
+        
+        report = housekeeping.render_report("2026-08-13", links, idx, scan, num)
+        self.assertIn("측정 불가", report)
+        self.assertIn("⚠ 계약 위반 및 시스템 에러", report)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,3 @@
-
 import os
 import re
 import sys
@@ -15,16 +14,16 @@ def get_kst_date():
         from datetime import datetime, timezone, timedelta
         return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime('%Y-%m-%d')
 
-def run_helper(args):
-    proc = subprocess.run([sys.executable] + args, capture_output=True, text=True)
-    if proc.returncode != 0:
-        return {"error": True, "traceback": proc.stderr, "args": args}
+def run_helper(args, timeout=120):
     try:
+        proc = subprocess.run([sys.executable] + args, capture_output=True, text=True, timeout=timeout)
+        if proc.returncode != 0:
+            return {"error": True, "traceback": proc.stderr or proc.stdout, "returncode": proc.returncode, "args": args}
         if proc.stdout.strip():
             return json.loads(proc.stdout)
         return None
     except Exception as e:
-        return {"error": True, "traceback": proc.stdout + "\n" + str(e), "args": args}
+        return {"error": True, "traceback": str(e), "args": args}
 
 def run_links():
     import glob
@@ -34,7 +33,7 @@ def run_links():
     try:
         inv = mdtext.inventory(files)
         urls = sorted({u for rec in inv.values() for u in (rec.get("external") or []) if u})
-    except:
+    except Exception:
         urls = []
     
     link = run_helper([".claude/audit/lib/linkcheck.py", ".claude/audit/link-state.json"] + urls)
@@ -49,9 +48,8 @@ def run_scan():
     q = run_helper([".claude/audit/lib/quality.py"])
     c = run_helper([".claude/audit/lib/contracts.py"])
     try:
-        # corpus needs date
         corp = run_helper([".claude/audit/lib/corpus.py", get_kst_date()])
-    except:
+    except Exception:
         corp = {"error": True}
     return {"quality": q, "contracts": c, "corpus": corp}
 
@@ -61,23 +59,68 @@ def run_numerics():
 def format_error(res):
     return f"\n\n```text\n{res.get('traceback', '')}\n```\n"
 
+def remove_dead_external_from_fm(fm: str, target: str) -> str:
+    lines = fm.splitlines(keepends=True)
+    new_lines = []
+    current_item = []
+    in_related = False
+    
+    for line in lines:
+        if line.startswith("related_articles:"):
+            in_related = True
+            new_lines.append(line)
+            continue
+        
+        if in_related:
+            if line and not line[0].isspace() and ":" in line:
+                if current_item:
+                    item_str = "".join(current_item)
+                    if target not in item_str:
+                        new_lines.extend(current_item)
+                    current_item = []
+                in_related = False
+                new_lines.append(line)
+                continue
+            
+            if line.lstrip().startswith("- "):
+                if current_item:
+                    item_str = "".join(current_item)
+                    if target not in item_str:
+                        new_lines.extend(current_item)
+                    current_item = []
+                current_item.append(line)
+            elif current_item:
+                current_item.append(line)
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+            
+    if current_item:
+        item_str = "".join(current_item)
+        if target not in item_str:
+            new_lines.extend(current_item)
+            
+    res = "".join(new_lines)
+    return re.sub(r"^related_articles:\s*\n(?=[^\s]|$)", "", res, flags=re.MULTILINE)
+
 def render_report(date, links, idx, scan, num):
     lines = []
     lines.append(f"# 주간 유지보수 리포트 ({date})\n")
     
     # 에러 가드
     errors = []
-    for section, obj in [("links", links["link"]), ("backfill", links["backfill"]), ("internal", links["internal"]), 
-                         ("indexation", idx), ("quality", scan["quality"]), ("contracts", scan["contracts"]), 
-                         ("corpus", scan["corpus"]), ("numerics", num)]:
+    for section, obj in [("links", links.get("link")), ("backfill", links.get("backfill")), ("internal", links.get("internal")), 
+                         ("indexation", idx), ("quality", scan.get("quality")), ("contracts", scan.get("contracts")), 
+                         ("corpus", scan.get("corpus")), ("numerics", num)]:
         if obj and isinstance(obj, dict) and obj.get("error"):
             errors.append(f"**{section}** 헬퍼 에러:" + format_error(obj))
             
-    if errors or (scan["contracts"] and isinstance(scan["contracts"], list) and len(scan["contracts"]) > 0):
+    if errors or (scan.get("contracts") and isinstance(scan["contracts"], list) and len(scan["contracts"]) > 0):
         lines.append("## ⚠ 계약 위반 및 시스템 에러")
         for e in errors:
             lines.append(e)
-        if scan["contracts"] and isinstance(scan["contracts"], list) and len(scan["contracts"]) > 0:
+        if scan.get("contracts") and isinstance(scan["contracts"], list) and len(scan["contracts"]) > 0:
             lines.append("| 검사 | 내용 |")
             lines.append("|---|---|")
             for c in scan["contracts"]:
@@ -86,7 +129,7 @@ def render_report(date, links, idx, scan, num):
     
     # ① 링크 무결성
     lines.append("## ① 링크 무결성")
-    if links["link"] and isinstance(links["link"], dict) and not links["link"].get("error"):
+    if links.get("link") and isinstance(links["link"], dict) and not links["link"].get("error"):
         dead = links["link"].get("confirmed_dead", [])
         lines.append("### 확정 사망 링크 (수정 대상)")
         if not dead:
@@ -94,19 +137,21 @@ def render_report(date, links, idx, scan, num):
         else:
             for d in dead:
                 lines.append(f"- {d}")
+    else:
+        lines.append("- 측정 불가 (헬퍼 오류)")
     
     # 백필
     lines.append("\n## ① 확장: 내부 링크 백필")
-    if links["backfill"]:
-        if isinstance(links["backfill"], list):
-            bf = links["backfill"]
-            if not bf:
-                lines.append("- 후보 없음")
-            else:
-                for b in bf:
-                    lines.append(f"- {b.get('file')}: {b.get('term')} -> {b.get('slug')}")
-        elif isinstance(links["backfill"], dict) and not links["backfill"].get("error"):
+    if isinstance(links.get("backfill"), list):
+        bf = links["backfill"]
+        if not bf:
             lines.append("- 후보 없음")
+        else:
+            for b in bf:
+                if isinstance(b, dict):
+                    lines.append(f"- {b.get('file')}: {b.get('term')} -> {b.get('slug')}")
+    else:
+        lines.append("- 측정 불가 (헬퍼 오류)")
     
     # Check hugo availability
     hugo_ok = True
@@ -189,6 +234,119 @@ def render_report(date, links, idx, scan, num):
         
     return "\n".join(lines)
 
+def mask_protected_markdown(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Mask fenced code blocks, comments, images, existing links, and inline code."""
+    placeholders = []
+    
+    def store_token(m):
+        tok = f"__HK_PROT_{len(placeholders)}__"
+        placeholders.append((tok, m.group(0)))
+        return tok
+
+    # 1. Fenced code blocks
+    text = re.sub(r"```[\s\S]*?```", store_token, text)
+    # 2. HTML comments
+    text = re.sub(r"<!--[\s\S]*?-->", store_token, text)
+    # 3. Images
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", store_token, text)
+    # 4. Existing Markdown links
+    text = re.sub(r"\[[^\]]*\]\([^)]*\)", store_token, text)
+    # 5. Inline code spans
+    text = re.sub(r"`[^`\n]+`", store_token, text)
+    
+    return text, placeholders
+
+def unmask_protected_markdown(text: str, placeholders: list[tuple[str, str]]) -> str:
+    res = text
+    for tok, orig in reversed(placeholders):
+        res = res.replace(tok, orig)
+    return res
+
+def apply_edits(repo_root: str, dead_links: list, backfills: list):
+    root = Path(repo_root)
+    if not isinstance(dead_links, list):
+        dead_links = []
+    if not isinstance(backfills, list):
+        backfills = []
+
+    # Group edits by file path
+    edits_by_file = {}
+    for d in dead_links:
+        if isinstance(d, dict) and d.get("file"):
+            edits_by_file.setdefault(d["file"], {"dead": [], "backfills": []})["dead"].append(d)
+    for b in backfills:
+        if isinstance(b, dict) and b.get("file"):
+            edits_by_file.setdefault(b["file"], {"dead": [], "backfills": []})["backfills"].append(b)
+
+    global_backfills = 0
+    BACKFILL_LIMIT = 20
+
+    for file_path, edits in edits_by_file.items():
+        full_path = root / file_path
+        if not full_path.exists():
+            continue
+
+        with open(full_path, "r", encoding="utf-8") as f:
+            content = f.read().replace("\r\n", "\n")
+
+        # Split front matter and body
+        fm = ""
+        body = content
+        fm_match = re.match(r"^---\n(.*?)\n---(?:\n|$)(.*)", content, flags=re.DOTALL)
+        if fm_match:
+            fm = fm_match.group(1)
+            body = fm_match.group(2)
+
+            # Dead external links in related_articles
+            for d in edits["dead"]:
+                if d.get("kind") == "external" and d.get("target"):
+                    target = d["target"]
+                    fm = remove_dead_external_from_fm(fm, target)
+
+        # Internal dead links in body
+        for d in edits["dead"]:
+            if d.get("kind") == "internal" and d.get("target") and d.get("anchor"):
+                target = d["target"]
+                anchor = d["anchor"]
+                body = body.replace(f"[{anchor}]({target})", anchor)
+
+        # Backfills on masked body lines
+        local_backfills = 0
+        masked_body, placeholders = mask_protected_markdown(body)
+        lines = masked_body.splitlines(keepends=True)
+
+        for b in edits["backfills"]:
+            if global_backfills >= BACKFILL_LIMIT or local_backfills >= 3:
+                break
+            term = b.get("term")
+            slug = b.get("slug")
+            if not term or not slug:
+                continue
+
+            pattern = re.compile(rf"(?<!\[){re.escape(term)}(?!\]\()")
+            replaced = False
+
+            for idx in range(len(lines)):
+                line_str = lines[idx]
+                stripped = line_str.lstrip()
+                if stripped.startswith(("#", "|", ">")) or line_str.startswith("    ") or line_str.startswith("\t"):
+                    continue  # Heading, table, blockquote, indented code block
+
+                if pattern.search(line_str):
+                    lines[idx] = pattern.sub(f"[{term}](/dictionary/{slug}/)", line_str, count=1)
+                    replaced = True
+                    break
+
+            if replaced:
+                local_backfills += 1
+                global_backfills += 1
+
+        unmasked_body = unmask_protected_markdown("".join(lines), placeholders)
+        new_content = f"---\n{fm}\n---" + unmasked_body if fm_match else unmasked_body
+
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
 def main_flow(dry_run=False):
     date = get_kst_date()
     links = run_links()
@@ -214,102 +372,9 @@ def main_flow(dry_run=False):
     else:
         with open(f"report/housekeeping-{date}.md", "w", encoding="utf-8") as f:
             f.write(report)
-        apply_edits(".", links["link"].get("confirmed_dead", []) if links["link"] else [], links["backfill"] if links["backfill"] else [])
+        dead_list = links["link"].get("confirmed_dead", []) if links.get("link") and isinstance(links["link"], dict) else []
+        bf_list = links["backfill"] if isinstance(links.get("backfill"), list) else []
+        apply_edits(".", dead_list, bf_list)
 
 if __name__ == '__main__':
     main_flow('--dry-run' in sys.argv)
-def apply_edits(repo_root: str, dead_links: list, backfills: list):
-    root = Path(repo_root)
-    # Group edits by file
-    edits_by_file = {}
-    for d in dead_links:
-        edits_by_file.setdefault(d["file"], {"dead": [], "backfills": []})["dead"].append(d)
-    for b in backfills:
-        edits_by_file.setdefault(b["file"], {"dead": [], "backfills": []})["backfills"].append(b)
-        
-    global_backfills = 0
-    BACKFILL_LIMIT = 20
-
-    for file_path, edits in edits_by_file.items():
-        full_path = root / file_path
-        if not full_path.exists():
-            continue
-            
-        with open(full_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            
-        # Handle backfills first or dead links first?
-        # Let's do dead links first.
-        # Front matter part
-        fm_match = re.match(r"^---\n(.*?)\n---(\n.*)", content, flags=re.DOTALL)
-        if fm_match:
-            fm = fm_match.group(1)
-            body = fm_match.group(2)
-            
-            # dead external links in related_articles
-            for d in edits["dead"]:
-                if d.get("kind") == "external":
-                    target = d["target"]
-                    # Remove from related_articles (but not source_url)
-                    # related_articles: \n  - url: "..." or - "..."
-                    # Since we don't have a full YAML parser, use regex carefully.
-                    # We just remove `- target` line
-                    fm = re.sub(rf"^\s*-\s*\"?{re.escape(target)}\"?\s*$\n?", "", fm, flags=re.MULTILINE)
-                    fm = re.sub(rf"^\s*-\s*url:\s*\"?{re.escape(target)}\"?\s*$\n?", "", fm, flags=re.MULTILINE)
-                    
-            # If related_articles is now empty or has no items, remove the key
-            # It might look like:
-            # related_articles:
-            # (nothing or other keys)
-            fm = re.sub(r"^related_articles:\s*\n(?=[^\s]|$)", "", fm, flags=re.MULTILINE)
-            
-            # Update content
-            content = f"---\n{fm}\n---{body}"
-            
-        # Internal links in body
-        for d in edits["dead"]:
-            if d.get("kind") == "internal":
-                target = d["target"]
-                anchor = d["anchor"]
-                # Replace [anchor](target) with anchor
-                # Note: target might have trailing slash issues, we replace exactly what is given.
-                content = content.replace(f"[{anchor}]({target})", anchor)
-                
-        # Backfills
-        local_backfills = 0
-        lines = content.splitlines(keepends=True)
-        for b in edits["backfills"]:
-            if global_backfills >= BACKFILL_LIMIT:
-                break
-            if local_backfills >= 3:
-                continue
-                
-            term = b["term"]
-            slug = b["slug"]
-            line_no = b.get("line")
-            pattern = re.compile(rf"(?<!\[){re.escape(term)}(?!\]\()")
-            
-            replaced = False
-            if line_no is not None and isinstance(line_no, int) and 1 <= line_no <= len(lines):
-                idx_line = line_no - 1
-                if pattern.search(lines[idx_line]):
-                    lines[idx_line] = pattern.sub(f"[{term}](/dictionary/{slug}/)", lines[idx_line], count=1)
-                    replaced = True
-            
-            if not replaced:
-                for idx_line in range(len(lines)):
-                    if pattern.search(lines[idx_line]):
-                        lines[idx_line] = pattern.sub(f"[{term}](/dictionary/{slug}/)", lines[idx_line], count=1)
-                        replaced = True
-                        break
-                        
-            if replaced:
-                local_backfills += 1
-                global_backfills += 1
-                
-        content = "".join(lines)
-
-        with open(full_path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-

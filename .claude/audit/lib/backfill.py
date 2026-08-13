@@ -62,8 +62,16 @@ def _passes_word_boundary(clean: str, start: int, end: int, surface: str) -> boo
     if last_class is not None and end < len(clean):
         nxt = clean[end]
         if _edge_class(nxt) == last_class:
-            if last_class == "hangul" and clean[end:].startswith(PARTICLES):
-                pass  # 조사로 시작 — 낱말 경계로 허용
+            if last_class == "hangul":
+                matched_p = next((p for p in PARTICLES if clean[end:].startswith(p)), None)
+                if matched_p:
+                    rest = clean[end + len(matched_p):]
+                    if not rest or _edge_class(rest[0]) != "hangul":
+                        pass  # 유효한 조사 — 낱말 경계로 허용
+                    else:
+                        return False
+                else:
+                    return False
             else:
                 return False
     return True
@@ -92,11 +100,13 @@ def _linked_slugs_and_lines(body: str) -> dict:
     out: dict = {}
     for lineno, line in enumerate(body.splitlines(), 1):
         for _, target in MD_LINK.findall(line):
-            if target.startswith(DICT_PREFIX) or target.startswith("dictionary/"):
+            if "dictionary/" in target:
                 clean_target = target.split("#", 1)[0].split("?", 1)[0]
-                slug = clean_target.split("dictionary/", 1)[1].strip("/").split("/")[0]
-                if slug:
-                    out.setdefault(slug, lineno)
+                parts = clean_target.split("dictionary/", 1)
+                if len(parts) > 1:
+                    slug = parts[1].strip("/").split("/")[0]
+                    if slug:
+                        out.setdefault(slug, lineno)
     return out
 
 
@@ -117,6 +127,13 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
         own_slug = path.stem  # 사전 항목이 자기 자신을 링크하지 않도록
         linked = _linked_slugs_and_lines(masked_body)
         seen: set = set()
+        # Relative file path from repo root or CONTENT_ROOT parent
+        try:
+            rel_file = str(path.relative_to(CONTENT_ROOT.parent))
+        except Exception:
+            rel_file = str(path)
+
+        doc_backfill_count = 0
         for lineno, line in enumerate(masked_body.splitlines(), 1):
             file_line = lineno + fm_offset
             stripped = line.lstrip()
@@ -130,13 +147,15 @@ def find_candidates(files: list[Path], terms: dict) -> list[dict]:
                 if _find_valid_surface(clean, surface):
                     if slug in linked:
                         if lineno < linked[slug]:
-                            out.append({"file": path.name, "slug": slug,
+                            out.append({"file": rel_file, "slug": slug,
                                         "term": surface, "line": file_line,
                                         "kind": "precedence"})  # AC #66 소견만
                     else:
-                        out.append({"file": path.name, "slug": slug,
-                                    "term": surface, "line": file_line,
-                                    "kind": "backfill"})  # AC #65
+                        if doc_backfill_count < 3:
+                            out.append({"file": rel_file, "slug": slug,
+                                        "term": surface, "line": file_line,
+                                        "kind": "backfill"})  # AC #65
+                            doc_backfill_count += 1
                     seen.add(slug)
     return out
 
