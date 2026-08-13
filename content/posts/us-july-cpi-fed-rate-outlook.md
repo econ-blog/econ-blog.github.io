@@ -3,7 +3,7 @@ title: "美 7월 CPI 3.4%로 둔화…9월 금리인상 확률 하루 만에 48%
 date: 2026-08-13T05:15:49+09:00
 description: "미국 7월 소비자물가가 예상치에 부합하며 근원물가까지 5년 만에 최저 수준으로 내려오자, 금리스왑 시장이 9월 연준 금리인상 확률을 하루 만에 12%포인트 낮춰 잡았습니다."
 tags: ["물가", "금리", "국제경제"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/202608127829i"
 related_articles:
   - title: "'매파적 동결' 연준, 9월 금리인상 가능성…한은도 추가인상 저울질"
