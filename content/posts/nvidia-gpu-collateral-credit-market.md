@@ -3,7 +3,7 @@ title: "엔비디아 GPU가 담보 자산 된다…월가 6개사와 710조원 �
 date: 2026-08-12T05:15:49+09:00
 description: "엔비디아가 블랙록·골드만삭스 등 월가 6개사와 손잡고 GPU를 담보 자산화해 710조원 규모 신용시장을 만듭니다. AI 순환금융 논란에 대한 업계의 구조적 대응입니다."
 tags: ["인공지능", "증시", "금리"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/202608115217i"
 related_articles:
   - title: "엔비디아, 7500억 달러 순환금융 논란…AI 거품론 재점화"
