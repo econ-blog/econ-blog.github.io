@@ -50,6 +50,7 @@ from contracts import (  # noqa: E402
     count_self_review_items,
     check_self_review_budget,
     check_topic_report_format,
+    check_duplicate_keys,
 )
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -69,6 +70,11 @@ with tempfile.TemporaryDirectory() as tmp:
     v2 = check_terms_sync({"base-rate": {}}, d)
     check("파일 전용 항목 → 위반", len(v2), 1)
     check("위반에 파일명", "orphan" in v2[0]["detail"], True)
+
+    dup_yaml = "apple:\n  title: A\napple:\n  title: B\n"
+    v3 = check_duplicate_keys(dup_yaml)
+    check("중복 키 발견 → 위반 1건", len(v3), 1)
+    check("위반에 중복 슬러그", "apple" in v3[0]["detail"], True)
 
 print("count_self_review_items")
 WS = (

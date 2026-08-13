@@ -604,6 +604,37 @@ class TestProcessInbox(unittest.TestCase):
             offset_val = int(raw_offset) if raw_offset.isdigit() else 0
             self.assertEqual(offset_val, 0)
 
+    def test_resolve_terms_conflict(self):
+        from process_inbox import resolve_terms_conflict
+        
+        # 1. 서로 다른 표제어 두 건 → 양쪽 모두 살아남고 중복 0
+        conflict_diff = (
+            "apple:\n  title: A\n"
+            "<<<<<<< HEAD\n"
+            "banana:\n  title: B\n"
+            "=======\n"
+            "cherry:\n  title: C\n"
+            ">>>>>>> main\n"
+        )
+        resolved = resolve_terms_conflict(conflict_diff)
+        self.assertIsNotNone(resolved)
+        self.assertIn("banana:", resolved)
+        self.assertIn("cherry:", resolved)
+        
+        # 2. 같은 슬러그가 양쪽에 있으면 → 병합하지 않고 실패로 낸다
+        conflict_dup = (
+            "<<<<<<< HEAD\n"
+            "banana:\n  title: B\n"
+            "=======\n"
+            "banana:\n  title: B2\n"
+            ">>>>>>> main\n"
+        )
+        self.assertIsNone(resolve_terms_conflict(conflict_dup))
+        
+        # 4. 해소 결과가 표제어 사이 빈 줄 규약을 지킨다
+        self.assertIn("\n\ncherry:", resolved)
+        self.assertIn("\n\nbanana:", resolved)
+
 
 class TestAutomationAlert(unittest.TestCase):
     def test_alert_contains_workflow_reason_and_url(self):

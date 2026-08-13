@@ -88,7 +88,7 @@ front matter:
    - **이미 발행된 글의 수치를 사전으로 옮겨 적지 않는다.** 포스트가 인용한 값은 그 기사 시점의 값이고 출처도 대개 언론이다. 사전은 오래 남는 글이므로 공시 기관에서 직접 확인한 값만 쓴다.
    - "이 용어가 나온 글" 목록은 쓰지 않는다 — `layouts/partials/dictionary_backlinks.html`이 자동 생성한다.
    - 면책 문구를 본문에 쓰지 않는다 — `layouts/partials/disclaimer.html`이 사전 페이지 하단에도 자동 표시한다.
-3. `_terms.yaml`에 append한다:
+3. `_terms.yaml`에 슬러그 사전순 위치에 삽입한다. 기존 항목 순서를 전부 재정렬하지 않는다 — 새 항목만 제자리에 넣는다:
 
    ```yaml
    <term-slug>:

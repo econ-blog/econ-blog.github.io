@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from internal_links import CONTENT_ROOT, REPO_ROOT, load_terms  # noqa: E402
+from internal_links import CONTENT_ROOT, REPO_ROOT, load_terms, SLUG  # noqa: E402
 
 # analysis.md §4가 방출하고 draft.md §2가 소비해야 하는 4개 필드.
 # 하나라도 짝을 잃으면 런타임에 조용히 드롭된다 — 실제로 한 번 일어났고
@@ -77,6 +77,26 @@ def check_terms_sync(terms: dict, dict_dir: Path) -> list[dict]:
             "check": "사전 정합",
             "detail": f"content/dictionary/{missing_slug}.md가 있으나 "
                       f"_terms.yaml에 '{missing_slug}' 키가 없다",
+        })
+    return out
+
+
+def check_duplicate_keys(terms_text: str) -> list[dict]:
+    """_terms.yaml에 같은 슬러그가 2번 이상 나오는지 검사한다."""
+    out = []
+    seen = set()
+    dups = set()
+    for line in terms_text.splitlines():
+        m = SLUG.match(line)
+        if m:
+            cur = m.group(1)
+            if cur in seen:
+                dups.add(cur)
+            seen.add(cur)
+    for d in sorted(dups):
+        out.append({
+            "check": "중복 키",
+            "detail": f"_terms.yaml에 '{d}' 키가 중복으로 존재한다",
         })
     return out
 
@@ -158,6 +178,9 @@ def all_checks() -> list[dict]:
     violations += check_terms_sync(
         load_terms(TERMS_PATH.read_text(encoding="utf-8")), DICT_DIR
     )
+    violations += check_duplicate_keys(
+        TERMS_PATH.read_text(encoding="utf-8")
+    )
     violations += check_self_review_budget(
         WRITING_STYLES_PATH.read_text(encoding="utf-8")
     )
@@ -181,9 +204,10 @@ def main() -> None:
         # 출력을 `--check terms` 결과로 오독한다(둘 다 리스트다). 실패로 낸다.
         if argv[1:] != ["terms"]:
             sys.exit(f"{USAGE}\n--check 는 terms 만 받는다: {' '.join(argv[1:]) or '(없음)'}")
-        terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
-        print(json.dumps(check_terms_sync(terms, DICT_DIR),
-                         ensure_ascii=False, indent=2))
+        terms_text = TERMS_PATH.read_text(encoding="utf-8")
+        terms = load_terms(terms_text)
+        out = check_terms_sync(terms, DICT_DIR) + check_duplicate_keys(terms_text)
+        print(json.dumps(out, ensure_ascii=False, indent=2))
         return
     if argv:
         sys.exit(f"{USAGE}\n알 수 없는 인자: {' '.join(argv)}")

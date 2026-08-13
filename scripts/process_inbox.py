@@ -260,6 +260,71 @@ def update_telegram_offset(repo: str, pat: str, offset: int):
     else:
         resp.raise_for_status()
 
+
+def resolve_terms_conflict(content: str) -> str | None:
+    """git 충돌 마커를 해소하고 양쪽 버전을 합친다. 
+    만약 슬러그가 중복되면 None을 반환해 병합을 거부한다."""
+    lines = content.splitlines()
+    out = []
+    
+    for line in lines:
+        if line.startswith("<<<<<<< "): continue
+        if line.startswith("======="): continue
+        if line.startswith(">>>>>>> "): continue
+        out.append(line)
+        
+    # 중복 키 검사
+    seen = set()
+    for line in out:
+        m = re.match(r"^([a-z0-9][a-z0-9-]*):\s*$", line)
+        if m:
+            if m.group(1) in seen:
+                return None
+            seen.add(m.group(1))
+            
+    # 표제어 사이 빈 줄 규약 복원
+    text = "\n".join(out)
+    text = re.sub(r'\n+([a-z0-9][a-z0-9-]*:\s*\n)', r'\n\n\1', text)
+    return text.strip() + "\n"
+
+def auto_resolve_terms_conflict_git(repo: str, pr: dict, pat: str) -> bool:
+    import tempfile
+    import subprocess
+    import os
+    branch = pr["head"]["ref"]
+    remote_url = f"https://x-access-token:{pat}@github.com/{repo}.git"
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "clone", "--depth=1", "--branch", branch, remote_url, tmpdir], check=True, capture_output=True)
+        subprocess.run(["git", "remote", "set-branches", "origin", "main"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "fetch", "--depth=1", "origin", "main"], cwd=tmpdir, check=True, capture_output=True)
+        
+        subprocess.run(["git", "config", "user.name", "bjh7790"], cwd=tmpdir, check=True)
+        subprocess.run(["git", "config", "user.email", "bjh7790@gmail.com"], cwd=tmpdir, check=True)
+        
+        res = subprocess.run(["git", "merge", "origin/main", "--no-commit", "--no-ff"], cwd=tmpdir, capture_output=True, text=True)
+        if res.returncode != 0:
+            conflicts = subprocess.run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.splitlines()
+            if conflicts != ["content/dictionary/_terms.yaml"]:
+                return False
+                
+            terms_path = os.path.join(tmpdir, "content/dictionary/_terms.yaml")
+            with open(terms_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            resolved = resolve_terms_conflict(content)
+            if not resolved:
+                return False
+                
+            with open(terms_path, "w", encoding="utf-8") as f:
+                f.write(resolved)
+                
+            subprocess.run(["git", "add", "content/dictionary/_terms.yaml"], cwd=tmpdir, check=True)
+            
+        subprocess.run(["git", "commit", "-m", "chore: auto-resolve _terms.yaml conflict"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "push", "origin", branch], cwd=tmpdir, check=True, capture_output=True)
+        return True
+
 def flip_front_matter_draft(content: str) -> str:
     def replace_draft(match):
         fm = match.group(1)
@@ -267,7 +332,7 @@ def flip_front_matter_draft(content: str) -> str:
         return f"---\n{fm_updated}\n---"
     return re.sub(r'^---\s*\n(.*?)\n---', replace_draft, content, count=1, flags=re.DOTALL)
 
-def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
+def execute_approved_post(pr: dict, repo: str, pat: str, bot_token: str, chat_id: str) -> bool:
     if not check_pr_open(pr, repo, pat):
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
         return False
@@ -308,7 +373,14 @@ def execute_approved_post(pr: dict, repo: str, pat: str) -> bool:
         p_resp.raise_for_status()
         
     # 3. Merge PR to main (triggers hugo.yml)
-    merge_pr(repo, pr_num, pat)
+    try:
+        merge_pr(repo, pr_num, pat)
+    except RuntimeError as err:
+        if "dirty" in str(err) and auto_resolve_terms_conflict_git(repo, pr, pat):
+            send_telegram(bot_token, chat_id, f"PR #{pr_num} _terms.yaml 충돌 자동 해소됨 — 병합 재시도")
+            merge_pr(repo, pr_num, pat)
+        else:
+            raise err
 
     # 4. Delete branch
     ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}"
@@ -381,7 +453,7 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
     try:
         if verdict == "APPROVED":
             if is_post:
-                success = execute_approved_post(target_pr, repo, pat)
+                success = execute_approved_post(target_pr, repo, pat, bot_token, chat_id)
                 if success:
                     send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
             else:
