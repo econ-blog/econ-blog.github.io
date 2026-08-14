@@ -65,6 +65,28 @@ for f in scripts/test_*.py; do .venv/bin/python "$f"; done
 
 **무인 불변조건** (각 스테이지 파일에서 각각 강제한다): `auto/post-YYYY-MM-DD`에만 푸시 · 단일 커밋만 푸시 (`git commit --cleanup=verbatim` 1건) · 항상 `draft: true` · 대화형 도구 호출 금지 · 1위가 8/15 미달이면 산출물 없이 중단.
 
+## `/revise-post` (수정 발행 · 대화형 클라우드 세션)
+
+승인 루프에는 두 갈래가 있다. **승인**은 텔레그램에 `승인 #P0814`로 답하면 다음날
+01:30 인박스가 집행한다. **수정**은 사람이 claude cloud session을 직접 열어
+`/revise-post`를 돌리고, 그 세션이 그 자리에서 집행한다 —
+`.claude/commands/revise-post.md`가 절차다.
+
+수정 경로는 `main`에 직접 커밋·푸시하고 그날 `auto/post-YYYY-MM-DD` PR을 **닫는다**
+(병합이 아니다 — 병합하면 `draft: true` 버전이 되살아난다). 이것은 무인 규약의
+예외가 아니라 `/daily-post` 수동 모드와 같은 등급이며, 승인 게이트와 발행 전 검사
+게이트를 그대로 거친 뒤에만 일어난다.
+
+**다음날 인박스가 조용한 것은 자동이다.** PR이 닫혀 있으면 `get_open_prs()`가
+빈 목록을 돌려주므로 인박스도 재질의(`--reask`)도 할 일이 없다. "이미 발행했으니
+건너뛰라"는 플래그를 따로 만들지 않는다 — 만들면 PR 상태와 플래그가 갈린다.
+
+**수정 세션은 `auto/**` 브랜치에 아무것도 밀지 않는다.** 그 푸시는
+`open-auto-pr.yml`을 깨우고, 그 시점에 PR을 만들 이유가 없다.
+
+텔레그램에 `수정`은 판정 어휘가 아니다. `process_inbox.py`는 승인/반려만 알고
+그 밖의 답장은 `판정불가`로 되돌려 보낸다 — 수정할 날은 답장하지 않고 세션만 연다.
+
 ## `/weekly-housekeeping` (무인 유지보수 · LLM 없음)
 
 GitHub Actions(`.github/workflows/weekly-housekeeping.yml`, 외부 cron-job.org 호출)로 자동 실행된다. ① 링크+백필 · ③ 색인 · ④ E/Q(결정론 규칙) · ⑥ 수치 축을 순수 Python(`scripts/housekeeping.py`)으로 판정하고 기계적 정정을 적용한다.
@@ -226,6 +248,16 @@ UTC 날짜를 쓰면 매일 "스냅샷 부재"로 조용히 중단된다.
 **`gh`를 루틴에서 호출하지 않는다.** 샌드박스에 설치되어 있지 않고, 토큰을 넣을 안전한
 경로도 없다. PR 생성은 `open-auto-pr.yml`이 커밋 메시지 본문을 PR 본문으로 써서 만든다 —
 그래서 무인 커밋은 반드시 단일 커밋 1건(`git commit --cleanup=verbatim -m "<제목>" -m "<PR 본문>"`) 형태다.
+
+**`open-auto-pr.yml`은 `chore: publish`·`chore: auto-resolve` 커밋을 건너뛴다.**
+인박스가 승인을 집행할 때 `draft` 플립을 **파일마다 따로** Contents API로 밀기
+때문에 푸시 1건 = 이 워크플로 1회인데, 러너가 잡히는 ~40초 사이에 인박스는 이미
+PR을 병합하고 브랜치를 지운다. 그러면 `gh pr list --head ... --state open`이 0을
+돌려줘(PR이 방금 닫혔으므로) 가드를 통과하고, `gh pr create`가
+`No commits between main and auto/post-...`로 실패해 **병합이 성공한 뒤에**
+"승인 루프가 끊긴다"는 거짓 경보가 나간다. 2026-08-11·08-13 회차에서 5건 발생했다.
+커밋 메시지 가드에 더해 브랜치 존재·`ahead_by` 확인도 넣었으니, 이 워크플로의 실패
+경보는 이제 진짜 실패를 뜻한다 — 가드를 떼면 그 성질이 사라진다.
 
 Hugo는 샌드박스에 설치 가능하다. `scripts/bootstrap_sandbox.sh`가 0.164.0을 받는다
 (로컬에서는 no-op). 실패하면 ④E1·④E4·③I1·⑤D4를 **`측정 불가`**로 낸다 — `통과`가 아니다.

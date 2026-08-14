@@ -16,6 +16,16 @@ permissions:
 jobs:
   open-pr:
     runs-on: ubuntu-latest
+    # 인박스가 승인을 집행하며 미는 커밋은 PR을 만들 대상이 아니다.
+    # `execute_approved_post()`는 draft 플립을 **파일마다 따로** Contents API로
+    # 밀기 때문에 푸시 1건 = 이 워크플로 1회인데, 러너가 잡히는 ~40초 사이에
+    # 인박스는 이미 PR을 병합하고 브랜치를 지운다. 그러면 아래 `gh pr list`가
+    # 0을 돌려줘(PR이 방금 닫혔으므로) 가드를 통과하고, `gh pr create`가
+    # "No commits between main and auto/post-..."로 실패해 거짓 경보가 나간다.
+    # 2026-08-11·08-13 회차에서 5건 발생했고, 전부 병합이 성공한 뒤였다.
+    if: >-
+      !startsWith(github.event.head_commit.message, 'chore: publish') &&
+      !startsWith(github.event.head_commit.message, 'chore: auto-resolve')
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -45,16 +55,36 @@ jobs:
             echo "$DELIM_BODY"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Skip if PR already exists
+      - name: Decide whether a PR is needed
         id: existing
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
+          # 커밋 메시지 가드(잡 레벨 `if`)를 빠져나온 푸시라도 PR을 만들 수 없는
+          # 상태가 있다 — 브랜치가 이미 지워졌거나 main 대비 새 커밋이 없는 경우다.
+          # 그대로 `gh pr create`에 넘기면 실패하고, 실패는 곧 텔레그램 경보다.
+          # 경보는 "승인 루프가 끊겼다"는 뜻이어야 하므로 여기서 조용히 걸러 낸다.
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "브랜치 ${GITHUB_REF_NAME} 가 이미 삭제되었다 — 건너뜀"
+            echo "create=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           COUNT=$(gh pr list --head "${GITHUB_REF_NAME}" --state open --json number --jq 'length')
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" != "0" ]; then
+            echo "이미 열린 PR ${COUNT}건 — 건너뜀"
+            echo "create=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          AHEAD=$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${GITHUB_REF_NAME}" --jq '.ahead_by')
+          if [ "$AHEAD" = "0" ]; then
+            echo "main 대비 새 커밋이 없다 — 건너뜀"
+            echo "create=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "create=1" >> "$GITHUB_OUTPUT"
 
       - name: Create pull request
-        if: steps.existing.outputs.count == '0'
+        if: steps.existing.outputs.create == '1'
         env:
           GH_TOKEN: ${{ secrets.PAT }}
           PR_TITLE: ${{ steps.msg.outputs.title }}
