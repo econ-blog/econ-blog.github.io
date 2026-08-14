@@ -3,7 +3,7 @@ title: "가계대출 총량 30조→60조 확대…DSR 문턱은 더 높인다"
 date: 2026-08-14T05:19:00+09:00
 description: "금융위원회가 가계대출 총량 증가율 목표를 연 1.5%에서 3%로 올려 대출 여력을 두 배로 늘렸습니다. 동시에 고위험 주담대는 DSR 기준이 더 까다로워집니다."
 tags: ["부동산", "금리"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026081300901"
 faq:
   - q: "가계대출 총량 규제가 완화되면 저도 대출을 더 쉽게 받을 수 있나요?"
