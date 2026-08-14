@@ -62,6 +62,10 @@ core-inflation:
   title: "근원물가"
   aliases: ["근원인플레이션", "핵심물가"]
 
+dsr:
+  title: "총부채원리금상환비율"
+  aliases: ["DSR", "소득대비 원리금상환비율"]
+
 ltv:
   title: "담보인정비율"
   aliases: ["LTV", "주택담보인정비율", "이주비 LTV"]
