@@ -82,7 +82,9 @@ fomc:
   title: "연방공개시장위원회"
   aliases: ["FOMC", "연방시장공개위원회"]
 
-
+high-yield-spread:
+  title: "하이일드 스프레드"
+  aliases: ["HY OAS", "정크본드 스프레드", "하이일드 크레딧스프레드"]
 
 
 
