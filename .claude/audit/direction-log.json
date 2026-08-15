@@ -1,5 +1,22 @@
 {
-  "hypotheses": [],
+  "hypotheses": [
+    {
+      "id": "H001",
+      "주장": "포스트의 1차 출처(ECOS·FRED·DART·KOSIS·bok.or.kr) 링크 보유 비율을 24건 중 5건(21%)에서 끌어올린다",
+      "지표": "content/posts/*.md 중 1차 출처 도메인 링크가 1건 이상인 파일 비율",
+      "예측": "발행 35건 시점에 1차 출처 링크 보유 포스트 비율이 60% 이상이 된다",
+      "확인시점": "발행 35건",
+      "기각기준": "발행 35건 시점에 1차 출처 링크 보유 포스트 비율이 50% 미만이면 기각한다",
+      "상태": "제안",
+      "제기일": "2026-08-16",
+      "채택일": null,
+      "연기횟수": 0,
+      "출처": {
+        "유형": "내부"
+      },
+      "대조이력": []
+    }
+  ],
   "portfolio_history": [
     {
       "date": "2026-08-01",
@@ -47,6 +64,22 @@
         "n1_count": 73,
         "claims_total": 160,
         "claims_per_post": 9.4
+      }
+    },
+    {
+      "date": "2026-08-16",
+      "snapshot": {
+        "d1_evergreen_mass_ratio": 0.1984,
+        "d2_vocab_used": 13,
+        "d3_links_per_post_median": 3,
+        "d3_self_reference": 0,
+        "d3_dead_ends": 0,
+        "d4_primary_source_links": 12,
+        "d5_aged_ratio": 0.0,
+        "d6_all_met": false,
+        "n1_count": 64,
+        "claims_total": 229,
+        "claims_per_post": 9.5
       }
     }
   ]
