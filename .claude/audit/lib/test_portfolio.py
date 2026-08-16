@@ -211,9 +211,16 @@ with tempfile.TemporaryDirectory() as tmp:
 print("d4_eeat")
 from portfolio import d4_eeat, PRIMARY_SOURCE_HOSTS  # noqa: E402
 
+# D4와 N2는 같은 튜플을 본다. 두 파일이 각자 리터럴을 들면 2026-08-16 이전처럼
+# 조용히 갈리므로, 동일 객체인지를 검사로 못박는다.
+from numerics import PRIMARY_HOSTS as _N2_HOSTS  # noqa: E402
+
+check("D4와 N2가 같은 목록", PRIMARY_SOURCE_HOSTS is _N2_HOSTS, True)
 check("1차 출처 호스트 여섯", len(PRIMARY_SOURCE_HOSTS), 6)
-check("bok.or.kr 포함", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, True)
-check("kfb.or.kr 포함", "kfb.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+check("공시 지점을 쓴다 (portal.kfb)", "portal.kfb.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+check("기관 대문은 빠진다 (bok.or.kr)", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, False)
+check("기관 대문은 빠진다 (kfb.or.kr)", "kfb.or.kr" in PRIMARY_SOURCE_HOSTS, False)
+check("bis.org 포함", "bis.org" in PRIMARY_SOURCE_HOSTS, True)
 
 from portfolio import _is_primary_source  # noqa: E402
 
@@ -358,6 +365,24 @@ check("포스트 분모(공지 제외)", r6["posts"]["## 투자 관점에서 보
 check("미충족 목록", r6["posts"]["## 투자 관점에서 보면"]["missing"],
       ["content/posts/half.md"])
 check("사전 슬롯 충족", r6["dictionary"]["## 실생활에서는"]["met"], 1)
+
+# 2026-08-10 제목 규율 이후의 글 — 주제 특화 H2 4개. 고정 문자열은 하나도 없지만
+# 4단 구성이므로 두 슬롯 모두 충족이다. 문자열만 보던 시절엔 둘 다 미충족이었다.
+D6TOPICAL = [
+    doc("topical", "posts", 100, source=True,
+        body="## 근원물가가 최고치를 찍은 경위\n가\n"
+             "## 한은의 8월 결정을 어렵게 만드는 이유\n나\n"
+             "## 근원물가가 내 대출 이자에 닿는 길\n다\n"
+             "## 물가 국면에서 자산군이 갈리는 지점\n라\n"),
+    # 3단 구성은 4단이 아니므로 구조로 통과하지 못한다 — 게이트가 살아 있는지 본다.
+    doc("three", "posts", 100, source=True,
+        body="## 하나\n가\n## 둘\n나\n## 셋\n다\n"),
+]
+r6t = d6_slots(D6TOPICAL)
+check("주제 특화 4단 — 슬롯1 충족", r6t["posts"]["## 나에게 무슨 의미인가"]["met"], 1)
+check("주제 특화 4단 — 슬롯2 충족", r6t["posts"]["## 투자 관점에서 보면"]["met"], 1)
+check("3단 구성은 미충족", r6t["posts"]["## 투자 관점에서 보면"]["missing"],
+      ["content/posts/three.md"])
 check("전부 충족 아님", r6["all_met"], False)
 
 print("snapshot")

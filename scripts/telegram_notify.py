@@ -10,6 +10,9 @@ def extract_verdict_token(branch_name: str, pr_type: str) -> str:
     prefix = "P" if pr_type == "post" else "A"
     return f"#{prefix}{mmdd}"
 
+LEADING_BULLET = re.compile(r'^[-*\s]+')
+
+
 def extract_inspection_line(body: str) -> str:
     lines = body.splitlines()
     for i, line in enumerate(lines):
@@ -22,7 +25,12 @@ def extract_inspection_line(body: str) -> str:
             for next_line in lines[i+1:]:
                 nl = next_line.strip()
                 if nl:
-                    return f"발행 전 검사: {re.sub(r'^[-*\s]+', '', nl)}"
+                    # f-string 표현식 안에 백슬래시를 두면 Python 3.11에서
+                    # SyntaxError다(3.12의 PEP 701부터 허용). 워크플로는 3.12라
+                    # 통과했지만 로컬 .venv(3.11)에서는 import 자체가 깨져
+                    # test_automation.py 전체가 실패했다. 치환을 밖으로 뺀다.
+                    stripped = LEADING_BULLET.sub('', nl)
+                    return f"발행 전 검사: {stripped}"
             return "발행 전 검사: 진행됨"
     return "발행 전 검사: 검사 불가"
 

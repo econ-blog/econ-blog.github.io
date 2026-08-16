@@ -91,6 +91,9 @@ from numerics import is_primary, n2_nonprimary, numbers_block  # noqa: E402
 check("1차 출처 판정", [is_primary(h) for h in
       ("ecos.bok.or.kr", "portal.kfb.or.kr", "www.hankyung.com", "bok.or.kr")],
       [True, True, False, False])
+# 2026-08-16 사람 판정으로 추가. REER 공시처이며 FRED와 같은 등급이다.
+check("bis.org 1차 출처", [is_primary(h) for h in ("bis.org", "www.bis.org")],
+      [True, True])
 
 BLOCK = (
     "리드 문단입니다.\n\n"
