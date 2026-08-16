@@ -6,9 +6,6 @@ tags: ["환율", "국제경제", "금리"]
 draft: false
 source_url: "https://www.hankyung.com/article/202608020059i"
 related_articles:
-  - title: "162엔 뚫린 엔화 39년 반만에 최저…금리인상·개입에도 '수퍼엔저'"
-    url: "https://www.koreadaily.com/article/20260630021453178"
-    source: "미주중앙일보"
   - title: "엔화, 달러당 163엔 돌파…39년7개월 만에 최저"
     url: "https://www.asiae.co.kr/article/2026072218103652335"
     source: "아시아경제"
