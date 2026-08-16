@@ -358,6 +358,24 @@ check("포스트 분모(공지 제외)", r6["posts"]["## 투자 관점에서 보
 check("미충족 목록", r6["posts"]["## 투자 관점에서 보면"]["missing"],
       ["content/posts/half.md"])
 check("사전 슬롯 충족", r6["dictionary"]["## 실생활에서는"]["met"], 1)
+
+# 2026-08-10 제목 규율 이후의 글 — 주제 특화 H2 4개. 고정 문자열은 하나도 없지만
+# 4단 구성이므로 두 슬롯 모두 충족이다. 문자열만 보던 시절엔 둘 다 미충족이었다.
+D6TOPICAL = [
+    doc("topical", "posts", 100, source=True,
+        body="## 근원물가가 최고치를 찍은 경위\n가\n"
+             "## 한은의 8월 결정을 어렵게 만드는 이유\n나\n"
+             "## 근원물가가 내 대출 이자에 닿는 길\n다\n"
+             "## 물가 국면에서 자산군이 갈리는 지점\n라\n"),
+    # 3단 구성은 4단이 아니므로 구조로 통과하지 못한다 — 게이트가 살아 있는지 본다.
+    doc("three", "posts", 100, source=True,
+        body="## 하나\n가\n## 둘\n나\n## 셋\n다\n"),
+]
+r6t = d6_slots(D6TOPICAL)
+check("주제 특화 4단 — 슬롯1 충족", r6t["posts"]["## 나에게 무슨 의미인가"]["met"], 1)
+check("주제 특화 4단 — 슬롯2 충족", r6t["posts"]["## 투자 관점에서 보면"]["met"], 1)
+check("3단 구성은 미충족", r6t["posts"]["## 투자 관점에서 보면"]["missing"],
+      ["content/posts/three.md"])
 check("전부 충족 아님", r6["all_met"], False)
 
 print("snapshot")

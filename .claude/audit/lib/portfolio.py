@@ -414,6 +414,26 @@ def d4_eeat(
 POST_SLOTS = ("## 나에게 무슨 의미인가", "## 투자 관점에서 보면")
 DICT_SLOTS = ("## 실생활에서는", "## 투자에서는")
 
+# 포스트 H2는 2026-08-10 제목 규율(`headings.py` T2·`draft.md` §1)로 **주제 특화
+# 문구**가 됐다. 그 뒤에 쓰인 글은 `## 투자 관점에서 보면` 대신 `## 물가 국면에서
+# 자산군이 갈리는 지점` 같은 제목을 쓴다 — 옛 고정 문구를 쓰는 것이 이제 위반이다.
+# 그래서 문자열로만 찾으면 **규칙을 지킨 글일수록 D6에서 떨어지고**, 충족률은
+# 발행할수록 0을 향해 내려간다. 2026-08-16 감사 ⑤ 소견 2(22/24)가 그 첫 두 건이다.
+#
+# 슬롯을 **구조로도** 인정해 이 모순을 닫는다: draft.md가 고정한 4단 구성이면
+# 3번째·4번째 H2가 각각 생활 경로·투자 관점 자리다. 옛 글은 문자열이 그대로 남아
+# 있어 어느 쪽으로든 통과하므로 소급 수정이 필요 없다. 사전 슬롯은 고정 문자열
+# 그대로다 — 제목 규율은 포스트에만 적용된다.
+POST_SECTION_COUNT = 4
+POST_H2 = re.compile(r"^##[ \t]+.+$", re.MULTILINE)
+
+
+def _slot_met(section: str, slot: str, body: str) -> bool:
+    """슬롯이 채워졌는가. 포스트는 고정 문자열 또는 4단 구성 중 하나면 충족."""
+    if slot in body:
+        return True
+    return section == "posts" and len(POST_H2.findall(body)) == POST_SECTION_COUNT
+
 
 def _days_between(start: str, end: str) -> int:
     try:
@@ -447,7 +467,10 @@ def d5_decay(docs: list[dict], today: str) -> dict:
 
 
 def d6_slots(docs: list[dict]) -> dict:
-    """D6 차별점 슬롯 충족률. 문자열 존재만 본다 — 내용의 품질은 판정하지 않는다. (AC #44 D6)"""
+    """D6 차별점 슬롯 충족률. 슬롯의 존재만 본다 — 내용의 품질은 판정하지 않는다. (AC #44 D6)
+
+    포스트는 고정 문자열과 4단 구성 둘 중 하나면 충족이다. 근거는 `_slot_met` 위 주석.
+    """
     out = {}
     for section, slots in (("posts", POST_SLOTS), ("dictionary", DICT_SLOTS)):
         group = [
@@ -457,7 +480,9 @@ def d6_slots(docs: list[dict]) -> dict:
         ]
         out[section] = {}
         for slot in slots:
-            missing = sorted(d["file"] for d in group if slot not in d["body"])
+            missing = sorted(
+                d["file"] for d in group if not _slot_met(section, slot, d["body"])
+            )
             out[section][slot] = {
                 "met": len(group) - len(missing),
                 "total": len(group),
