@@ -10,7 +10,7 @@ related_articles:
     url: "https://www.asiae.co.kr/article/2026072218103652335"
     source: "아시아경제"
   - title: "엔화 끝없는 약세…달러·엔 환율 164엔 목전, 40년 만에 '최저'"
-    url: "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03680166645518784"
+    url: "https://www.edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03680166645518784"
     source: "이데일리"
 ---
 

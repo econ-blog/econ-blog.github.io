@@ -7,7 +7,7 @@ draft: false
 source_url: "https://www.hankyung.com/article/2026072557777"
 related_articles:
   - title: "EU, 러 사할린-2 LNG 韓·日 수입 제재 예외 인정…에너지 안보 숨통"
-    url: "https://www.einfomax.co.kr/news/articleView.html?idxno=4318721"
+    url: "https://news.einfomax.co.kr/?idxno=4318721"
     source: "연합인포맥스"
   - title: "EU 제재 속 숨통 튼 사할린-2 LNG… 2028년 3월까지 제재 예외 인정"
     url: "https://www.e2news.com/news/articleView.html?idxno=311542"
@@ -31,7 +31,7 @@ related_articles:
 
 한국은 가스 소비량의 대부분을 해외 수입에 의존하는 대표적인 에너지 수입국입니다. 지정학적 불안으로 [호르무즈·홍해 공급망 이슈](/posts/hormuz-red-sea-oil-supply-shock/)가 지속되고 [브렌트유](/dictionary/brent-crude/)를 비롯한 국제 원자재 가격 변동성이 큰 상황에서, 기존 장기 계약 물량의 중단 조치는 심각한 [공급충격](/dictionary/supply-shock/)을 부를 수 있었습니다.
 
-사할린-2 프로젝트는 한국 전체 LNG 수입량의 3~5% 안팎을 차지하는 주요 장기 도입선입니다. 이번 예외 인정을 받지 못했다면 비싼 가격을 주고 단기 현물 시장에서 대체 물량을 급히 구해야 했을 것이고, 이는 수입 비용 급증과 외화 유출로 이어질 수 있었습니다.
+사할린-2 프로젝트는 2026년 7월 기준 한국 전체 LNG 수입량의 3~5% 안팎을 차지하는 주요 장기 도입선입니다. 이번 예외 인정을 받지 못했다면 비싼 가격을 주고 단기 현물 시장에서 대체 물량을 급히 구해야 했을 것이고, 이는 수입 비용 급증과 외화 유출로 이어질 수 있었습니다.
 
 ## 나에게 무슨 의미인가
 
