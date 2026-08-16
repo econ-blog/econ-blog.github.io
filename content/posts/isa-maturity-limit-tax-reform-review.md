@@ -3,7 +3,7 @@ title: "ISA 만기 5년 제한 논란…정부, 발표 나흘 만에 재검토"
 date: 2026-08-16T19:07:00+09:00
 description: "정부가 일반 ISA의 계약 기간을 최대 5년으로 묶고 납입 한도 이월을 없애는 세제개편안을 냈다가 반발에 부딪혀 재검토에 들어갔습니다."
 tags: ["재정·세금", "증시"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026081420026"
 faq:
   - q: "지금 갖고 있는 ISA 계좌를 해지하고 만기를 길게 다시 만들어야 하나요?"
