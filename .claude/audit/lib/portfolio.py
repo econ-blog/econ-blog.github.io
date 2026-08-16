@@ -273,14 +273,11 @@ def d3_render_side(public_root: Path, terms: dict) -> dict:
     }
 
 
-PRIMARY_SOURCE_HOSTS = (
-    "ecos.bok.or.kr",
-    "fred.stlouisfed.org",
-    "dart.fss.or.kr",
-    "kosis.kr",
-    "bok.or.kr",
-    "kfb.or.kr",
-)
+# D4의 1차 출처 목록은 N2와 **같은 튜플이다.** 2026-08-16까지 두 파일이 각자 목록을
+# 들고 있다가 서로 갈렸고(그 주 감사 ⑤가 소견으로 냄), 목록을 `numerics.py` 하나로
+# 모으고 여기서 import하는 것으로 닫았다. 근거와 합친 규칙은 그쪽 주석에 있다.
+# **여기에 다시 리터럴을 두지 않는다** — 그러면 같은 불일치가 그대로 되살아난다.
+from numerics import PRIMARY_HOSTS as PRIMARY_SOURCE_HOSTS  # noqa: E402
 
 # 속성 순서를 가정하지 않는다 — <meta> 태그를 먼저 잡고 그 안에서 속성을 읽는다.
 # minify는 content=""를 content로 줄인다: <meta name=author content>

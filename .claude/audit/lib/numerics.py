@@ -43,11 +43,26 @@ TABLE_ROW = re.compile(r"^\s*\|")
 # 소수점과 문장 끝을 가르는 유일한 신호는 마침표 앞 글자가 한글인지다.
 SENT_END = re.compile(r"(?<=[가-힣])\.(?=\s|$)")
 
-# AC #56 — draft.md:68이 정한 1차 출처. SEED D4(AC #44)의 목록과 다르다(D4는
-# bok.or.kr을 포함하고 portal.kfb.or.kr을 빼놓았다). AC #56이 draft.md를
-# 지목하므로 N2는 이쪽을 따른다. 목록 자체를 이 축이 고치지 않는다.
+# 1차 출처 호스트의 **단일 진리원**이다. N2(이 파일)와 D4(`portfolio.py`)가 이 하나를
+# 공유한다 — `portfolio.py`가 `PRIMARY_SOURCE_HOSTS`라는 이름으로 이것을 import한다.
+#
+# 2026-08-16까지는 두 파일이 각자 목록을 들고 있었고 서로 달랐다(D4는 `bok.or.kr`·
+# `kfb.or.kr`을 갖고 `portal.kfb.or.kr`이 없었다). 같은 주 감사가 그 불일치를 소견으로
+# 냈고, 사람 판정으로 아래처럼 합쳤다:
+#
+#   - **기관 대문이 아니라 공시 지점을 쓴다.** `bok.or.kr`(한은 홈)과 `kfb.or.kr`(연합회
+#     홈)은 지표가 실제로 게시되는 곳이 아니다. 그 둘을 1차 출처로 세면 숫자를 보여 주지
+#     않는 링크가 D4를 부풀린다. 접미 일치 규칙 덕에 `ecos.bok.or.kr`·`portal.kfb.or.kr`은
+#     그대로 통과하므로 잃는 것이 없다(합칠 당시 대문 주소를 쓰는 콘텐츠는 0건이었다).
+#   - **`bis.org` 추가.** 실질실효환율(REER)의 실제 공시처이며, 목록에 없다는 이유만으로
+#     `real-effective-exchange-rate.md`의 숫자 슬롯이 지워졌다. `draft.md` §3이 "목록에
+#     없는 기관이 그 지표의 실제 공시처라면 슬롯을 채우기 전에 이 목록부터 고친다"고
+#     이미 정해 둔 경우다. FRED와 같은 등급의 해외 공시 기관이다.
+#
+# **목록을 늘리고 줄이는 것은 `사람 판정`이다**(`audit-improvement.md` §9-2). 감사 축이
+# 스스로 고치지 않는다 — 한 번 틀리면 그 뒤 몇 주의 D4·N2 판정이 그 값 위에서 이뤄진다.
 PRIMARY_HOSTS = ("ecos.bok.or.kr", "fred.stlouisfed.org", "kosis.kr",
-                 "dart.fss.or.kr", "portal.kfb.or.kr")
+                 "dart.fss.or.kr", "portal.kfb.or.kr", "bis.org")
 HOST = re.compile(r"^https?://([^/?#]+)")
 NUMBERS_HEADER = "## 숫자로 보면"
 

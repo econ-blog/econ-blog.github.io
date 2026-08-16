@@ -211,9 +211,16 @@ with tempfile.TemporaryDirectory() as tmp:
 print("d4_eeat")
 from portfolio import d4_eeat, PRIMARY_SOURCE_HOSTS  # noqa: E402
 
+# D4와 N2는 같은 튜플을 본다. 두 파일이 각자 리터럴을 들면 2026-08-16 이전처럼
+# 조용히 갈리므로, 동일 객체인지를 검사로 못박는다.
+from numerics import PRIMARY_HOSTS as _N2_HOSTS  # noqa: E402
+
+check("D4와 N2가 같은 목록", PRIMARY_SOURCE_HOSTS is _N2_HOSTS, True)
 check("1차 출처 호스트 여섯", len(PRIMARY_SOURCE_HOSTS), 6)
-check("bok.or.kr 포함", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, True)
-check("kfb.or.kr 포함", "kfb.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+check("공시 지점을 쓴다 (portal.kfb)", "portal.kfb.or.kr" in PRIMARY_SOURCE_HOSTS, True)
+check("기관 대문은 빠진다 (bok.or.kr)", "bok.or.kr" in PRIMARY_SOURCE_HOSTS, False)
+check("기관 대문은 빠진다 (kfb.or.kr)", "kfb.or.kr" in PRIMARY_SOURCE_HOSTS, False)
+check("bis.org 포함", "bis.org" in PRIMARY_SOURCE_HOSTS, True)
 
 from portfolio import _is_primary_source  # noqa: E402
 
