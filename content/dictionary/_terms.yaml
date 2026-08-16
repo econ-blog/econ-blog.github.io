@@ -94,3 +94,7 @@ high-yield-spread:
 isa:
   title: "개인종합자산관리계좌"
   aliases: ["ISA", "만능통장", "만능 통장", "중개형 ISA"]
+
+shareholder-return:
+  title: "주주환원"
+  aliases: ["주주환원 정책", "주주환원율"]
