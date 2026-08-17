@@ -73,13 +73,13 @@ curl -s -o /dev/null -w "%{http_code}\n" --max-time 10 https://www.hankyung.com/
 
 ## 4. ⑤ D4 — 1차 출처 소급 링크
 
-대기열의 `⑤ D4` 항목이 입력이다. 붙일 수 있는 1차 출처는 다섯이다 —
+대기열의 `⑤ D4` 항목이 입력이다. 붙일 수 있는 1차 출처는 `numerics.py`의 `PRIMARY_HOSTS` 6개다 —
 ECOS(`ecos.bok.or.kr`) · FRED(`fred.stlouisfed.org`) · KOSIS(`kosis.kr`) ·
-DART(`dart.fss.or.kr`) · 전국은행연합회 소비자포털(`portal.kfb.or.kr`).
+DART(`dart.fss.or.kr`) · 전국은행연합회 소비자포털(`portal.kfb.or.kr`) · BIS(`bis.org`).
 
 - **URL을 열어 200이 나오는 것만 쓴다.** 딥링크(통계표 ID·조회 파라미터)를 추측하지
   않는다. 확신이 서지 않으면 기관 대문 주소를 쓴다.
-- 그 글이 인용한 지표의 공시 기관이 다섯 목록 밖이면 **링크하지 않고 넘어간다.**
+- 그 글이 인용한 지표의 공시 기관이 위 목록 밖이면 **링크하지 않고 넘어간다.**
   비1차 출처를 대신 넣지 않는다. 목록 자체를 늘리는 것은 `사람 판정`이다
   (`audit-improvement.md` §9-2).
 - 지정학·정책 발표·기업 개별 이슈처럼 공시 지표가 애초에 없는 글은 **대상이 아니다.**

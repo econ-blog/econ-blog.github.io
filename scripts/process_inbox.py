@@ -392,6 +392,9 @@ def execute_approved_audit(pr: dict, repo: str, pat: str) -> bool:
         print(f"PR #{pr.get('number')} is not open; skipping execution.", file=sys.stderr)
         return False
     merge_pr(repo, pr["number"], pat)
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+    ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}"
+    requests.delete(ref_url, headers=headers, timeout=10)
     return True
 
 def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
@@ -403,6 +406,8 @@ def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
     close_url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
     c_resp = requests.patch(close_url, headers=headers, json={"state": "closed"}, timeout=10)
     c_resp.raise_for_status()
+    ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}"
+    requests.delete(ref_url, headers=headers, timeout=10)
     return True
 
 def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str, chat_id: str) -> list:

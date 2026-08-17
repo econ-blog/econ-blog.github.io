@@ -370,9 +370,22 @@ def main_flow(dry_run=False):
         print(f"Summary: {summary}")
         print(report)
     else:
-        with open(f"report/housekeeping-{date}.md", "w", encoding="utf-8") as f:
-            f.write(report)
-        dead_list = links["link"].get("confirmed_dead", []) if links.get("link") and isinstance(links["link"], dict) else []
+        dead_urls = set(links["link"].get("confirmed_dead", [])) if links.get("link") and isinstance(links["link"], dict) else set()
+        dead_list = []
+        if dead_urls:
+            import glob
+            files = sorted(glob.glob("content/posts/*.md")) + sorted(glob.glob("content/dictionary/*.md"))
+            try:
+                sys.path.append(".claude/audit/lib")
+                import mdtext
+                inv = mdtext.inventory(files)
+                for file_path, rec in inv.items():
+                    for u in rec.get("external", []):
+                        if u in dead_urls:
+                            kind = "external" if u in rec.get("related_urls", []) else "internal"
+                            dead_list.append({"file": file_path, "target": u, "kind": kind})
+            except Exception:
+                pass
         bf_list = links["backfill"] if isinstance(links.get("backfill"), list) else []
         apply_edits(".", dead_list, bf_list)
 
