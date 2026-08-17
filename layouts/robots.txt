@@ -1,3 +1,7 @@
+# Search Engine Crawlers
+User-agent: Yeti
+Allow: /
+
 User-agent: *
 {{- if hugo.IsProduction | or (eq site.Params.env "production") }}
 Disallow:
