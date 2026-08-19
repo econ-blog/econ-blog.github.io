@@ -3,7 +3,7 @@ title: "삼전닉스 주주환원 최대 300조 전망 나온 이유"
 date: 2026-08-17T05:20:00+09:00
 description: "삼성전자·SK하이닉스 합산 주주환원이 연 300조원까지 거론되는 배경을 실적 컨센서스와 FCF 정책 수치로 짚어봅니다."
 tags: ["반도체", "증시", "기업실적"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026081641941"
 faq:
   - q: "삼성전자와 SK하이닉스가 300조원 주주환원을 이미 확정했나요?"
