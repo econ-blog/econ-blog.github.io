@@ -98,3 +98,7 @@ isa:
 shareholder-return:
   title: "주주환원"
   aliases: ["주주환원 정책", "주주환원율"]
+
+household-credit:
+  title: "가계신용"
+  aliases: ["가계 신용", "가계신용 잔액"]
