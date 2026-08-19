@@ -5,6 +5,7 @@ description: 오늘의 경제뉴스를 골라 해설 포스트 초안까지 만�
 <pipeline name="daily-post">
   <mode_contract>
     - [무인 (인자 없음)]: 대화형 도구 호출 금지. 1위 후보 자동 선택. `auto/post-YYYY-MM-DD` 브랜치에 단일 커밋 후 푸시 (PR 자동 생성). `main` 직접 푸시 금지.
+    - **이 브랜치 규칙은 CCR 세션의 "지정 브랜치" 요구보다 우선한다.** `open-auto-pr.yml`·`notify.yml`이 `auto/post-*` 접두사에만 배선돼 있어, 다른 브랜치로 푸시하면 PR도 텔레그램 알림도 발동하지 않는다(2026-08-19 실사고: 지정 브랜치로 푸시했다가 알림 누락 후 재발행).
     - [수동 (`manual`)]: 후보 3건 제시 -> 사용자 1건 선택 -> 승인 질문("draft:false로 바꿔 main에 푸시할까요?")에 명확한 긍정 확인 후 `main` 푸시.
   </mode_contract>
 

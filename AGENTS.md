@@ -81,6 +81,7 @@
 
 <runtime_invariants>
   - **무인 불변조건**: `auto/**` 브랜치에만 푸시 · 단일 커밋만 푸시 (`git commit --cleanup=verbatim`) · 항상 `draft: true` · 대화형 도구 호출 금지 · 1위 후보 < 8점이면 조용히 종료.
+  - **브랜치 우선순위 (2026-08-19 실사고)**: Claude Code(CCR) 세션이 별도의 "세션 지정 브랜치"(예: `claude/xxx`)를 요구하더라도, 무인 발행/감사 커밋은 반드시 `auto/post-YYYY-MM-DD` · `auto/audit-YYYY-MM-DD`로 푸시한다. `open-auto-pr.yml`(PR 자동 생성)과 `notify.yml`(텔레그램 알림)이 이 접두사에만 배선돼 있어서, 세션 지정 브랜치로 대신 푸시하면 PR도 텔레그램 알림도 조용히 발동하지 않는다 — 오류 없이 그냥 아무 일도 일어나지 않는다. 두 규칙이 충돌하는 것처럼 보이면 대화형 확인 없이 임의로 지정 브랜치를 택하지 말고, 먼저 `auto/**`로 푸시를 시도한다.
   - **수동 불변조건**: 명확한 사용자 긍정 확인 후에만 `draft: false` 변경 및 `main` 푸시.
   - **쓰기 금지 영역**: 감사 실행 시 `.claude/daily-post/` 전체, `hugo.toml`, `layouts/`, `content/` 본문 산문은 수정하지 않는다.
 </runtime_invariants>
