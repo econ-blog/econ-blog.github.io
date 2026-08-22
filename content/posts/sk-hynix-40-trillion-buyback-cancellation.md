@@ -3,7 +3,7 @@ title: "SK하이닉스 40조 자사주 소각, 주가 급등이 남긴 신호"
 date: 2026-08-21T05:30:00+09:00
 description: "SK하이닉스가 40조원 규모 자사주 매입·소각을 결의하자 주가가 하루 만에 12.73% 급등하며 역대급 주주환원 사례로 떠올랐습니다."
 tags: ["반도체", "증시", "기업실적"]
-draft: true
+draft: false
 source_url: "https://www.hankyung.com/article/2026082026886"
 faq:
   - q: "SK하이닉스 40조원 자사주 소각은 언제 진행되나요?"
