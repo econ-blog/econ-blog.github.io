@@ -443,7 +443,8 @@ class TestProcessInbox(unittest.TestCase):
              patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
             process_inbox.main()
 
-        self.assertEqual(polled, [])            # getUpdates 호출 없음
+        # 원장 조회(GitHub API)는 해도 되지만 텔레그램 큐는 건드리면 안 된다.
+        self.assertEqual([u for u in polled if "api.telegram.org" in u], [])
         self.assertEqual(len(sent), 1)
         self.assertIn("#P0804", sent[0])
         self.assertIn("유실", sent[0])
@@ -558,12 +559,17 @@ class TestProcessInbox(unittest.TestCase):
                 process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
         self.assertIn("dirty", str(ctx.exception))
 
-    def test_failed_verdict_is_not_consumed(self):
-        """실행이 실패하면 그 업데이트의 오프셋을 넘기지 않는다 — 넘기면 승인이 사라진다."""
+    def test_failed_verdict_goes_to_ledger_before_offset_is_consumed(self):
+        """집행이 실패하면 판정을 원장에 적고 **그 다음에** 오프셋을 소비한다.
+
+        예전에는 오프셋을 붙들어 두는 것이 안전장치였지만, 이 루프는 하루 1회이고
+        텔레그램은 미확인 업데이트를 24시간만 보관한다 — 재시도 시점에는 이미
+        지워져 있어 한 번도 성립할 수 없었다(2026-08-20 '승인 #P0819' 실증).
+        """
         import process_inbox
         creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
         updates = [{"update_id": 100, "message": {"chat": {"id": 1}, "text": "승인"}}]
-        recorded = []
+        order, saved, sent = [], [], []
 
         def boom(*args, **kwargs):
             raise RuntimeError("PR #7 병합 실패: 405 Pull Request is not mergeable")
@@ -571,16 +577,129 @@ class TestProcessInbox(unittest.TestCase):
         env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
         with patch.dict(os.environ, env), \
              patch.object(process_inbox, "get_open_prs", lambda *a: [{"number": 7, "head": {"ref": "auto/post-2026-08-03"}}]), \
+             patch.object(process_inbox, "load_pending_verdicts", lambda *a: []), \
              patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": updates})), \
              patch.object(process_inbox, "execute_approved_post", boom), \
-             patch.object(process_inbox, "update_telegram_offset", lambda *a: recorded.append(a[2])), \
-             patch.object(process_inbox, "send_telegram", lambda *a: recorded.append(a[2])):
+             patch.object(process_inbox, "save_pending_verdicts",
+                          lambda r, p, e: (order.append("ledger"), saved.append(e))), \
+             patch.object(process_inbox, "update_telegram_offset",
+                          lambda r, p, o: (order.append("offset"), saved.append(o))), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            with self.assertRaises(SystemExit) as ctx:
+                process_inbox.main()
+
+        self.assertEqual(ctx.exception.code, 1)          # 실패는 실패로 보고한다
+        self.assertEqual(order, ["ledger", "offset"])    # 원장이 먼저, 오프셋이 나중
+        self.assertIn(101, saved)                        # 오프셋은 전진했다
+        entry = saved[0][0]
+        self.assertEqual(entry["pr"], 7)
+        self.assertEqual(entry["verdict"], "APPROVED")
+        self.assertEqual(entry["attempts"], 1)
+        self.assertIn("405", entry["last_error"])
+        self.assertTrue(any("405" in str(s) for s in sent))       # 사유가 실려 나갔다
+        self.assertTrue(any("원장" in str(s) for s in sent))       # 재시도됨을 알렸다
+
+    def test_ledger_is_retried_before_telegram_and_cleared_on_success(self):
+        """원장에 남은 판정은 텔레그램 큐와 무관하게 먼저 재집행되고, 성공하면 지워진다."""
+        import process_inbox
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        pr = {"number": 25, "head": {"ref": "auto/post-2026-08-19"}}
+        ledger = [{"pr": 25, "branch": "auto/post-2026-08-19",
+                   "verdict": "APPROVED", "attempts": 1, "last_error": "dirty"}]
+        saved, executed, sent = [], [], []
+
+        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
+        with patch.dict(os.environ, env), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [pr]), \
+             patch.object(process_inbox, "load_pending_verdicts", lambda *a: list(ledger)), \
+             patch.object(process_inbox, "save_pending_verdicts", lambda r, p, e: saved.append(e)), \
+             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
+             patch.object(process_inbox, "execute_approved_post",
+                          lambda *a: executed.append(a[0]["number"]) or True), \
+             patch.object(process_inbox, "update_telegram_offset", lambda *a: None), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+
+        self.assertEqual(executed, [25])       # 텔레그램에 아무것도 없어도 집행됐다
+        self.assertEqual(saved, [[]])          # 원장이 비워졌다
+        self.assertTrue(any("승인 처리 완료" in s for s in sent))
+
+    def test_ledger_retry_failure_increments_attempts_and_keeps_entry(self):
+        """재집행이 또 실패하면 항목을 남기고 시도 횟수를 올린다."""
+        import process_inbox
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        pr = {"number": 25, "head": {"ref": "auto/post-2026-08-19"}}
+        ledger = [{"pr": 25, "branch": "auto/post-2026-08-19",
+                   "verdict": "APPROVED", "attempts": 2, "last_error": "dirty"}]
+        saved, sent = [], []
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("병합 중단: 병합 불가 (mergeable_state=dirty)")
+
+        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
+        with patch.dict(os.environ, env), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [pr]), \
+             patch.object(process_inbox, "load_pending_verdicts", lambda *a: list(ledger)), \
+             patch.object(process_inbox, "save_pending_verdicts", lambda r, p, e: saved.append(e)), \
+             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
+             patch.object(process_inbox, "execute_approved_post", boom), \
+             patch.object(process_inbox, "update_telegram_offset", lambda *a: None), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
             with self.assertRaises(SystemExit) as ctx:
                 process_inbox.main()
 
         self.assertEqual(ctx.exception.code, 1)
-        self.assertNotIn(101, recorded)  # 오프셋이 전진하지 않았다
-        self.assertTrue(any("405" in str(r) for r in recorded))  # 사유가 실려 나갔다
+        self.assertEqual(len(saved[0]), 1)
+        self.assertEqual(saved[0][0]["attempts"], 3)     # 2 → 3
+        self.assertEqual(saved[0][0]["pr"], 25)
+        self.assertTrue(any("재집행 실패" in s for s in sent))
+
+    def test_reask_skips_prs_waiting_in_the_ledger(self):
+        """원장에서 재시도 중인 PR은 다시 묻지 않는다 — '승인했는데 또 물어본다'가 된다."""
+        import process_inbox
+        stale = self._pr(8, "auto/post-2026-08-04", 30)
+        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
+        sent = []
+
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r"}), \
+             patch.object(sys, "argv", ["process_inbox.py", "--reask"]), \
+             patch.object(process_inbox, "get_open_prs", lambda *a: [stale]), \
+             patch.object(process_inbox, "load_pending_verdicts",
+                          lambda *a: [{"pr": 8, "verdict": "APPROVED", "attempts": 1}]), \
+             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
+            process_inbox.main()
+
+        self.assertEqual(sent, [])   # 조용하다
+
+    def test_ledger_bookkeeping_helpers(self):
+        import process_inbox
+        pr = {"number": 7, "head": {"ref": "auto/post-2026-08-03"}}
+
+        # 새 항목은 attempts 1로 들어간다
+        entries = process_inbox.record_pending_verdict([], pr, "APPROVED", "boom")
+        self.assertEqual(entries[0]["attempts"], 1)
+        self.assertEqual(entries[0]["branch"], "auto/post-2026-08-03")
+
+        # 같은 PR이 또 실패하면 항목이 늘지 않고 횟수만 오른다
+        entries = process_inbox.record_pending_verdict(entries, pr, "APPROVED", "boom again")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["attempts"], 2)
+        self.assertEqual(entries[0]["last_error"], "boom again")
+        self.assertEqual(entries[0]["first_failed_at"], entries[0].get("first_failed_at"))
+
+        # 닫힌 PR의 항목은 버린다 (사람이 손으로 병합·반려한 경우)
+        self.assertEqual(process_inbox.drop_settled_verdicts(entries, []), [])
+        self.assertEqual(len(process_inbox.drop_settled_verdicts(entries, [pr])), 1)
+
+    def test_ledger_survives_unreadable_variable(self):
+        """원장 변수가 깨져 있어도 죽지 않는다 — 죽으면 새 판정까지 막힌다."""
+        import process_inbox
+        with patch.object(process_inbox, "get_repo_variable", lambda *a: "not json{"):
+            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
+        with patch.object(process_inbox, "get_repo_variable", lambda *a: ""):
+            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
+        with patch.object(process_inbox, "get_repo_variable", lambda *a: '{"pr": 1}'):
+            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
 
     def test_successful_verdict_consumes_update(self):
         import process_inbox
