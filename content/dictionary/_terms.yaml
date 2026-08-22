@@ -86,11 +86,6 @@ high-yield-spread:
   title: "하이일드 스프레드"
   aliases: ["HY OAS", "정크본드 스프레드", "하이일드 크레딧스프레드"]
 
-
-
-
-
-
 isa:
   title: "개인종합자산관리계좌"
   aliases: ["ISA", "만능통장", "만능 통장", "중개형 ISA"]
@@ -98,3 +93,11 @@ isa:
 crowding-out-effect:
   title: "구축효과"
   aliases: ["구축 효과", "crowding-out effect"]
+
+shareholder-return:
+  title: "주주환원"
+  aliases: ["주주환원 정책", "주주환원율"]
+
+household-credit:
+  title: "가계신용"
+  aliases: ["가계 신용", "가계신용 잔액"]
