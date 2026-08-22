@@ -101,3 +101,7 @@ shareholder-return:
 household-credit:
   title: "가계신용"
   aliases: ["가계 신용", "가계신용 잔액"]
+
+oil-price-cap:
+  title: "석유 최고가격제"
+  aliases: ["석유 최고가격", "최고가격제", "유가 최고가격제"]
