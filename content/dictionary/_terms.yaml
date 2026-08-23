@@ -105,3 +105,7 @@ household-credit:
 oil-price-cap:
   title: "석유 최고가격제"
   aliases: ["석유 최고가격", "최고가격제", "유가 최고가격제"]
+
+treasury-buyback:
+  title: "국채 바이백"
+  aliases: ["국채 환매", "바이백 프로그램", "Treasury buyback"]
