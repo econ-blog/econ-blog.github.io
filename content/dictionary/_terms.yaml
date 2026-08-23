@@ -109,3 +109,7 @@ oil-price-cap:
 treasury-buyback:
   title: "국채 바이백"
   aliases: ["국채 환매", "바이백 프로그램", "Treasury buyback"]
+
+junk-bond:
+  title: "정크본드"
+  aliases: ["투기등급 채권", "하이일드 본드", "junk bond"]
