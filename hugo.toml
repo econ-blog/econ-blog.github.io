@@ -18,6 +18,14 @@ pygmentsUseClasses = true
   # author 키가 생긴다. 감사 ⑤ D4가 그 셋을 각각 센다.
   author = "쉽게 읽는 경제뉴스"
   description = "어려운 경제·금융 뉴스를 비전공자도 이해할 수 있게 쉬운 말로 풀어 설명하고, 경제 용어를 사전으로 정리하는 블로그입니다."
+
+  # SEO/GEO 감사 S3 (BlogPosting 에 image 없음, 33/33).
+  # 템플릿을 건드리지 않는다 — PaperMod 의 `templates/_funcs/get-page-images` 가
+  # 페이지에 이미지가 없을 때 `site.Params.images` 의 첫 항목으로 떨어지고,
+  # `templates/schema_json.html` 이 그 값을 BlogPosting 의 `image` 로 쓴다.
+  # cover.image 로 주면 같은 JSON-LD 를 얻는 대신 전 포스트 상단에 같은 배너가
+  # 렌더되므로 쓰지 않는다. 페이지별 이미지가 생기면 그 페이지의 값이 이긴다.
+  images = ["images/og-default.png"]
   mainSections = ["posts"]
   ShowReadingTime = true
   ShowShareButtons = false
