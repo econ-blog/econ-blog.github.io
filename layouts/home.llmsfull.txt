@@ -1,0 +1,50 @@
+{{- /* llms-full.txt — 전 코퍼스 본문. `llms.txt` 가 이 파일을 "전체 본문"이라고
+      가리키는데도 이전 정적 파일에는 본문이 한 글자도 없고 8건의 요약만 있었다.
+      본문은 마크다운 원문(`.RawContent`)으로 낸다 — 소제목·목록·링크 구조가
+      남아야 답변엔진이 문서 안에서 답이 있는 구간을 집어낼 수 있다. */ -}}
+# {{ site.Title }} — 전체 본문
+
+> {{ site.Params.description }}
+
+출처: {{ site.BaseURL }}
+생성: {{ now.Format "2006-01-02" }}
+구성: 뉴스 해설 {{ len (where site.RegularPages "Section" "posts") }}건 · 경제 용어 사전 {{ len (where site.RegularPages "Section" "dictionary") }}건
+인용: 각 문서 머리의 URL 을 출처로 표시해 주세요.
+
+{{ range where site.RegularPages "Section" "posts" }}
+--------------------------------------------------------------------------------
+
+# {{ .Title }}
+
+URL: {{ .Permalink }}
+발행일: {{ .Date.Format "2006-01-02" }}
+분류: 뉴스 해설{{ with .Params.tags }} / {{ delimit . ", " }}{{ end }}
+{{- with .Description }}
+요약: {{ . }}
+{{- end }}
+{{- with .Params.source_url }}
+원문 출처: {{ . }}
+{{- end }}
+
+{{ replaceRE "\\]\\(/" (printf "](%s" site.BaseURL) .RawContent }}
+{{- with .Params.faq }}
+## 자주 묻는 질문
+{{ range . }}
+Q. {{ .q }}
+A. {{ .a }}
+{{ end }}
+{{- end }}
+{{- end }}
+{{ range sort (where site.RegularPages "Section" "dictionary") "Title" }}
+--------------------------------------------------------------------------------
+
+# {{ .Title }}
+
+URL: {{ .Permalink }}
+분류: 경제 용어 사전
+{{- with .Description }}
+정의: {{ . }}
+{{- end }}
+
+{{ replaceRE "\\]\\(/" (printf "](%s" site.BaseURL) .RawContent }}
+{{- end }}

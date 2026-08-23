@@ -62,5 +62,21 @@ pygmentsUseClasses = true
     name = "date"
     weight = 10
 
+# llms.txt / llms-full.txt 를 정적 파일이 아니라 출력 형식으로 낸다.
+# 손으로 적힌 `static/llms.txt` 는 61개 문서 중 15개만 담고 있었고, 매일 글이
+# 나가는 저장소에서는 발행 첫날부터 어긋난다 — 렌더 경로로 옮겨 드리프트를 없앤다.
+# 템플릿: `layouts/home.llms.txt` · `layouts/home.llmsfull.txt`.
+[outputFormats]
+  [outputFormats.llms]
+    mediaType = "text/plain"
+    baseName = "llms"
+    isPlainText = true
+    notAlternative = true
+  [outputFormats.llmsfull]
+    mediaType = "text/plain"
+    baseName = "llms-full"
+    isPlainText = true
+    notAlternative = true
+
 [outputs]
-  home = ["HTML", "RSS", "JSON"]
+  home = ["HTML", "RSS", "JSON", "llms", "llmsfull"]
