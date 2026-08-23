@@ -1,0 +1,48 @@
+{{- if lt hugo.Version "0.146.0" }}
+{{- errorf "=> hugo v0.146.0 or greater is required for hugo-PaperMod to build " }}
+{{- end -}}
+
+<!DOCTYPE html>
+{{- $theme := site.Params.defaultTheme | default "auto" }}
+{{- if eq $theme "dark" }}
+<html lang="{{ site.Language }}" dir="{{ .Language.LanguageDirection | default "auto" }}" data-theme="dark">
+{{- else if eq $theme "light" }}
+<html lang="{{ site.Language }}" dir="{{ .Language.LanguageDirection | default "auto" }}" data-theme="light">
+{{- else }}
+<html lang="{{ site.Language }}" dir="{{ .Language.LanguageDirection | default "auto" }}" data-theme="auto">
+{{- end }}
+
+<head>
+    {{- /*
+      SEO/GEO 감사 T1 — 타이틀 35자 초과 32/61.
+      PaperMod 의 head.html 은 `<title>{{ .Title }} | {{ site.Title }}</title>` 를
+      하드코딩하고 접미사를 끄는 파라미터가 없다. 그 파일(194줄)을 통째로 벤더링하는
+      대신, 31줄짜리 baseof 만 오버라이드해 렌더된 head 에서 접미사만 떼어 낸다.
+
+      접미사 " | 쉽게 읽는 경제뉴스" 11자는 무명 브랜드라 쿼리 가치가 없는데 35자
+      예산에서 매 페이지 빠져나간다. 포스트·사전 **상세** 페이지에서만 뗀다 —
+      목록·홈에는 남겨야 브랜드가 SERP 에 한 번은 나온다.
+
+      치환 대상 문자열은 `</title>` 를 포함하므로 title 태그 안에서만 일치한다.
+      한 문서에 title 은 하나뿐이라 limit 1 로 첫 일치만 바꾼다.
+    */ -}}
+    {{- $head := partial "head.html" . }}
+    {{- if and .IsPage (in (slice "posts" "dictionary") .Section) }}
+      {{- $head = replace $head (printf " | %s</title>" site.Title) "</title>" 1 }}
+    {{- end }}
+    {{- $head | safeHTML }}
+</head>
+
+{{- if (or (ne .Kind `page` ) (eq .Layout `archives`) (eq .Layout `search`)) }}
+<body class="list" id="top">
+{{- else }}
+<body id="top">
+{{- end }}
+    {{ partialCached "header.html" . .Page -}}
+    <main class="main">
+        {{- block "main" . }}{{ end }}
+    </main>
+    {{ partialCached "footer.html" . .Layout .Kind (.Param "hideFooter") (.Param "ShowCodeCopyButtons") -}}
+</body>
+
+</html>

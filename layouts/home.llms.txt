@@ -1,0 +1,38 @@
+{{- /* llms.txt — 답변엔진용 사이트 색인. 이전에는 `static/llms.txt` 에 손으로 적혀
+      있었고 61개 문서 중 15개만 담고 있었다(2026-08-23 SEO/GEO 크롤 감사 A5).
+      매일 글이 나가는 저장소에서 손으로 유지되는 색인은 발행 첫날부터 어긋난다 —
+      그래서 파일이 아니라 출력 형식으로 만든다. `hugo.toml` 의 [outputFormats.llms].
+      형식은 llmstxt.org 규약: H1 → 인용문 요약 → `## 섹션` → `- [제목](URL): 설명`. */ -}}
+# {{ site.Title }}
+
+> {{ site.Params.description }}
+
+{{ site.Params.homeInfoParams.Content }}
+
+## 사이트 정보
+
+- 사이트: {{ site.BaseURL }}
+- 언어: 한국어 (ko-KR)
+- 발행: {{ site.Params.author }}
+- 전체 본문: {{ "llms-full.txt" | absURL }}
+- 인용 안내: 모든 문서는 원문 출처를 명시합니다. 인용 시 해당 문서의 URL을 함께 표시해 주세요.
+- 갱신: {{ now.Format "2006-01-02" }} 기준 뉴스 해설 {{ len (where site.RegularPages "Section" "posts") }}건 · 용어 {{ len (where site.RegularPages "Section" "dictionary") }}건
+
+## 뉴스 해설 ({{ "posts/" | absURL }})
+
+경제·금융 뉴스 한 건을 골라 사건·중요성·개인 영향·투자 관점 네 단계로 풀어 쓴 해설입니다. 발행일 최신순.
+{{ range where site.RegularPages "Section" "posts" }}
+- [{{ .Title }}]({{ .Permalink }}) ({{ .Date.Format "2006-01-02" }}): {{ with .Description }}{{ . }}{{ else }}{{ .Summary | plainify | truncate 160 }}{{ end }}
+{{- end }}
+
+## 경제 용어 사전 ({{ "dictionary/" | absURL }})
+
+뉴스 해설에 나오는 개념을 한 문장 정의 + 실생활·투자 관점으로 정리한 항목입니다. 가나다순.
+{{ range sort (where site.RegularPages "Section" "dictionary") "Title" }}
+- [{{ .Title }}]({{ .Permalink }}): {{ with .Description }}{{ . }}{{ else }}{{ .Summary | plainify | truncate 160 }}{{ end }}
+{{- end }}
+
+## 안내
+{{ range slice "about" "contact" "privacy" }}{{ with site.GetPage . }}
+- [{{ .Title }}]({{ .Permalink }}){{ with .Description }}: {{ . }}{{ end }}
+{{- end }}{{ end }}
