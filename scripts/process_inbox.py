@@ -41,6 +41,11 @@ def log(msg: str):
     print(msg, flush=True)
 
 
+def mask(text: str, bot_token: str) -> str:
+    """봇 토큰이 오류 문자열을 타고 텔레그램·로그로 새어 나가지 않게 한다."""
+    return text.replace(bot_token, "[MASKED_BOT_TOKEN]") if bot_token else text
+
+
 def parse_verdict(text: str) -> str:
     cleaned = re.sub(r'#([paPA])\d{4}', '', text).strip().lower()
     if cleaned in APPROVED_SET:
@@ -151,10 +156,7 @@ def send_telegram(bot_token: str, chat_id: str, text: str):
         resp = requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=10)
         resp.raise_for_status()
     except Exception as e:
-        err_msg = str(e)
-        if bot_token:
-            err_msg = err_msg.replace(bot_token, "[MASKED_BOT_TOKEN]")
-        print(f"Telegram API error: {err_msg}", file=sys.stderr)
+        print(f"Telegram API error: {mask(str(e), bot_token)}", file=sys.stderr)
 
 def get_open_prs(repo: str, pat: str) -> list:
     url = f"https://api.github.com/repos/{repo}/pulls?state=open"
@@ -249,16 +251,107 @@ def merge_pr(repo: str, pr_num: int, pat: str, sleep=time.sleep):
     raise RuntimeError(f"PR #{pr_num} 병합 실패: {last_detail}")
 
 
-def update_telegram_offset(repo: str, pat: str, offset: int):
-    url = f"https://api.github.com/repos/{repo}/actions/variables/TELEGRAM_OFFSET"
+def set_repo_variable(repo: str, pat: str, name: str, value: str):
+    """저장소 Actions 변수를 쓴다. 없으면 만든다."""
+    url = f"https://api.github.com/repos/{repo}/actions/variables/{name}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
-    resp = requests.patch(url, headers=headers, json={"name": "TELEGRAM_OFFSET", "value": str(offset)}, timeout=10)
+    resp = requests.patch(url, headers=headers, json={"name": name, "value": value}, timeout=10)
     if resp.status_code == 404:
         url_create = f"https://api.github.com/repos/{repo}/actions/variables"
-        resp_create = requests.post(url_create, headers=headers, json={"name": "TELEGRAM_OFFSET", "value": str(offset)}, timeout=10)
+        resp_create = requests.post(url_create, headers=headers, json={"name": name, "value": value}, timeout=10)
         resp_create.raise_for_status()
     else:
         resp.raise_for_status()
+
+
+def get_repo_variable(repo: str, pat: str, name: str) -> str:
+    """저장소 Actions 변수를 읽는다. 없으면 빈 문자열."""
+    url = f"https://api.github.com/repos/{repo}/actions/variables/{name}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"}
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code == 404:
+        return ""
+    resp.raise_for_status()
+    return resp.json().get("value", "")
+
+
+def update_telegram_offset(repo: str, pat: str, offset: int):
+    set_repo_variable(repo, pat, "TELEGRAM_OFFSET", str(offset))
+
+
+# ── 미집행 판정 원장 ───────────────────────────────────────────────────────
+# 집행에 실패한 판정을 텔레그램 큐 **바깥에** 적어 둔다.
+#
+# 원래 설계는 "실패하면 오프셋을 넘기지 않는다"였고 의도대로 동작했지만, 이 루프는
+# 하루 한 번 돈다. 텔레그램은 확인되지 않은 업데이트를 24시간만 보관하므로 재시도
+# 기회가 오는 시점에는 보존해 둔 그 업데이트가 이미 삭제돼 있다 — 안전장치가 구조적으로
+# 한 번도 성립할 수 없었다. 2026-08-20 회차의 '승인 #P0819'가 정확히 그렇게 사라졌다.
+#
+# 그래서 판정을 저장소 변수에 옮겨 적고 오프셋은 정상적으로 소비한다. 다음 회차가
+# 텔레그램과 무관하게 원장을 먼저 재집행한다.
+PENDING_VERDICTS_VAR = "PENDING_VERDICTS"
+
+
+class VerdictExecutionError(Exception):
+    """집행 단계에서 실패한 판정. 어느 PR의 어떤 판정이었는지를 들고 다닌다 —
+    메시지 문자열에서 다시 파싱하면 원장에 적을 수 없다."""
+
+    def __init__(self, pr: dict, verdict: str, detail: str):
+        super().__init__(f"PR #{pr.get('number')} — {detail}")
+        self.pr = pr
+        self.verdict = verdict
+        self.detail = detail
+
+
+def load_pending_verdicts(repo: str, pat: str) -> list:
+    raw = (get_repo_variable(repo, pat, PENDING_VERDICTS_VAR) or "").strip()
+    if not raw:
+        return []
+    try:
+        entries = json.loads(raw)
+    except ValueError:
+        # 읽을 수 없는 원장은 버리지 않고 비운 뒤 알린다 — 조용히 무시하면
+        # 승인이 또 사라진 것과 구분되지 않는다.
+        log(f"  원장을 해석할 수 없다 (내용 {raw[:80]!r}) — 빈 원장으로 시작한다")
+        return []
+    return entries if isinstance(entries, list) else []
+
+
+def save_pending_verdicts(repo: str, pat: str, entries: list):
+    set_repo_variable(repo, pat, PENDING_VERDICTS_VAR, json.dumps(entries, ensure_ascii=False))
+
+
+def record_pending_verdict(entries: list, pr: dict, verdict: str, detail: str, now=None) -> list:
+    """실패한 판정을 원장에 적는다. 같은 PR이 이미 있으면 시도 횟수만 올린다."""
+    now = now or datetime.now(timezone.utc)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = []
+    found = False
+    for e in entries:
+        if e.get("pr") == pr.get("number"):
+            found = True
+            out.append({**e,
+                        "verdict": verdict,
+                        "attempts": int(e.get("attempts", 1)) + 1,
+                        "last_error": detail,
+                        "last_failed_at": stamp})
+        else:
+            out.append(e)
+    if not found:
+        out.append({"pr": pr.get("number"),
+                    "branch": pr.get("head", {}).get("ref", ""),
+                    "verdict": verdict,
+                    "attempts": 1,
+                    "last_error": detail,
+                    "first_failed_at": stamp,
+                    "last_failed_at": stamp})
+    return out
+
+
+def drop_settled_verdicts(entries: list, open_prs: list) -> list:
+    """열려 있지 않은 PR의 원장 항목은 버린다 — 사람이 손으로 병합·반려했을 수 있다."""
+    open_numbers = {p["number"] for p in open_prs}
+    return [e for e in entries if e.get("pr") in open_numbers]
 
 
 def resolve_terms_conflict(content: str) -> str | None:
@@ -295,34 +388,58 @@ def auto_resolve_terms_conflict_git(repo: str, pr: dict, pat: str) -> bool:
     remote_url = f"https://x-access-token:{pat}@github.com/{repo}.git"
     
     with tempfile.TemporaryDirectory() as tmpdir:
-        subprocess.run(["git", "clone", "--depth=1", "--branch", branch, remote_url, tmpdir], check=True, capture_output=True)
+        # `--depth=1`을 쓰면 안 된다. 브랜치와 main을 각각 깊이 1로 받으면 두 히스토리에
+        # 공통 조상이 없어 `git merge`가 "refusing to merge unrelated histories"로 죽는다.
+        # 병합이 시작조차 못 하므로 충돌 파일이 스테이지되지 않고, 아래 `--diff-filter=U`가
+        # 빈 목록을 돌려줘 이 함수가 조용히 False를 반환한다 — 정작 해소 가능한 충돌인데도.
+        # 2026-08-20 회차의 PR #25가 그렇게 막혔고, 보존된 판정이 다음 회차까지 살지 못해
+        # 승인이 통째로 증발했다. blob은 lazy로 받아 전송량은 얕은 클론 수준으로 유지한다.
+        subprocess.run(["git", "clone", "--filter=blob:none", "--branch", branch, remote_url, tmpdir], check=True, capture_output=True)
         subprocess.run(["git", "remote", "set-branches", "origin", "main"], cwd=tmpdir, check=True, capture_output=True)
-        subprocess.run(["git", "fetch", "--depth=1", "origin", "main"], cwd=tmpdir, check=True, capture_output=True)
-        
+        subprocess.run(["git", "fetch", "origin", "main"], cwd=tmpdir, check=True, capture_output=True)
+
         subprocess.run(["git", "config", "user.name", "bjh7790"], cwd=tmpdir, check=True)
         subprocess.run(["git", "config", "user.email", "bjh7790@gmail.com"], cwd=tmpdir, check=True)
-        
+
+        # 공통 조상을 실제로 확인한다. 없으면 병합이 아니라 클론 방식이 잘못된 것이므로
+        # 조용히 포기하지 말고 이유를 남긴다 — 위 버그가 3일 동안 안 보였던 이유가 침묵이었다.
+        base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"], cwd=tmpdir, capture_output=True, text=True)
+        if base.returncode != 0:
+            log(f"  자동 해소 포기: HEAD와 origin/main의 공통 조상을 찾지 못했다 ({base.stderr.strip()})")
+            return False
+
         res = subprocess.run(["git", "merge", "origin/main", "--no-commit", "--no-ff"], cwd=tmpdir, capture_output=True, text=True)
         if res.returncode != 0:
             conflicts = subprocess.run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=tmpdir, capture_output=True, text=True, check=True).stdout.splitlines()
             if conflicts != ["content/dictionary/_terms.yaml"]:
+                log(f"  자동 해소 포기: _terms.yaml 외의 충돌 {conflicts or '(없음 — 병합이 시작되지 못했다)'}"
+                    f" / git: {res.stderr.strip()}")
                 return False
-                
+
             terms_path = os.path.join(tmpdir, "content/dictionary/_terms.yaml")
             with open(terms_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                
+
             resolved = resolve_terms_conflict(content)
             if not resolved:
+                log("  자동 해소 포기: 양쪽에 같은 슬러그가 있어 합칠 수 없다")
                 return False
-                
+
             with open(terms_path, "w", encoding="utf-8") as f:
                 f.write(resolved)
-                
+
             subprocess.run(["git", "add", "content/dictionary/_terms.yaml"], cwd=tmpdir, check=True)
-            
+
+        # 스테이지가 비어 있으면(이미 main을 담고 있는 브랜치) commit이 check=True에 걸려
+        # 죽는다. 그건 충돌이 아니라 애초에 병합할 것이 없었던 경우다.
+        staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=tmpdir)
+        if staged.returncode == 0:
+            log("  자동 해소 포기: 병합할 변경이 없다 (dirty의 원인이 _terms.yaml이 아니다)")
+            return False
+
         subprocess.run(["git", "commit", "-m", "chore: auto-resolve _terms.yaml conflict"], cwd=tmpdir, check=True, capture_output=True)
         subprocess.run(["git", "push", "origin", branch], cwd=tmpdir, check=True, capture_output=True)
+        log(f"  _terms.yaml 충돌 자동 해소 완료 — {branch} 푸시함")
         return True
 
 def flip_front_matter_draft(content: str) -> str:
@@ -410,10 +527,70 @@ def execute_rejected(pr: dict, repo: str, pat: str) -> bool:
     requests.delete(ref_url, headers=headers, timeout=10)
     return True
 
+def execute_verdict(pr: dict, verdict: str, repo: str, pat: str, bot_token: str, chat_id: str) -> bool:
+    """판정 하나를 집행한다. 텔레그램에서 갓 읽은 판정과 원장에서 재시도하는 판정이
+    같은 경로를 타야 한다 — 갈라 두면 재시도만 조용히 다르게 동작한다.
+
+    실패하면 VerdictExecutionError를 올린다(호출자가 원장에 적는다)."""
+    is_post = pr["head"]["ref"].startswith("auto/post-")
+    try:
+        if verdict == "APPROVED":
+            if is_post:
+                if execute_approved_post(pr, repo, pat, bot_token, chat_id):
+                    send_telegram(bot_token, chat_id, f"PR #{pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
+                    return True
+            else:
+                if execute_approved_audit(pr, repo, pat):
+                    send_telegram(bot_token, chat_id, f"PR #{pr['number']} 감사 승인 병합 완료.")
+                    return True
+        elif verdict == "REJECTED":
+            if execute_rejected(pr, repo, pat):
+                send_telegram(bot_token, chat_id, f"PR #{pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
+                return True
+    except Exception as err:
+        raise VerdictExecutionError(pr, verdict, str(err)) from err
+    return False
+
+
+def retry_pending_verdicts(entries: list, open_prs: list, repo: str, pat: str,
+                           bot_token: str, chat_id: str) -> tuple:
+    """원장에 남은 판정을 텔레그램과 무관하게 재집행한다.
+
+    (남은 원장, 갱신된 대기 PR 목록, 실패 여부)를 돌려준다."""
+    by_number = {p["number"]: p for p in open_prs}
+    remaining = []
+    failed = False
+    for entry in entries:
+        pr = by_number.get(entry.get("pr"))
+        if pr is None:
+            continue  # drop_settled_verdicts가 이미 걸렀어야 하지만 방어적으로 둔다
+        verdict = entry.get("verdict", "APPROVED")
+        log(f"  원장 재집행: PR #{pr['number']} {verdict} (시도 {entry.get('attempts', 1)}회차)")
+        try:
+            if execute_verdict(pr, verdict, repo, pat, bot_token, chat_id):
+                open_prs = [p for p in open_prs if p["number"] != pr["number"]]
+                log(f"  원장 재집행 성공: PR #{pr['number']} — 원장에서 제거")
+                continue
+            remaining.append(entry)
+        except VerdictExecutionError as err:
+            failed = True
+            detail = mask(str(err.detail), bot_token)
+            remaining = record_pending_verdict(remaining + [entry], pr, verdict, detail)
+            attempts = next((e.get("attempts") for e in remaining if e.get("pr") == pr["number"]), "?")
+            send_telegram(bot_token, chat_id,
+                          f"❌ PR #{pr['number']} 판정 재집행 실패 ({attempts}회차): {detail}\n\n"
+                          f"판정은 원장에 남아 있어 다음 회차에 다시 시도합니다. "
+                          f"계속 실패하면 사람이 직접 처리해야 합니다.")
+    return remaining, open_prs, failed
+
+
 def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str, chat_id: str) -> list:
     """업데이트 1건을 처리하고 갱신된 대기 PR 목록을 돌려준다.
 
-    실행이 실패하면 예외를 올린다 — 호출자가 그 업데이트를 소비하지 않고 멈춘다.
+    집행이 실패하면 VerdictExecutionError를 올린다 — 호출자가 판정을 원장에 적고
+    오프셋은 소비한다(오프셋을 붙들어 봐야 텔레그램이 24시간 뒤에 지운다).
+    그 앞 단계(매칭·통신)의 실패는 적어 둘 판정이 없으므로 일반 예외로 올라가고,
+    호출자가 오프셋을 붙든 채 멈춘다.
     """
     msg_obj = up.get("message", {})
     up_chat_id = msg_obj.get("chat", {}).get("id")
@@ -453,26 +630,7 @@ def handle_update(up: dict, open_prs: list, repo: str, pat: str, bot_token: str,
                           f"{POLL_NOTE}")
         return open_prs
 
-    is_post = target_pr["head"]["ref"].startswith("auto/post-")
-    success = False
-    try:
-        if verdict == "APPROVED":
-            if is_post:
-                success = execute_approved_post(target_pr, repo, pat, bot_token, chat_id)
-                if success:
-                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 승인 처리 완료 — 포스트가 게시 및 배포되었습니다.")
-            else:
-                success = execute_approved_audit(target_pr, repo, pat)
-                if success:
-                    send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 감사 승인 병합 완료.")
-        elif verdict == "REJECTED":
-            success = execute_rejected(target_pr, repo, pat)
-            if success:
-                send_telegram(bot_token, chat_id, f"PR #{target_pr['number']} 반려 처리 완료 — PR이 닫혔습니다.")
-    except Exception as err:
-        raise RuntimeError(f"PR #{target_pr['number']} — {err}") from err
-
-    if success:
+    if execute_verdict(target_pr, verdict, repo, pat, bot_token, chat_id):
         return [p for p in open_prs if p["number"] != target_pr["number"]]
     return open_prs
 
@@ -496,14 +654,31 @@ def main():
     open_prs = get_open_prs(repo, pat)
     log(f"open auto/* PRs: {len(open_prs)} → {[p['number'] for p in open_prs]}")
 
+    pending = drop_settled_verdicts(load_pending_verdicts(repo, pat), open_prs)
+    log(f"미집행 판정 원장: {len(pending)} → {[e.get('pr') for e in pending]}")
+
     # 재질의 전용 모드 — 텔레그램 큐를 읽지 않는다. 오프셋을 소비하지 않으므로
     # 아침 재질의가 새벽 회차의 판정을 가로채는 일이 없다.
     if "--reask" in sys.argv:
-        due = overdue_prs(open_prs)
-        log(f"재질의 대상: {len(due)} → {[p['number'] for p in due]}")
+        # 원장에 있는 PR은 빼고 묻는다. 이미 승인을 받아 재시도 중인 건이라
+        # 다시 물으면 "승인했는데 또 물어본다"가 된다 — 재집행 실패는 인박스가
+        # 자기 경보로 이미 알렸다.
+        queued = {e.get("pr") for e in pending}
+        due = [p for p in overdue_prs(open_prs) if p["number"] not in queued]
+        log(f"재질의 대상: {len(due)} → {[p['number'] for p in due]} (원장 대기 {sorted(queued)} 제외)")
         if due:
             send_telegram(bot_token, chat_id, reask_message(due))
         return
+
+    # 원장을 텔레그램보다 **먼저** 처리한다. 여기 있는 판정은 이미 사람이 내린 것이고
+    # 텔레그램 큐에서는 이미 사라졌으므로, 이 경로가 유일한 집행 기회다.
+    ledger_failed = False
+    if pending:
+        before = list(pending)
+        pending, open_prs, ledger_failed = retry_pending_verdicts(
+            pending, open_prs, repo, pat, bot_token, chat_id)
+        if pending != before:
+            save_pending_verdicts(repo, pat, pending)
 
     # Poll Telegram updates (timeout 10)
     try:
@@ -513,25 +688,31 @@ def main():
         updates = u_resp.json().get("result", [])
         log(f"getUpdates offset={offset_val} → {len(updates)}건")
     except Exception as e:
-        err_msg = str(e)
-        if bot_token:
-            err_msg = err_msg.replace(bot_token, "[MASKED_BOT_TOKEN]")
-        print(f"Telegram API getUpdates failed: {err_msg}", file=sys.stderr)
+        print(f"Telegram API getUpdates failed: {mask(str(e), bot_token)}", file=sys.stderr)
         sys.exit(1)
-    
+
     last_offset = offset_val
-    failed = False
+    failed = ledger_failed
     try:
         for up in updates:
             up_id = up["update_id"]
             try:
                 open_prs = handle_update(up, open_prs, repo, pat, bot_token, chat_id)
+            except VerdictExecutionError as err:
+                detail = mask(str(err.detail), bot_token)
+                # 판정을 원장에 **먼저** 적고, 그 다음에 오프셋을 소비한다. 순서가 반대면
+                # 원장 쓰기가 실패했을 때 판정이 사라진다. 오프셋을 붙들고 있어 봐야
+                # 텔레그램이 24시간 뒤에 지우므로(하루 1회 폴링) 보존이 되지 않는다.
+                pending = record_pending_verdict(pending, err.pr, err.verdict, detail)
+                save_pending_verdicts(repo, pat, pending)
+                send_telegram(bot_token, chat_id,
+                              f"❌ 판정 처리 중 오류 발생: {mask(str(err), bot_token)}\n\n"
+                              f"판정은 원장에 적어 두었습니다 — 다음 회차가 텔레그램과 무관하게 다시 시도합니다.")
+                failed = True
             except Exception as err:
-                err_str = str(err)
-                if bot_token:
-                    err_str = err_str.replace(bot_token, "[MASKED_BOT_TOKEN]")
-                send_telegram(bot_token, chat_id, f"❌ 판정 처리 중 오류 발생: {err_str}")
-                # 이 업데이트는 소비하지 않는다 — 오프셋을 넘기면 판정이 통째로 사라진다.
+                # 집행 이전 단계(매칭·통신)의 오류는 적어 둘 판정이 없다. 이때만
+                # 오프셋을 붙들고 멈춘다.
+                send_telegram(bot_token, chat_id, f"❌ 판정 처리 중 오류 발생: {mask(str(err), bot_token)}")
                 failed = True
                 break
             last_offset = max(last_offset, up_id + 1)
