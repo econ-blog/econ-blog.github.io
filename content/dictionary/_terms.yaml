@@ -109,3 +109,7 @@ oil-price-cap:
 treasury-buyback:
   title: "국채 바이백"
   aliases: ["국채 환매", "바이백 프로그램", "Treasury buyback"]
+
+m2-broad-money:
+  title: "M2(광의통화)"
+  aliases: ["M2", "광의통화", "통화량"]
