@@ -113,3 +113,7 @@ treasury-buyback:
 junk-bond:
   title: "정크본드"
   aliases: ["투기등급 채권", "하이일드 본드", "junk bond"]
+
+m2-broad-money:
+  title: "M2(광의통화)"
+  aliases: ["M2", "광의통화", "통화량"]
