@@ -117,3 +117,7 @@ junk-bond:
 m2-broad-money:
   title: "M2(광의통화)"
   aliases: ["M2", "광의통화", "통화량"]
+
+hbm:
+  title: "고대역폭메모리(HBM)"
+  aliases: ["HBM", "고대역폭메모리", "HBM4", "고대역폭 메모리"]
