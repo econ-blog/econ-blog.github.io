@@ -1,3 +1,7 @@
+nand-flash:
+  title: "낸드플래시"
+  aliases: ["낸드", "NAND", "낸드 플래시"]
+
 base-rate:
   title: "기준금리"
   aliases: ["정책금리", "기준 금리"]
