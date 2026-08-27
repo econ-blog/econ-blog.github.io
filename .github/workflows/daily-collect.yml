@@ -1,112 +1,29 @@
-name: Daily Collection (Inbox + Candidates)
+name: Daily Collection (Candidates)
 
 on:
   # 스케줄은 cron-job.org가 REST API로 건다 — 매일 01:30 KST.
   # GitHub 내장 schedule은 2026-08-02에 제거했다. 근거·설정은 MEMORY.md §9.
   #
-  # inbox.yml + fetch-candidates.yml을 여기로 합쳤다(2026-08-02). 순서가 요점이다:
-  # 인박스가 **먼저** 어제 글의 승인 판정을 처리해 PR을 닫고, 그 다음 오늘 후보를
-  # 수집하고, 그 다음 05:00 루틴이 오늘 글을 만든다. 하루가 한 방향으로 흐른다.
+  # 2026-08-27 무인 운영 전환으로 `inbox`·`reask` 잡을 제거했다. 둘 다 승인 루프의
+  # 부품이었다 — 인박스는 텔레그램 답장을 읽어 어제 글의 PR을 병합하거나 닫았고,
+  # 재질의는 답장이 유실된 회차의 교착을 깼다. 이제 글은 승인을 기다리지 않고 당일
+  # 05:00에 바로 발행되므로 병합할 PR도, 되물을 판정도 없다.
   #
-  # 2026-08-08: `reask` 잡을 인박스 뒤에 붙였다. 텔레그램 getUpdates는 확인되지
-  # 않은 업데이트를 24시간만 보관해서 회차 하나가 걸러지면 그 사이의 판정이
-  # 영구 삭제된다(2026-08-07 회차가 러너를 못 받고 취소되며 실제로 발생).
-  # 유실은 못 막지만 교착은 깬다 — 사람은 답했다고 기억하고 시스템은 받은 적이
-  # 없어서, 먼저 묻지 않으면 PR이 조용히 쌓인다. 근거는 MEMORY.md §9.
+  # 남은 것은 수집 하나뿐이라 하루의 순서 의존도 사라졌다. 이 워크플로는 이제
+  # 05:00 루틴이 읽을 후보 스냅샷을 사이드카에 올리기만 한다.
   workflow_dispatch:
 
 concurrency:
   group: daily-collect
-  # inbox가 PR 병합·draft 플립을 한다 — 중간에 끊지 않는다.
-  cancel-in-progress: false
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  inbox:
-    name: 어제 글 승인 판정 처리
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Mask Sensitive Tokens
-        env:
-          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
-        run: |
-          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
-          echo "::add-mask::$BOT_TOKEN"
-
-      - name: Process Inbox Updates
-        env:
-          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
-          PAT: ${{ secrets.PAT }}
-          TELEGRAM_OFFSET: ${{ vars.TELEGRAM_OFFSET }}
-          REPO: ${{ github.repository }}
-        run: python scripts/process_inbox.py
-
-  reask:
-    name: 미결 판정 재질의
-    runs-on: ubuntu-latest
-    # 인박스 **뒤**라야 한다. 앞에 두면 방금 승인한 PR까지 목록에 실려
-    # "승인했는데 또 물어본다"가 된다 — 2026-08-08까지의 적체 경보가 그랬다.
-    #
-    # `if: always()`를 붙이지 않는다(candidates와 다른 점). 인박스가 실패하면
-    # 판정은 소비되지 않은 채 다음 회차로 넘어가므로, 그 상태에서 "아직
-    # 미결입니다"는 거짓이다 — 실패는 인박스 자신의 경보가 이미 알린다.
-    needs: inbox
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Mask Sensitive Tokens
-        env:
-          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
-        run: |
-          BOT_TOKEN=$(python3 -c "import os, json; print(json.loads(os.environ['CREDENTIALS_JSON'])['telegram']['bot_token'])")
-          echo "::add-mask::$BOT_TOKEN"
-
-      # `--reask`는 getUpdates를 호출하지 않고 오프셋도 쓰지 않는다. 읽으면
-      # 이 잡이 다음 회차가 처리해야 할 판정을 먼저 소비하는데, 이 경로에는
-      # PR 병합 로직이 없어 판정이 그대로 증발한다. TELEGRAM_OFFSET을 넘기지
-      # 않는 것도 같은 이유다.
-      - name: Re-ask pending verdicts
-        env:
-          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
-          PAT: ${{ secrets.PAT }}
-          REPO: ${{ github.repository }}
-        run: python scripts/process_inbox.py --reask
-
   candidates:
     name: 오늘 후보 수집
     runs-on: ubuntu-latest
-    needs: inbox
-    # 순서만 강제하고 성공은 요구하지 않는다. 인박스는 텔레그램 API·저장소 변수
-    # 쓰기·PR 병합에 걸려 있어 이 워크플로에서 가장 잘 깨지는 쪽인데, 그 실패가
-    # 수집까지 막으면 오늘 /daily-post가 통째로 no_snapshot이 된다.
-    if: always()
-    permissions:
-      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

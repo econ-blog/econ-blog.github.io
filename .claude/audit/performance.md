@@ -1,7 +1,7 @@
 # ② 성과 분석 스테이지 지침
 
 GA4·GSC 데이터로 어떤 주제가 먹히는지 판정하고, **데이터 충분성 게이트를 통과할 때만**
-`topic-report.md`를 갱신한다. 결과를 문자열로 weekly-audit.md에 넘긴다 — 파일 쓰기·git은
+`topic-report.md`를 갱신한다. 결과를 문자열로 health-check.md에 넘긴다 — 파일 쓰기·git은
 시퀀서가 한다. 모든 Python은 `.venv/bin/python`으로 호출한다.
 
 이 스테이지의 불변조건(시퀀서와 이중 진술 — AC #39 규약):

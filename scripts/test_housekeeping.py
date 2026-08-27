@@ -7,6 +7,58 @@ import textwrap
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import housekeeping
 
+class TestHousekeepingReportOutput(unittest.TestCase):
+    """2026-08-27까지 `main_flow`는 리포트를 렌더만 하고 어디에도 쓰지 않았다.
+    워크플로의 `git add report/housekeeping-*.md` 는 매칭되는 파일이 없어 매번 죽었고,
+    유지보수는 사실상 한 번도 커밋되지 않았다. 이제 리포트는 격주 점검의 입력이다."""
+
+    def test_report_path_matches_the_workflow_glob(self):
+        import fnmatch
+        path = housekeeping.report_path("2026-09-10")
+        self.assertEqual(path, "report/housekeeping-2026-09-10.md")
+        self.assertTrue(fnmatch.fnmatch(path, "report/housekeeping-*.md"))
+
+    def test_main_flow_writes_the_report_file(self):
+        from unittest.mock import patch
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                with patch.object(housekeeping, "get_kst_date", lambda: "2026-09-10"), \
+                     patch.object(housekeeping, "run_links",
+                                  lambda: {"link": {"confirmed_dead": []}, "backfill": [], "internal": []}), \
+                     patch.object(housekeeping, "run_indexation", lambda: {}), \
+                     patch.object(housekeeping, "run_scan",
+                                  lambda: {"quality": {}, "contracts": [], "corpus": {}}), \
+                     patch.object(housekeeping, "run_numerics", lambda: {}), \
+                     patch.object(housekeeping, "apply_edits", lambda *a: None):
+                    housekeeping.main_flow()
+                written = housekeeping.report_path("2026-09-10")
+                self.assertTrue(os.path.exists(written), "리포트가 파일로 쓰이지 않았다")
+                with open(written, encoding="utf-8") as fh:
+                    self.assertIn("주간 유지보수 리포트", fh.read())
+            finally:
+                os.chdir(cwd)
+
+    def test_dry_run_writes_nothing(self):
+        from unittest.mock import patch
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                with patch.object(housekeeping, "get_kst_date", lambda: "2026-09-10"), \
+                     patch.object(housekeeping, "run_links",
+                                  lambda: {"link": {"confirmed_dead": []}, "backfill": [], "internal": []}), \
+                     patch.object(housekeeping, "run_indexation", lambda: {}), \
+                     patch.object(housekeeping, "run_scan",
+                                  lambda: {"quality": {}, "contracts": [], "corpus": {}}), \
+                     patch.object(housekeeping, "run_numerics", lambda: {}):
+                    housekeeping.main_flow(dry_run=True)
+                self.assertFalse(os.path.exists("report"))
+            finally:
+                os.chdir(cwd)
+
+
 class TestHousekeepingApplyEdits(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

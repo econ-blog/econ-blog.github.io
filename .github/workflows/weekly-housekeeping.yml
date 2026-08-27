@@ -1,5 +1,17 @@
 name: Weekly Housekeeping (무인 유지보수)
 
+# 스케줄은 cron-job.org가 REST API로 건다 — 매주 일 02:00 KST.
+#
+# 2026-08-27 무인 운영 전환: `content/` 수정을 `auto/audit-*` 브랜치로 빼서 PR·승인을
+# 받던 경로를 없앴다. 이제 리포트·원장·본문 정정이 한 커밋으로 `main`에 직행한다.
+#
+# **텔레그램을 쓰지 않는다** — 성공도 실패도 알리지 않는다(사용자 지시). 이 패스는
+# 순수 결정론이라 사람이 읽고 판단할 것이 없고, 실패는 격주 점검(`/health-check`)이
+# `report/housekeeping-*.md`의 날짜 공백으로 집어낸다.
+#
+# 안전장치는 알림이 아니라 **단위 테스트**다. 테스트가 깨지면 커밋 스텝에 도달하지
+# 못하므로, 고장난 헬퍼가 본문을 망가뜨린 채 `main`으로 나가는 경로가 없다.
+
 on:
   workflow_dispatch:
 
@@ -9,7 +21,6 @@ concurrency:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   housekeeping:
@@ -35,6 +46,7 @@ jobs:
           hugo-version: '0.164.0'
           extended: true
 
+      # 승인 게이트가 없어진 뒤로 이 스텝이 유일한 게이트다. 실패하면 여기서 멈춘다.
       - name: Run Unit Tests
         run: |
           for f in .claude/audit/lib/test_*.py; do python "$f" || exit 1; done
@@ -44,36 +56,25 @@ jobs:
         id: hk
         env:
           TZ: Asia/Seoul
-        run: |
-          python scripts/housekeeping.py
+        run: python scripts/housekeeping.py
 
       - name: Commit and Push
         run: |
           git config --global user.name "bjh7790"
           git config --global user.email "bjh7790@gmail.com"
-          
-          # 1. Commit and push reports/ledger directly to main
-          git add report/housekeeping-*.md .claude/audit/link-state.json
-          git commit -m "audit: 무인 유지보수 (${{ steps.hk.outputs.summary }})" || echo "No report changes to commit"
-          git pull --rebase origin main || true
-          git push origin main
-          
-          # 2. If content/ has edits (dead links removed, backfills), branch and push to trigger open-auto-pr.yml
-          if [ -n "$(git status --porcelain content/)" ]; then
-            BRANCH="auto/audit-${{ steps.hk.outputs.date }}"
-            git checkout -b "$BRANCH"
-            git add content/
-            git commit -m "audit: 유지보수 content 정정 (${{ steps.hk.outputs.summary }})" -m "확정 사망 링크 제거 및 내부 링크 백필 정정"
-            git push origin "$BRANCH"
-          fi
 
-      - name: Alert on workflow failure
-        if: failure()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python scripts/telegram_notify.py alert \
-            "weekly-housekeeping" "워크플로 실패" \
-            "유지보수 스크립트 실행이 실패했습니다." \
-            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # 리포트·원장·본문 정정을 **한 커밋**으로 main에 올린다. 셋을 갈라 놓으면
+          # "무엇을 보고 무엇을 고쳤나"가 커밋 경계에서 끊긴다.
+          #
+          # `content/`를 여기 함께 넣어도 `notify-post.yml`은 반응하지 않는다 —
+          # 그쪽은 `post: ` 접두사만 본다(이 커밋은 `audit:`).
+          git add -A report/ .claude/audit/link-state.json content/
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋하지 않는다"
+            exit 0
+          fi
+          git commit -m "audit: 무인 유지보수 (${{ steps.hk.outputs.summary }})" \
+                     -m "확정 사망 링크 제거 및 내부 링크 백필 정정"
+          # 유지보수가 도는 사이 다른 커밋이 main에 들어왔을 수 있다(발행은 매일 돈다).
+          git pull --rebase origin main
+          git push origin main

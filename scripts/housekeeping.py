@@ -347,29 +347,41 @@ def apply_edits(repo_root: str, dead_links: list, backfills: list):
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
+def report_path(date: str) -> str:
+    return f"report/housekeeping-{date}.md"
+
+
 def main_flow(dry_run=False):
     date = get_kst_date()
     links = run_links()
     idx = run_indexation()
     scan = run_scan()
     num = run_numerics()
-    
+
     report = render_report(date, links, idx, scan, num)
-    
+
     dead_cnt = len(links["link"].get("confirmed_dead", [])) if links.get("link") and isinstance(links["link"], dict) else 0
     bf_cnt = len(links["backfill"]) if isinstance(links.get("backfill"), list) else 0
     q1_cnt = len(scan.get("quality", {}).get("Q1", [])) if isinstance(scan.get("quality"), dict) else 0
     summary = f"사망 {dead_cnt}건, 백필 {bf_cnt}건, Q1 결함 {q1_cnt}건"
-    
+
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
             f.write(f"summary={summary}\n")
             f.write(f"date={date}\n")
-            
+
     if dry_run:
         print(f"Summary: {summary}")
         print(report)
     else:
+        # 리포트를 **파일로 쓴다.** 2026-08-27까지 이 스크립트는 리포트를 렌더만 하고
+        # 어디에도 쓰지 않았다. 워크플로는 `git add report/housekeeping-*.md`를 했고,
+        # 매칭되는 파일이 없어 그 스텝이 매번 죽었다 — 유지보수는 사실상 한 번도
+        # 커밋된 적이 없다. 격주 점검이 이 리포트를 입력으로 읽으므로 이제는 산출물이다.
+        Path("report").mkdir(exist_ok=True)
+        with open(report_path(date), "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+
         dead_urls = set(links["link"].get("confirmed_dead", [])) if links.get("link") and isinstance(links["link"], dict) else set()
         dead_list = []
         if dead_urls:

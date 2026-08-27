@@ -1,126 +1,159 @@
+"""텔레그램 발신부.
+
+2026-08-27 무인 운영 전환 이후 이 스크립트가 보내는 메시지는 **세 종류뿐**이며
+셋 다 통보이지 질문이 아니다 — 승인/반려 판정을 묻는 경로는 없어졌다.
+
+| 모드 | 트리거 | 내용 |
+|---|---|---|
+| `post` | `notify-post.yml` (main 푸시 · `content/posts/**`) | 오늘 발행된 글 본문 |
+| `health` | `notify-health.yml` (main 푸시 · `report/health-*.md`) | 격주 점검 중 사람이 알아야 할 것만 |
+| `alert` | 수집 워크플로 실패 | 자동화 경보 |
+
+주간 유지보수(`weekly-housekeeping.yml`)는 **어떤 메시지도 보내지 않는다.** 순수
+결정론 패스라 사람이 읽고 할 일이 없고, 실패는 격주 점검이 집어낸다.
+
+판정 토큰(`#P0827`)을 만드는 함수가 여기 있었지만 승인 루프와 함께 제거했다.
+다시 넣지 않는다 — 받는 쪽(`process_inbox.py`)이 더 이상 존재하지 않아서
+사용자가 답장해도 아무 일도 일어나지 않는다.
+"""
+
 import os
 import re
 import sys
 import json
 import requests
 
-def extract_verdict_token(branch_name: str, pr_type: str) -> str:
-    match = re.search(r'(\d{4})-(\d{2})-(\d{2})', branch_name)
-    mmdd = (match.group(2) + match.group(3)) if match else "0000"
-    prefix = "P" if pr_type == "post" else "A"
-    return f"#{prefix}{mmdd}"
+SITE_BASE = "https://econ-blog.github.io"
+
+# 텔레그램 텍스트 메시지 상한은 4096자다. UTF-8 바이트가 아니라 문자 수이며,
+# 넘기면 400 Bad Request로 통째로 실패한다 — 잘라 보내는 쪽이 낫다.
+TELEGRAM_TEXT_LIMIT = 3500
 
 LEADING_BULLET = re.compile(r'^[-*\s]+')
+SUMMARY_FIELD = re.compile(r'^([^:\n]{1,20}):\s*(\S.*)$')
+DECISION_DIVIDER = re.compile(r'^[─-]+\s*사람이 해야 할 일\s*[─-]*$')
 
 
-def extract_inspection_line(body: str) -> str:
-    lines = body.splitlines()
-    for i, line in enumerate(lines):
-        clean = line.strip()
-        m = re.search(r'(?:#+\s*)?발행\s*전\s*검사:\s*(.+)', clean)
-        if m and m.group(1).strip():
-            return f"발행 전 검사: {m.group(1).strip()}"
-        
-        if re.search(r'#+\s*발행\s*전\s*검사', clean):
-            for next_line in lines[i+1:]:
-                nl = next_line.strip()
-                if nl:
-                    # f-string 표현식 안에 백슬래시를 두면 Python 3.11에서
-                    # SyntaxError다(3.12의 PEP 701부터 허용). 워크플로는 3.12라
-                    # 통과했지만 로컬 .venv(3.11)에서는 import 자체가 깨져
-                    # test_automation.py 전체가 실패했다. 치환을 밖으로 뺀다.
-                    stripped = LEADING_BULLET.sub('', nl)
-                    return f"발행 전 검사: {stripped}"
-            return "발행 전 검사: 진행됨"
-    return "발행 전 검사: 검사 불가"
+# ── 커밋 메시지 본문 파싱 ──────────────────────────────────────────────────
 
-def format_post_notification(title: str, body: str, branch: str, url: str) -> str:
-    token = extract_verdict_token(branch, "post")
-    inspection = extract_inspection_line(body)
-    
-    clean_body = re.sub(r'#.*?(?:\n|$)', '', body)
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', clean_body) if s.strip()]
-    summary = " ".join(sentences[:2]) if len(sentences) >= 2 else (sentences[0] if sentences else "")
-    
-    return (
-        f"{token} 오늘의 포스트\n\n"
-        f"{title}\n"
-        f"{summary}\n\n"
-        f"{inspection}\n"
-        f"PR: {url}\n\n"
-        f"승인 / 반려 로 답장."
-    )
+def extract_block(body: str, heading: str) -> list:
+    """`## <heading>` 아래부터 다음 `## `까지의 줄을 돌려준다.
 
-# weekly-audit.md §9-1이 PR 본문에 쓰기로 한 여섯 줄의 키. `키:` 형태만 받는다.
-# 리포트 본문의 H2(`## ⚠ 계약 위반`)는 콜론이 없어 의도적으로 탈락한다 — 리포트를
-# 통째로 복사하면 값이 빠진 헤딩만 늘어서 요약처럼 보이는 빈 메시지가 된다.
-SUMMARY_KEYS = ("계약 위반", "확정 사망 링크", "데이터 충분성",
-                "색인 건전성", "소견", "front matter 수정", "새 가설 제안")
-SUMMARY_LINE = re.compile(r'^(?:' + '|'.join(SUMMARY_KEYS) + r')\s*:\s*\S')
-DECISION_DIVIDER = re.compile(r'^[─-]+\s*결정 필요\s*[─-]*$')
-
-
-def summarize_audit_body(body: str) -> str:
-    """§9-1 블록에서 알림에 실을 줄만 남긴다.
-
-    PR 경로(`auto/audit-*`)와 리포트 경로(`main` 직행) 둘이 같은 커밋 메시지
-    계약을 쓰므로 필터도 하나다. 한쪽만 고치면 두 알림의 요약이 갈린다.
+    커밋 메시지 본문에서 요약 블록만 떼어 낸다. 헤딩 범위로 자르는 이유는 리포트
+    산문이 딸려 들어오는 것을 막기 위해서다 — 예전 구현은 고정 키 목록으로 걸렀는데,
+    키가 하나 늘 때마다 스크립트를 같이 고쳐야 했고 실제로 한쪽만 고쳐 요약이 반쪽이
+    된 적이 있다.
     """
-    filtered_lines = []
-    in_decision_block = False
+    out, inside = [], False
     for raw in body.splitlines():
         line = raw.strip()
-        if not line:
+        if line.startswith("## "):
+            if inside:
+                break
+            inside = line[3:].strip() == heading
             continue
-        if DECISION_DIVIDER.match(line):
-            in_decision_block = True
-            filtered_lines.append(line)
-        elif SUMMARY_LINE.match(line):
-            filtered_lines.append(line)
-        elif in_decision_block and line[:1] in ("*", "-"):
-            # 결정 필요 블록 안의 항목만 싣는다. 블록 밖의 불릿은 리포트 산문이다.
-            filtered_lines.append(line)
-
-    # 계약을 지키지 않은 본문은 조용히 반쪽 요약을 내지 않고 그렇다고 말한다.
-    # 링크는 아래에 그대로 붙으므로 사람이 열어볼 경로는 남는다.
-    return "\n".join(filtered_lines[:12]) if filtered_lines else "요약 정보 없음"
+        if inside and line:
+            out.append(line)
+    return out
 
 
-def format_audit_notification(title: str, body: str, branch: str, url: str) -> str:
-    token = extract_verdict_token(branch, "audit")
-    return (
-        f"{token} 주간 감사\n\n"
-        f"{summarize_audit_body(body)}\n\n"
-        f"PR: {url}\n\n"
-        f"승인 / 반려 로 답장."
-    )
+# 배선용 필드 — 워크플로와 이 스크립트가 읽으려고 있는 줄이지 사람에게 보여줄 내용이
+# 아니다. `알림:`은 발신 스위치이고(받은 사람은 이미 받았으므로 자명하다), `리포트:`는
+# 아래에서 클릭 가능한 URL로 다시 붙는다.
+ROUTING_FIELDS = ("알림", "리포트", "상태", "사유")
 
 
-def format_audit_report_notification(body: str, report_path: str, url: str) -> str:
-    """감사 리포트가 `main`에 올라갔을 때의 알림.
+def summarize_block(lines: list, limit: int = 12) -> str:
+    """요약 블록에서 알림에 실을 줄만 남긴다.
 
-    **판정 토큰(`#A0808`)을 넣지 않고 승인/반려를 묻지도 않는다.** 리포트와
-    원장은 2026-08-01 결정에 따라 승인 없이 `main`으로 직행하는 관측치라
-    사람이 반려할 대상이 아니다. 토큰을 넣으면 사용자가 무심코 답장했을 때
-    `process_inbox.py`가 열려 있지도 않은 `auto/audit-*` PR을 찾는다.
-
-    콘텐츠 수정이 딸린 주에는 이 알림과 별개로 `auto/audit-*` PR 알림
-    (`format_audit_notification`)이 따로 가며, 승인 대상은 그쪽뿐이다.
+    `키: 값` 줄과, 「사람이 해야 할 일」 구분선 **뒤에** 오는 불릿만 싣는다.
+    구분선 앞의 불릿은 산문이라 뺀다.
     """
-    name = os.path.basename(report_path) if report_path else "audit report"
+    kept, in_decision = [], False
+    for line in lines:
+        if DECISION_DIVIDER.match(line):
+            in_decision = True
+            kept.append(line)
+        elif in_decision and line[:1] in ("*", "-"):
+            kept.append(LEADING_BULLET.sub("• ", line))
+        else:
+            m = SUMMARY_FIELD.match(line)
+            if m and m.group(1).strip() not in ROUTING_FIELDS:
+                kept.append(line)
+    return "\n".join(kept[:limit]) if kept else "요약 정보 없음"
+
+
+def field(lines: list, key: str, default: str = "") -> str:
+    """요약 블록에서 `키: 값` 한 줄의 값을 꺼낸다."""
+    for line in lines:
+        m = SUMMARY_FIELD.match(line)
+        if m and m.group(1).strip() == key:
+            return m.group(2).strip()
+    return default
+
+
+# ── 포스트 발행 알림 ───────────────────────────────────────────────────────
+
+def strip_front_matter(raw: str) -> str:
+    """본문만 남긴다. 알림에서 front matter는 읽을 가치가 없다."""
+    return re.sub(r'^---\s*\n.*?\n---\s*\n?', '', raw, count=1, flags=re.DOTALL)
+
+
+def front_matter(raw: str) -> str:
+    m = re.match(r'^---\s*\n(.*?)\n---', raw, flags=re.DOTALL)
+    return m.group(1) if m else ""
+
+
+def is_draft(raw: str) -> bool:
+    """front matter의 `draft:` 값. 파일이 진리원이다 — 커밋 메시지가 아니라.
+
+    커밋 메시지의 `상태:` 줄을 믿었다가 둘이 어긋나면 사이트에 없는 글을
+    "발행되었습니다"라고 알리게 된다. 파일은 그럴 수 없다.
+    """
+    return bool(re.search(r'(?m)^draft:\s*true\b', front_matter(raw)))
+
+
+def post_title(raw: str) -> str:
+    m = re.search(r'(?m)^title:\s*["\']?(.*?)["\']?\s*$', front_matter(raw))
+    return m.group(1).strip() if m else ""
+
+
+def post_url(path: str) -> str:
+    slug = os.path.splitext(os.path.basename(path))[0]
+    return f"{SITE_BASE}/posts/{slug}/"
+
+
+def format_post_published(path: str, raw: str, note: str = "") -> str:
+    """오늘 발행된(혹은 보류된) 글의 머리말.
+
+    승인을 묻지 않는다. 사람이 읽고 고치고 싶으면 `/revise-post`로 고쳐 다시 밀면
+    되고, 그대로 두면 그대로 남는다.
+    """
+    title = post_title(raw) or os.path.basename(path)
+    if is_draft(raw):
+        head = "🟡 오늘의 글 — 보류됨 (사이트에 노출되지 않음)"
+        tail = (f"{note}\n\n" if note else "") + "고쳐서 발행하려면 로컬에서 `/revise-post`."
+    else:
+        head = "🟢 오늘의 글 — 발행됨"
+        tail = post_url(path)
+    return f"{head}\n\n{title}\n\n{tail}"
+
+
+def format_health_notification(body: str, report_path: str, url: str) -> str:
+    """격주 점검 알림. 보낼지 말지는 워크플로가 `알림:` 줄로 이미 판정했다."""
+    lines = extract_block(body, "점검 요약")
+    monthly = field(lines, "월간 리포트") == "예"
+    head = "📊 월간 현황 리포트" if monthly else "🔧 격주 점검 — 사람 확인 필요"
+    name = os.path.basename(report_path) if report_path else "health report"
     return (
-        f"📋 주간 감사 리포트 — {name}\n\n"
-        f"{summarize_audit_body(body)}\n\n"
-        f"리포트: {url}\n\n"
-        f"확인만 하면 된다 — 승인 대상이 아니다."
+        f"{head} ({name})\n\n"
+        f"{summarize_block(lines)}\n\n"
+        f"리포트: {url}"
     )
 
 
 def format_automation_alert(workflow: str, reason: str, detail: str, run_url: str) -> str:
-    """수집 워크플로 실패 경보. §9-1 PR 본문 계약과 무관한 별개 경로다.
-
-    SUMMARY_LINE 매처에 걸리지 않도록 'X: Y' 형태의 줄을 만들지 않는다.
-    """
+    """수집 워크플로 실패 경보. 요약 블록 계약과 무관한 별개 경로다."""
     return (
         f"⚠ 자동화 경보 [{workflow}]\n\n"
         f"{reason}\n"
@@ -128,6 +161,8 @@ def format_automation_alert(workflow: str, reason: str, detail: str, run_url: st
         f"실행 로그 {run_url}"
     )
 
+
+# ── 전송 ───────────────────────────────────────────────────────────────────
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -141,16 +176,6 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str):
             err_msg = err_msg.replace(bot_token, "[MASKED_BOT_TOKEN]")
         print(f"Telegram API send failed: {err_msg}", file=sys.stderr)
         sys.exit(1)
-
-
-# 텔레그램 텍스트 메시지 상한은 4096자다. UTF-8 바이트가 아니라 문자 수이며,
-# 넘기면 400 Bad Request로 통째로 실패한다 — 잘라 보내는 쪽이 낫다.
-TELEGRAM_TEXT_LIMIT = 3500
-
-
-def strip_front_matter(raw: str) -> str:
-    """본문만 남긴다. 초안 알림에서 front matter는 읽을 가치가 없다."""
-    return re.sub(r'^---\s*\n.*?\n---\s*\n?', '', raw, count=1, flags=re.DOTALL)
 
 
 def chunk_text(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list:
@@ -176,9 +201,8 @@ def chunk_text(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list:
 
 
 def send_telegram_document(bot_token: str, chat_id: str, path: str, caption: str = ""):
-    """초안 파일을 첨부한다. 실패해도 죽지 않는다 — 요약 메시지는 이미 갔고,
-    첨부는 편의 기능이라 이것 때문에 워크플로를 실패시키면 PR 코멘트 폴백이
-    '알림 전송 실패'라고 거짓말을 하게 된다."""
+    """글 파일을 첨부한다. 실패해도 죽지 않는다 — 본문은 이미 갔고, 첨부는 보관용이라
+    이것 때문에 워크플로를 실패시키면 경보가 거짓말을 하게 된다."""
     url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
     try:
         with open(path, "rb") as fh:
@@ -198,72 +222,70 @@ def send_telegram_document(bot_token: str, chat_id: str, path: str, caption: str
         return False
 
 
-def send_draft_files(bot_token: str, chat_id: str, paths: list):
-    """포스트 초안을 본문(인라인) + 파일(첨부) 두 형태로 보낸다.
+def send_posts(bot_token: str, chat_id: str, paths: list, note: str = ""):
+    """발행된 글을 머리말 + 본문(인라인) + 파일(첨부)로 보낸다.
 
     인라인이 주다 — 텔레그램은 .md를 다운로드 카드로만 그려서 모바일에서 바로
-    읽히지 않는다. 첨부는 원문 확인·보관용이다.
+    읽히지 않는다. 사용자가 매일 받기로 한 것은 그 본문이다.
     """
     for path in paths:
         if not os.path.isfile(path):
-            print(f"draft file not found, skipping: {path}", file=sys.stderr)
+            print(f"post file not found, skipping: {path}", file=sys.stderr)
             continue
         raw = open(path, encoding="utf-8").read()
         name = os.path.basename(path)
-        body = strip_front_matter(raw).strip()
-        chunks = chunk_text(body)
+        send_telegram_message(bot_token, chat_id, format_post_published(path, raw, note))
+        chunks = chunk_text(strip_front_matter(raw).strip())
         for i, chunk in enumerate(chunks, 1):
             header = f"📄 {name}" + (f" ({i}/{len(chunks)})" if len(chunks) > 1 else "")
             send_telegram_message(bot_token, chat_id, f"{header}\n\n{chunk}")
         send_telegram_document(bot_token, chat_id, path, caption=name)
 
-def main():
+
+def resolve_credentials():
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not (bot_token and chat_id):
-        creds_json = os.environ.get("CREDENTIALS_JSON")
-        if not creds_json:
-            print("Error: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID or CREDENTIALS_JSON missing", file=sys.stderr)
-            sys.exit(1)
-        creds = json.loads(creds_json)
-        bot_token = creds["telegram"]["bot_token"]
-        chat_id = creds["telegram"]["chat_id"]
+    if bot_token and chat_id:
+        return bot_token, chat_id
+    creds_json = os.environ.get("CREDENTIALS_JSON")
+    if not creds_json:
+        print("Error: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID or CREDENTIALS_JSON missing",
+              file=sys.stderr)
+        sys.exit(1)
+    creds = json.loads(creds_json)
+    return creds["telegram"]["bot_token"], creds["telegram"]["chat_id"]
+
+
+def main():
+    bot_token, chat_id = resolve_credentials()
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
+
     if mode == "alert":
         workflow, reason, detail, run_url = sys.argv[2:6]
         send_telegram_message(bot_token, chat_id,
                               format_automation_alert(workflow, reason, detail, run_url))
         return
 
-    if mode == "audit-report":
-        # `main` 직행 리포트 경로. PR이 없으므로 PR_* 환경변수를 쓰지 않는다.
-        send_telegram_message(bot_token, chat_id, format_audit_report_notification(
+    if mode == "health":
+        send_telegram_message(bot_token, chat_id, format_health_notification(
             os.environ.get("COMMIT_BODY", ""),
             os.environ.get("REPORT_PATH", ""),
             os.environ.get("REPORT_URL", ""),
         ))
         return
 
-    branch = os.environ.get("PR_BRANCH", "")
-    title = os.environ.get("PR_TITLE", "")
-    body = os.environ.get("PR_BODY", "")
-    url = os.environ.get("PR_URL", "")
-    
-    if "auto/post-" in branch:
-        msg = format_post_notification(title, body, branch, url)
-    elif "auto/audit-" in branch:
-        msg = format_audit_notification(title, body, branch, url)
-    else:
-        sys.exit(0)
+    if mode == "post":
+        paths = [p.strip() for p in os.environ.get("POST_FILES", "").splitlines() if p.strip()]
+        if not paths:
+            print("POST_FILES is empty — nothing to send", file=sys.stderr)
+            return
+        note = field(extract_block(os.environ.get("COMMIT_BODY", ""), "발행"), "사유")
+        send_posts(bot_token, chat_id, paths, note)
+        return
 
-    send_telegram_message(bot_token, chat_id, msg)
+    print(f"Unknown mode: {mode!r} (expected: post | health | alert)", file=sys.stderr)
+    sys.exit(1)
 
-    # 초안 본문·파일 전송. 포스트 PR에만 붙인다 — 감사 PR은 리포트가 길고
-    # 요약이 이미 판정에 필요한 것을 다 담는다.
-    if "auto/post-" in branch:
-        paths = [p.strip() for p in os.environ.get("PR_FILES", "").splitlines() if p.strip()]
-        if paths:
-            send_draft_files(bot_token, chat_id, paths)
 
 if __name__ == "__main__":
     main()
