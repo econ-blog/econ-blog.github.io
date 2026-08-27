@@ -820,3 +820,32 @@ econ-blog.github.io 저장소의 무인 격주 헬스체크 루틴이다. 클라
 `/daily-post` 커밋 본문에 `검토:` 줄이 추가됐고, 격주 점검 §2가 그 줄을 훑어 검토자가
 반복 지적하는 축을 찾는다 — 같은 지적이 계속 나오면 개별 글이 아니라 `draft.md`·
 `writing-styles.md`를 고쳐야 한다는 신호다.
+
+### 12-5. 루틴 트리거 교체 (2026-08-27)
+
+사용자가 기존 루틴 2개를 지우기로 하여 새 루틴 2개를 만들었다. §11-7의 "옛 트리거를
+갱신해 달라"는 요청은 이것으로 대체됐다 — 갱신 대신 교체다.
+
+| 새 트리거 | ID | cron (UTC) | KST |
+|---|---|---|---|
+| `econ-blog /daily-post (무인, 매일 05:00 KST)` | `trig_01RJiveFGo3PAKyEY4Tq2MFM` | `0 20 * * *` | 매일 05:00 |
+| `econ-blog /health-check (무인, 매주 일 06:00 KST · 깊은 점검은 격주)` | `trig_01LkWz2cUv6T5CCE67YEKrce` | `0 21 * * 6` | 매주 일 06:00 |
+
+지울 것: `trig_017vS1PQigJt7WXNPzzNSMUJ`(옛 daily-post) ·
+`trig_01XR7htngbvPqqcmN3s5GDJA`(옛 weekly-audit). 에이전트는 자기가 만들지 않은 루틴을
+지우거나 끌 수 없다 — 사람이 지운다.
+
+**둘 다 지우기 전까지 옛것과 새것이 같이 발화한다.** 두 daily 트리거의 발화 시각이
+1분 차이(20:08:04 / 20:08:59 UTC)라 같은 날 글이 두 개 나올 수 있다. 무인 모드의 슬러그
+충돌 회피(`-2` 접미사)가 파일 덮어쓰기는 막지만 중복 발행 자체는 막지 못한다.
+
+#### 새 트리거에 `sources`가 없다 — 확인이 필요하다
+
+옛 트리거의 `job_config.ccr.session_context`에는 `sources`(두 저장소)와 `outcomes`가
+명시돼 있었는데, `create_trigger` MCP 도구는 그 필드를 받지 않아 새 트리거에는 없다.
+환경(`env_01GD8DRN3CwrbhzGNzSmcCzn`)이 기본 소스를 주면 문제없지만, 옛 트리거가 굳이
+명시하고 있었다는 것은 안 줄 수도 있다는 뜻이다.
+
+첫 발화 뒤 반드시 확인한다: 그날 `main`에 `post:` 커밋이 올라왔는가. 안 올라왔으면
+저장소가 체크아웃되지 않은 것이므로 claude.ai Routines UI에서 소스를 붙여 준다.
+모델도 같은 이유로 지정하지 못했다(옛 트리거는 `claude-sonnet-5`).
