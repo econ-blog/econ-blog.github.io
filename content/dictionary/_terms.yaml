@@ -125,3 +125,7 @@ m2-broad-money:
 hbm:
   title: "고대역폭메모리(HBM)"
   aliases: ["HBM", "고대역폭메모리", "HBM4", "고대역폭 메모리"]
+
+won-dollar-exchange-rate:
+  title: "원/달러 환율"
+  aliases: ["원달러 환율", "원/달러", "달러/원 환율", "원화 환율"]
