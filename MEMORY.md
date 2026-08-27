@@ -345,12 +345,17 @@ Content-Type: application/json
 |---|---|---|---|
 | econblog-daily | 매일 01:30 | `daily-collect.yml` | 동작 중 |
 | econblog-weekly | 일 01:20 | `weekly-collect.yml` | 동작 중 |
-| econblog-housekeeping | 일 02:00 | `weekly-housekeeping.yml` | **미설정 — 만들어야 한다** |
 
-`weekly-housekeeping.yml`은 `workflow_dispatch`만 갖고 있고 이 표에 잡이 없다. 즉
+`weekly-housekeeping.yml`은 `workflow_dispatch`만 갖고 있었고 이 표에도 잡이 없었다. 즉
 **2026-08-27까지 한 번도 스케줄로 돈 적이 없다.** §11-4의 리포트 미기록 버그가 3주 넘게
 안 보였던 진짜 이유가 이것이다 — 워크플로가 깨져 있었던 게 아니라 아예 돌지 않았다.
-수집(01:20)이 끝난 뒤에 두어 링크 상태 스냅샷을 같은 회차에 쓰게 한다.
+
+**그 하나는 cron-job.org가 아니라 GitHub 내장 `schedule`로 돌린다** (일 18:00 UTC =
+월 03:00 KST). 이 절의 전환 근거는 "내장 스케줄이 3~4시간 늦는다"였고, 그것이 문제가
+된 이유는 일간 체인의 여유가 3시간 13분뿐이었기 때문이다. 유지보수에는 그런 예산이
+없다 — 몇 시간 늦어도 깨지는 것이 없다. 반대로 저장소 밖 설정이 조용히 빠지는 비용은
+방금 3주짜리 실사고로 확인했다. 발화가 걸러지는 주가 있어도 격주 점검 §2가
+`report/housekeeping-*.md`의 날짜 공백으로 집어낸다.
 
 **재질의는 크론 잡을 늘리지 않는다** (2026-08-08 결정)는 규칙은 재질의 잡과 함께
 2026-08-27에 사라졌다. 그 배경 규칙 자체는 유효하다: 외부 스케줄러에 잡을 더 만들수록
@@ -694,3 +699,41 @@ Claude 세션은 샌드박스에서 텔레그램 API에 도달할 수 없다. �
 
 둘뿐이다. `/revise-post`(이미 발행된 글의 사후 수정 — 성격이 가로채기에서 사후 수정으로
 바뀌었다)와 `/audit-local`(샌드박스가 도달 못 하는 GSC 제출·원문 확인).
+
+### 11-7. 사람이 해야 하는 이관 작업 하나 — 루틴 트리거 갱신
+
+Claude Routines의 `econ-blog /weekly-audit` 트리거(`trig_01XR7htngbvPqqcmN3s5GDJA`,
+cron `0 21 * * 6` = 일 06:00 KST)가 `.claude/commands/weekly-audit.md`를 Read 하도록
+적혀 있다. **에이전트는 이 트리거를 고칠 수 없다** — `http_api`로 생성된 루틴이라
+에이전트가 만든 것이 아니고, 권한이 `enabled=false`로 자기를 끄는 것뿐이다.
+
+그래서 `.claude/commands/weekly-audit.md`를 **리다이렉트 셈**으로 남겼다. 파일을 그냥
+지우면 다음 일요일 세션이 존재하지 않는 지침을 찾다가 아무 지침 없이 쓰기 권한만 든 채
+남는데, 그 상태가 조용히 나쁜 일을 할 수 있다. 셈은 그 세션을 `/health-check`로 보낸다.
+
+사람이 할 일 (급하지 않다 — 셈이 받치고 있다):
+
+1. 루틴 이름을 `econ-blog /health-check (무인, 격주 일요일 06:00 KST)`로 바꾼다.
+2. 프롬프트를 아래로 교체한다. **cron은 그대로 둔다** — 매주 발화시키고 격주 판정은
+   `health_state.py`의 `run_due`가 한다(§11-5).
+
+```
+econ-blog.github.io 저장소의 무인 격주 헬스체크 루틴이다. 클라우드 샌드박스에서
+실행되므로 사용자 질의 없이 스스로 판정한다.
+
+1. 부트스트랩: `bash scripts/bootstrap.sh --hugo` 실행 (Hugo 설치 실패 시 중단하지
+   말고 계속하되 대상 축을 `측정 불가`로 판정).
+2. 규약 확인: 저장소 루트의 `AGENTS.md`를 Read 한다.
+3. 주기 판정: `.venv/bin/python scripts/health_state.py --date <KST 오늘>` 을 실행한다.
+   이 트리거는 매주 발화하지만 점검은 격주다 — 출력의 `run_due`가 false면 아무것도
+   쓰지 말고 커밋하지 말고 알리지 말고 "이번 주는 격주 주기가 아님"만 보고하고 즉시
+   종료한다.
+4. 본작업: `.claude/commands/health-check.md`를 Read 하고 10개 스테이지를 무인 모드로
+   수행한다. 리포트·원장·자율 수정은 전부 `main` 직행 단일 커밋이다 (브랜치·PR 금지).
+5. 최종 보고: `health-check.md` §10에 정의된 최종 보고 항목을 그대로 출력한다.
+```
+
+3. 갱신이 끝나면 `.claude/commands/weekly-audit.md`를 지운다.
+
+`econ-blog /daily-post` 트리거(`trig_017vS1PQigJt7WXNPzzNSMUJ`)는 **손대지 않아도 된다.**
+프롬프트가 `daily-post.md`를 Read 하라고만 하고 있고 그 파일이 새 계약을 담고 있다.
