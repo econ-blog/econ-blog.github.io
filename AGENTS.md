@@ -25,7 +25,7 @@
     | 매일 05:00 KST | `/daily-post` (무인) | 글 작성 -> `main` 직행 발행 | **매일 본문 전송** |
     | 매주 일 01:20 KST | `weekly-collect.yml` | GA4·GSC·링크상태 -> 사이드카 | 실패 시에만 경보 |
     | 매주 일 02:00 KST | `weekly-housekeeping.yml` | 결정론 유지보수 -> `main` 직행 | **아무것도 보내지 않음** |
-    | 격주 | `/health-check` (무인) | SEO/GEO 전수 점검 + 자율 수정 -> `main` 직행 | **꼭 필요할 때만** |
+    | 매주 일 06:00 KST | `/health-check` (무인) | 격주는 전수 점검 + 자율 수정·실험 -> `main` 직행, 나머지 주는 연속성만 확인 | **꼭 필요할 때만** |
 
     격주 점검이 사람을 부르는 경우는 넷뿐이다: ① 월 1회 현황 리포트 ② 사람 승인이 필요한
     변경 ③ 사람만 할 수 있는 작업(GSC 색인 제출, 네이버 서치어드바이저 조회, 광고 도입,
@@ -38,7 +38,7 @@
     - 일간 뉴스 해설 포스트 작성 및 발행.
     - 인자 없음 = 무인 모드 (`draft: false` + `main` 직행. 승인 없음, 브랜치·PR 없음).
     - `manual` 인자 = 대화형 수동 모드 (후보 3건 제시 -> 선택 -> 승인 후 `main` 푸시).
-    - 발행 전 결정론 검사(N1~N5, T1~T4, contracts)가 **유일한 게이트**다. 위반이 남으면 `draft: true`로 보류해 `main`에 올린다.
+    - 게이트는 둘이다: 결정론 검사(N1~N5, T1~T4, contracts) **그리고** `post-reviewer` 서브에이전트 검토. 한쪽이라도 통과하지 못하면 `draft: true`로 보류해 `main`에 올린다.
   </command>
 
   <command name="/revise-post" file=".claude/commands/revise-post.md">
@@ -47,9 +47,11 @@
   </command>
 
   <command name="/health-check" file=".claude/commands/health-check.md">
-    - 격주 1회 SEO/GEO 점검 (운영 연속성, ② 성과, ③ 색인, SEO/GEO 크롤, ⑤ 방향).
-    - 고칠 수 있는 것은 §7의 쓰기 허용 범위 안에서 스스로 고쳐 `main`에 직행한다 (회차당 `content/` 12파일 상한).
-    - 리포트는 `report/health-YYYY-MM-DD.md`. 알림 발신 여부는 커밋 메시지의 `알림:` 줄이 정한다.
+    - **이 블로그를 키우는 담당자.** 격주로 전체를 점검하고 판단해서 스스로 고치고 실험한다. 스테이지 목록은 바닥이지 천장이 아니다 (`<mandate>` 절).
+    - 트리거는 **매주** 발화한다. 깊은 점검은 격주(`health_state.py`의 `run_due`)이고, 남는 주는 발행 연속성만 보는 가벼운 패스로 끝난다(§1b) — 아무것도 고치지 않고 조용히 끝내되 중대 고장이면 알린다.
+    - `.claude/daily-post/`(`topics.yaml`·`writing-styles.md` 포함)의 주인이다. 다만 거기를 건드리면 앞으로 나올 모든 글이 바뀌므로 **가설 등록 + 다음 회차 판정**이 조건이다.
+    - 회차당 `content/` 20파일 · 실험 3건 상한. 검증(결정론 검사 + 단위 테스트 + Hugo 빌드) 실패 시 그 파일은 되돌린다.
+    - 리포트는 `report/health-YYYY-MM-DD.md`, 연속성은 `.claude/audit/health-memory.md`. 알림 발신 여부는 커밋 메시지의 `알림:` 줄이 정한다.
   </command>
 
   <command name="/weekly-housekeeping">
@@ -95,6 +97,15 @@
     | `health: ` | `/health-check` | `notify-health.yml` (본문에 `알림: 필요`가 있을 때만) |
   </contract>
 
+  <contract name="review_gate">
+    `/daily-post`는 발행 전에 `post-reviewer` 서브에이전트를 부른다. 검토자는 **파일을 고치지 않는다** — 판정(`발행 가능` · `수정 필요` · `보류`)과 「고칠 방법」만 돌려주고, 고치는 것은 부른 쪽이다. 고치게 하면 검토자가 저자가 되어 독립적인 눈이라는 유일한 가치가 사라진다.
+    재검토는 최대 1회. 검토를 못 했으면 `검사 불가`로 보고 보류한다 — 건너뛸 수 있게 해 두면 그 경로가 기본값이 된다.
+  </contract>
+
+  <contract name="health_memory_format">
+    `.claude/audit/health-memory.md`의 회차 헤딩은 `## YYYY-MM-DD · 회차 N` 형식이며 `scripts/health_memory.py`가 이 형식으로 회차를 자른다. 형식이 무너지면 다음 점검이 자기 기억을 못 읽는다 (`test_health_memory.py`가 저장소의 실제 파일을 검사한다).
+  </contract>
+
   <contract name="commit_body_summary_block">
     `/daily-post`는 커밋 본문에 `## 발행` 블록을, `/health-check`는 `## 점검 요약` 블록을
     싣는다. `scripts/telegram_notify.py`가 그 블록만 잘라 읽는다 (`extract_block`).
@@ -134,7 +145,9 @@
 
   - **수동 불변조건**: 명확한 사용자 긍정 확인 후에만 `draft: false` 변경 및 `main` 푸시. "좋아요"·"괜찮네요"는 승인이 아니다.
 
-  - **쓰기 금지 영역**: 점검·유지보수 실행 시 `.claude/daily-post/` 전체(`topics.yaml`·`writing-styles.md` 포함), `hugo.toml`의 `baseURL`·`theme`, `.github/workflows/**`, `content/` 본문 산문(H2 제목 줄과 링크 앵커는 예외 — `health-check.md` §7)은 수정하지 않는다.
+  - **절대 쓰기 금지** (격주 점검 포함 모든 무인 경로): `.github/workflows/**` · `hugo.toml`의 `baseURL`·`theme` · 자격증명 일체 · 발행된 글의 삭제와 비공개 전환 · **원문 대조 없는 사실·수치 변경**. 마지막 것이 중요하다 — 어느 쪽이 맞는지 알 수 없으므로 고치지 말고 사람 대기열로 올린다.
 
-  - **자율 수정 상한**: 격주 점검은 회차당 `content/` 12파일까지만 고친다. 수정 후 `numerics`·`headings`·`contracts`·Hugo 빌드를 전부 통과해야 하며, 하나라도 실패하면 그 파일을 되돌리고 소견으로만 남긴다.
+  - **자율 수정 상한**: 격주 점검은 회차당 `content/` 20파일 · 실험 3건까지. 본문 산문은 발행 14일이 지난 글만, 사실·수치는 그대로 두고 표현·구조만 고친다. 수정 후 `numerics`·`headings`·`contracts`·단위 테스트·Hugo 빌드를 전부 통과해야 하며, 하나라도 실패하면 그 파일을 되돌리고 소견으로만 남긴다.
+
+  - **연속성 원장**: 격주 점검은 매 회차 시작에 `.claude/audit/health-memory.md`를 읽고(`health_memory.py tail`) 끝에 그 회차를 덧붙인다(`append`). 바꾼 것은 가설로 등록하고 다음 회차가 `닫힘`·`폐기`·`계속`으로 판정한다 — 판정 없이 사라지는 변경을 두지 않는다.
 </runtime_invariants>
