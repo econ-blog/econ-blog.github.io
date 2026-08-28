@@ -38,160 +38,127 @@ class TestScriptWireup(unittest.TestCase):
 
 
 class TestTelegramNotify(unittest.TestCase):
-    def test_front_matter_fix_line_survives_filter(self):
-        from telegram_notify import summarize_audit_body
-        body = (
-            "## 감사 요약\n"
-            "계약 위반: 0건\n"
-            "확정 사망 링크: 0건 / 사람 점검 필요: 1건\n"
-            "데이터 충분성: 미달 (발행 17 / 20건)\n"
-            "색인 건전성: 관찰\n"
-            "소견: 12건 (④ 5, ⑥ 7)\n"
-            "front matter 수정: 3건\n"
-            "새 가설 제안: 0건\n"
-            "─ 결정 필요 ─\n"
-            "* description 3건 수정안 승인 필요\n"
-        )
-        out = summarize_audit_body(body)
-        self.assertIn("front matter 수정: 3건", out)
-        self.assertIn("소견: 12건 (④ 5, ⑥ 7)", out)
-        self.assertIn("* description 3건 수정안 승인 필요", out)
+    """무인 운영 전환(2026-08-27) 이후의 발신부. 판정 토큰·승인 문구는 전부 사라졌고,
+    남은 것은 통보 세 종류다."""
 
-    def test_extract_verdict_token(self):
-        from telegram_notify import extract_verdict_token
-        self.assertEqual(extract_verdict_token("auto/post-2026-07-30", "post"), "#P0730")
-        self.assertEqual(extract_verdict_token("auto/audit-2026-07-30", "audit"), "#A0730")
+    HEALTH_BODY = (
+        "## 점검 요약\n"
+        "알림: 필요\n"
+        "월간 리포트: 예\n"
+        "자동 수정: 7건\n"
+        "사람 작업: 2건\n"
+        "발행 누계: 34건 / 색인: 12건\n"
+        "GSC 28일: 클릭 41 · 노출 2,180\n"
+        "─ 사람이 해야 할 일 ─\n"
+        "* 색인 제출 · /posts/ymtc-nand/ · GSC 미색인 · 수집 요청\n"
+        "리포트: report/health-2026-09-10.md\n"
+    )
 
-    def test_format_post_notification(self):
-        from telegram_notify import format_post_notification
-        title = "Test Title"
-        body = "First sentence. Second sentence.\n\n## 발행 전 검사\n통과"
-        url = "https://github.com/org/repo/pull/1"
-        msg = format_post_notification(title, body, "auto/post-2026-07-30", url)
-        self.assertIn("#P0730 오늘의 포스트", msg)
-        self.assertIn("발행 전 검사: 통과", msg)
+    def test_extract_block_stops_at_next_heading(self):
+        from telegram_notify import extract_block
+        body = "머리말\n\n## 점검 요약\n알림: 필요\n\n## 딴 절\n알림: 불필요\n"
+        self.assertEqual(extract_block(body, "점검 요약"), ["알림: 필요"])
 
-        body_inline = "First sentence. Second sentence.\n\n## 발행 전 검사: 통과"
-        msg_inline = format_post_notification(title, body_inline, "auto/post-2026-07-30", url)
-        self.assertIn("발행 전 검사: 통과", msg_inline)
+    def test_health_summary_keeps_fields_and_queue(self):
+        from telegram_notify import extract_block, summarize_block
+        out = summarize_block(extract_block(self.HEALTH_BODY, "점검 요약"))
+        self.assertIn("자동 수정: 7건", out)
+        self.assertIn("GSC 28일: 클릭 41 · 노출 2,180", out)
+        self.assertIn("• 색인 제출 · /posts/ymtc-nand/", out)
+
+    def test_routing_fields_stay_out_of_the_message(self):
+        """`알림:`은 발신 스위치이고 `리포트:`는 URL로 따로 붙는다. 둘 다 사람이
+        읽을 내용이 아니라 배선이다."""
+        from telegram_notify import extract_block, summarize_block, field
+        lines = extract_block(self.HEALTH_BODY, "점검 요약")
+        shown = summarize_block(lines).splitlines()
+        self.assertNotIn("알림: 필요", shown)
+        self.assertNotIn("리포트: report/health-2026-09-10.md", shown)
+        # 키가 정확히 일치할 때만 걸러진다 — `월간 리포트`는 살아남아야 한다.
+        self.assertIn("월간 리포트: 예", shown)
+        # 걸러지는 것은 표시일 뿐 — 파싱은 여전히 값을 읽어야 한다.
+        self.assertEqual(field(lines, "알림"), "필요")
+
+    def test_field_reads_one_value(self):
+        from telegram_notify import extract_block, field
+        lines = extract_block(self.HEALTH_BODY, "점검 요약")
+        self.assertEqual(field(lines, "월간 리포트"), "예")
+        self.assertEqual(field(lines, "없는 키", "기본"), "기본")
+
+    def test_monthly_report_changes_the_headline(self):
+        from telegram_notify import format_health_notification
+        monthly = format_health_notification(self.HEALTH_BODY, "report/health-2026-09-10.md", "https://x/y")
+        self.assertIn("📊 월간 현황 리포트", monthly)
+        routine = format_health_notification(
+            self.HEALTH_BODY.replace("월간 리포트: 예", "월간 리포트: 아니오"),
+            "report/health-2026-09-24.md", "https://x/y")
+        self.assertIn("사람 확인 필요", routine)
+        self.assertNotIn("월간 현황 리포트", routine)
+
+    def test_health_notification_survives_broken_body(self):
+        from telegram_notify import format_health_notification
+        msg = format_health_notification("## ⚠ 계약 위반\n1건", "report/health-2026-09-10.md", "https://x/y")
+        self.assertIn("요약 정보 없음", msg)
+        self.assertIn("health-2026-09-10.md", msg)
+
+    def test_no_message_asks_for_a_verdict(self):
+        """승인/반려를 묻는 경로는 제거됐다. 받는 쪽이 없어서 물으면 사용자가
+        답장해도 아무 일도 일어나지 않는다."""
+        from telegram_notify import (format_health_notification, format_automation_alert,
+                                     format_post_published)
+        published = "---\ntitle: \"환율 1,400원\"\ndraft: false\n---\n본문"
+        msgs = [
+            format_health_notification(self.HEALTH_BODY, "report/health-2026-09-10.md", "https://x/y"),
+            format_automation_alert("w", "r", "d", "https://x/y"),
+            format_post_published("content/posts/fx-1400.md", published),
+        ]
+        for msg in msgs:
+            self.assertNotIn("승인", msg)
+            self.assertNotIn("반려", msg)
+            self.assertNotRegex(msg, r"#[paPA]\d{4}")
+
+    def test_published_post_carries_live_url(self):
+        from telegram_notify import format_post_published
+        raw = "---\ntitle: \"환율 1,400원 돌파\"\ndraft: false\n---\n\n본문입니다."
+        msg = format_post_published("content/posts/fx-1400.md", raw)
+        self.assertIn("발행됨", msg)
+        self.assertIn("환율 1,400원 돌파", msg)
+        self.assertIn("https://econ-blog.github.io/posts/fx-1400/", msg)
+
+    def test_held_post_says_it_is_not_live(self):
+        """`draft: true`는 사이트에 없다는 뜻이다. 발행됐다고 알리면 거짓말이 된다."""
+        from telegram_notify import format_post_published
+        raw = "---\ntitle: \"환율 1,400원 돌파\"\ndraft: true\n---\n\n본문입니다."
+        msg = format_post_published("content/posts/fx-1400.md", raw, note="N1 기준일 누락 2건")
+        self.assertIn("보류됨", msg)
+        self.assertIn("N1 기준일 누락 2건", msg)
+        self.assertNotIn("https://econ-blog.github.io/posts/fx-1400/", msg)
+
+    def test_draft_state_comes_from_the_file_not_the_commit(self):
+        """커밋 메시지와 파일이 어긋나면 파일이 이긴다."""
+        from telegram_notify import is_draft
+        self.assertTrue(is_draft("---\ndraft: true\n---\n본문"))
+        self.assertFalse(is_draft("---\ndraft: false\n---\n본문"))
+        # 본문에 draft: true 라는 문자열이 있어도 front matter가 아니면 무시한다.
+        self.assertFalse(is_draft("---\ndraft: false\n---\n예시: draft: true"))
 
     def test_strip_front_matter_and_chunking(self):
-        from telegram_notify import strip_front_matter, chunk_text, TELEGRAM_TEXT_LIMIT
-        raw = '---\ntitle: "T"\ndraft: true\n---\n\n첫 문단.\n\n둘째 문단.\n'
+        from telegram_notify import strip_front_matter, chunk_text
+        raw = "---\ntitle: T\ndraft: false\n---\n\n첫 문단.\n\n둘째 문단."
         body = strip_front_matter(raw).strip()
-        self.assertFalse(body.startswith("---"))
-        self.assertNotIn("draft: true", body)
         self.assertTrue(body.startswith("첫 문단."))
+        self.assertNotIn("title: T", body)
+        chunks = chunk_text("가" * 50 + "\n\n" + "나" * 50, limit=60)
+        self.assertEqual(len(chunks), 2)
+        self.assertTrue(all(len(c) <= 60 for c in chunks))
 
-        # 상한 이하는 한 덩어리로 남는다
-        self.assertEqual(chunk_text(body), [body])
-
-        # 문단 경계에서 나뉘고, 어떤 덩어리도 상한을 넘지 않는다
-        paras = "\n\n".join(["가" * 1200 for _ in range(5)])
-        chunks = chunk_text(paras)
-        self.assertGreater(len(chunks), 1)
-        self.assertTrue(all(len(c) <= TELEGRAM_TEXT_LIMIT for c in chunks))
-
-        # 단일 문단이 상한을 넘으면 그 문단만 강제로 잘린다 — 통째 실패보다 낫다
-        giant = chunk_text("나" * (TELEGRAM_TEXT_LIMIT * 2 + 7))
-        self.assertEqual(len(giant), 3)
-        self.assertTrue(all(len(c) <= TELEGRAM_TEXT_LIMIT for c in giant))
-        self.assertEqual("".join(giant), "나" * (TELEGRAM_TEXT_LIMIT * 2 + 7))
-
-    def test_flip_front_matter_draft(self):
-        from process_inbox import flip_front_matter_draft
-        content = "---\ntitle: Sample\ndraft: true\n---\nHere is draft: true in body."
-        updated = flip_front_matter_draft(content)
-        self.assertTrue(updated.startswith("---\n"))
-        self.assertIn("\n---\n", updated)
-        self.assertIn("draft: false", updated.split("---")[1])
-        self.assertIn("Here is draft: true in body.", updated)
-
-    # weekly-audit.md §9-1이 지시하는 PR 본문 축자 템플릿. 이 상수와 그 절이
-    # 어긋나면 알림에서 줄이 조용히 사라진다 — 양쪽을 함께 고친다.
-    AUDIT_PR_BODY = """## 감사 요약
-계약 위반: 1건
-확정 사망 링크: 0건 / 사람 점검 필요: 2건
-데이터 충분성: 미달 (발행 5 / 20건)
-색인 건전성: 정상
-소견: 1건 (④ 1, ⑥ 0)
-새 가설 제안: 1건
-─ 결정 필요 ─
-* Check link X
-PR 리포트: .claude/audit/audit-2026-07-30.md"""
-
-    def test_format_audit_notification(self):
-        from telegram_notify import format_audit_notification
-        msg = format_audit_notification("Weekly Audit", self.AUDIT_PR_BODY,
-                                        "auto/audit-2026-07-30",
-                                        "https://github.com/org/repo/pull/2")
-        self.assertIn("#A0730 주간 감사", msg)
-        # 일곱 줄 전부가 살아남아야 한다. 하나라도 빠지면 요약이 반쪽이 된다.
-        for line in ("계약 위반: 1건",
-                     "확정 사망 링크: 0건 / 사람 점검 필요: 2건",
-                     "데이터 충분성: 미달 (발행 5 / 20건)",
-                     "색인 건전성: 정상",
-                     "소견: 1건 (④ 1, ⑥ 0)",
-                     "새 가설 제안: 1건",
-                     "─ 결정 필요 ─"):
-            self.assertIn(line, msg, f"§9-1 계약 줄이 필터를 통과하지 못했다: {line}")
-        self.assertNotIn("요약 정보 없음", msg)
-
-    def test_audit_notification_report_headings_do_not_match(self):
-        """리포트 H2를 PR 본문으로 복사하면 빈 요약이 된다 — 그 실패를 고정한다.
-
-        `## ⚠ 계약 위반`에는 콜론이 없어 필터를 통과하지 못한다. 이 테스트가
-        깨지면 누군가 필터를 느슨하게 만든 것이고, 그 순간 §9-1 계약은
-        "정규식이 알아서 맞춰준다"로 퇴화한다.
-        """
-        from telegram_notify import format_audit_notification
-        report_body = "## ⚠ 계약 위반\n1건\n\n## ③ 색인 건전성\n정상"
-        msg = format_audit_notification("Weekly Audit", report_body,
-                                        "auto/audit-2026-07-30",
-                                        "https://github.com/org/repo/pull/2")
-        self.assertIn("요약 정보 없음", msg)
-
-    def test_format_audit_report_notification(self):
-        """`main` 직행 리포트 알림. 같은 §9-1 본문에서 같은 줄이 살아남는다."""
-        from telegram_notify import format_audit_report_notification
-        msg = format_audit_report_notification(
-            self.AUDIT_PR_BODY, "report/audit-2026-08-09.md",
-            "https://github.com/org/repo/blob/abc123/report/audit-2026-08-09.md")
-        self.assertIn("audit-2026-08-09.md", msg)
-        for line in ("계약 위반: 1건",
-                     "확정 사망 링크: 0건 / 사람 점검 필요: 2건",
-                     "데이터 충분성: 미달 (발행 5 / 20건)",
-                     "색인 건전성: 정상",
-                     "소견: 1건 (④ 1, ⑥ 0)",
-                     "새 가설 제안: 1건",
-                     "─ 결정 필요 ─"):
-            self.assertIn(line, msg, f"§9-1 계약 줄이 필터를 통과하지 못했다: {line}")
-        self.assertIn("blob/abc123", msg)
-
-    def test_audit_report_notification_carries_no_verdict_token(self):
-        """리포트는 승인 대상이 아니다 — `#A0809` 토큰도 승인 문구도 넣지 않는다.
-
-        토큰이 들어가면 사용자가 답장했을 때 `process_inbox.py`가 열려 있지도
-        않은 `auto/audit-*` PR을 찾아 '대기 중인 PR이 없습니다'로 튄다.
-        """
-        from telegram_notify import format_audit_report_notification
-        from process_inbox import parse_verdict
-        msg = format_audit_report_notification(
-            self.AUDIT_PR_BODY, "report/audit-2026-08-09.md",
-            "https://github.com/org/repo/blob/abc123/report/audit-2026-08-09.md")
-        self.assertIsNone(re.search(r'#[paPA]\d{4}', msg),
-                          "리포트 알림에 판정 토큰이 들어갔다")
-        self.assertNotIn("승인 / 반려 로 답장", msg)
-        # 본문이 그 자체로 승인 판정처럼 파싱되지 않는지도 본다.
-        self.assertEqual(parse_verdict(msg), "AMBIGUOUS")
-
-    def test_audit_report_notification_survives_broken_body(self):
-        """계약을 어긴 본문에도 조용히 반쪽 요약을 내지 않는다."""
-        from telegram_notify import format_audit_report_notification
-        msg = format_audit_report_notification(
-            "## ⚠ 계약 위반\n1건", "report/audit-2026-08-09.md", "https://x/y")
-        self.assertIn("요약 정보 없음", msg)
-        self.assertIn("audit-2026-08-09.md", msg)
+    def test_unknown_mode_exits_nonzero(self):
+        from telegram_notify import main
+        creds = json.dumps({"telegram": {"bot_token": "t", "chat_id": "1"}})
+        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds}), \
+             patch.object(sys, "argv", ["telegram_notify.py", "audit-report"]):
+            with self.assertRaises(SystemExit):
+                main()
 
 
 class TestSelectInspectUrls(unittest.TestCase):
@@ -264,497 +231,6 @@ class TestSelectInspectUrls(unittest.TestCase):
         self.assertTrue(opts_dim["explicit_dimensions"])
 
 
-class TestProcessInbox(unittest.TestCase):
-    def test_parse_verdict_strict(self):
-        from process_inbox import parse_verdict
-        self.assertEqual(parse_verdict("승인"), "APPROVED")
-        self.assertEqual(parse_verdict("발행"), "APPROVED")
-        self.assertEqual(parse_verdict("ok"), "APPROVED")
-        self.assertEqual(parse_verdict("승인 #P0730"), "APPROVED")
-        self.assertEqual(parse_verdict("반려 #A0730"), "REJECTED")
-        self.assertEqual(parse_verdict("반려"), "REJECTED")
-        
-        # Must NOT approve loose words or negations
-        self.assertEqual(parse_verdict("발행 안 함"), "AMBIGUOUS")
-        self.assertEqual(parse_verdict("좋아요"), "AMBIGUOUS")
-        self.assertEqual(parse_verdict("괜찮네요"), "AMBIGUOUS")
-
-    def test_match_target_pr_sequence(self):
-        from process_inbox import match_target_pr
-        open_prs = [
-            {"number": 10, "head": {"ref": "auto/post-2026-07-30"}},
-            {"number": 11, "head": {"ref": "auto/audit-2026-07-30-1430"}}
-        ]
-        
-        # 1. Reply to message with token
-        up_reply = {"message": {"reply_to_message": {"text": "#P0730 오늘의 포스트"}, "text": "승인", "chat": {"id": 12345}}}
-        pr, status = match_target_pr(up_reply, open_prs)
-        self.assertEqual(pr["number"], 10)
-        self.assertEqual(status, "TOKEN_MATCH")
-
-        # 2. Text token
-        up_text = {"message": {"text": "승인 #A0730", "chat": {"id": 12345}}}
-        pr, status = match_target_pr(up_text, open_prs)
-        self.assertEqual(pr["number"], 11)
-        self.assertEqual(status, "TOKEN_MATCH")
-
-        # 2-1. 직접 친 토큰이 답장 대상의 토큰을 이긴다 — 대기 목록 안내에는 토큰이
-        # 여러 개 실려 있어서, 답장 우선이면 목록 첫 줄의 다른 글이 병합된다.
-        up_conflict = {"message": {"reply_to_message": {"text": "#P0730 — 포스트 PR #10\n#A0730 — 감사 PR #11"},
-                                   "text": "승인 #A0730", "chat": {"id": 12345}}}
-        pr, status = match_target_pr(up_conflict, open_prs)
-        self.assertEqual(pr["number"], 11)
-        self.assertEqual(status, "TOKEN_MATCH")
-
-        # 3. Invalid token
-        up_bad_token = {"message": {"text": "승인 #P9999", "chat": {"id": 12345}}}
-        pr_bad, status_bad = match_target_pr(up_bad_token, open_prs)
-        self.assertIsNone(pr_bad)
-        self.assertEqual(status_bad, "TOKEN_NOT_FOUND")
-
-        # 4. 2+ open PRs without token
-        up_notoken = {"message": {"text": "승인", "chat": {"id": 12345}}}
-        pr, status = match_target_pr(up_notoken, open_prs)
-        self.assertIsNone(pr)
-        self.assertEqual(status, "MULTIPLE_PRS_NEED_TOKEN")
-
-        # 5. 1 open PR fallback
-        pr_single, status_single = match_target_pr(up_notoken, [open_prs[0]])
-        self.assertEqual(pr_single["number"], 10)
-        self.assertEqual(status_single, "SINGLE_PR_FALLBACK")
-
-    def test_pending_pr_lines_carry_tokens(self):
-        """토큰 형식만 알려 주고 목록을 빼면 어느 토큰을 쓸지 알 수 없다."""
-        from process_inbox import pending_pr_lines
-        lines = pending_pr_lines([
-            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
-            {"number": 11, "head": {"ref": "auto/audit-2026-08-01-1824"}},
-        ])
-        self.assertIn("#P0804", lines)
-        self.assertIn("#A0801", lines)
-        self.assertIn("PR #8", lines)
-        self.assertIn("PR #11", lines)
-
-    def test_multiple_prs_message_lists_every_token(self):
-        """매칭 실패 메시지가 그대로 다음 답장의 안내가 된다."""
-        import process_inbox
-        sent = []
-        open_prs = [
-            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
-            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
-        ]
-        up = {"message": {"chat": {"id": 1}, "text": "승인"}}
-
-        with patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            remaining = process_inbox.handle_update(up, open_prs, "o/r", "p", "tok", "1")
-
-        self.assertEqual(remaining, open_prs)  # 아무 PR도 건드리지 않았다
-        self.assertEqual(len(sent), 1)
-        self.assertIn("#P0804", sent[0])
-        self.assertIn("#P0805", sent[0])
-
-    def _run_main(self, open_prs, argv, updates=None):
-        """main()을 한 번 돌리고 텔레그램으로 나간 메시지를 돌려준다."""
-        import process_inbox
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        sent = []
-        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r",
-               "TELEGRAM_OFFSET": "99"}
-
-        with patch.dict(os.environ, env), \
-             patch.object(sys, "argv", argv), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: open_prs), \
-             patch.object(process_inbox.requests, "get",
-                          lambda url, **kw: FakeResponse(200, {"result": updates or []})), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
-        return sent
-
-    def _pr(self, number, ref, age_hours):
-        from datetime import datetime, timedelta, timezone
-        created = datetime.now(timezone.utc) - timedelta(hours=age_hours)
-        return {"number": number, "head": {"ref": ref},
-                "created_at": created.strftime("%Y-%m-%dT%H:%M:%SZ")}
-
-    def _pr_at(self, number, ref, kst_iso):
-        """KST 시각으로 PR을 만든다. created_at은 API와 같은 UTC 'Z' 형식."""
-        from datetime import datetime
-        import process_inbox
-        created = datetime.fromisoformat(kst_iso).replace(tzinfo=process_inbox.KST)
-        return {"number": number, "head": {"ref": ref},
-                "created_at": created.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-
-    def test_reask_catches_yesterday_pr_at_0135(self):
-        """재질의는 새벽 01:3x에 돈다. 어제 05:00 PR은 그 시점에 20.6시간이라
-        '24시간 경과' 규칙이면 걸러진다 — 정작 물어야 할 PR이 하루 밀린다.
-        KST 날짜 경계로 가르는 이유가 이것이다."""
-        from datetime import datetime
-        import process_inbox
-        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
-        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
-
-        self.assertEqual(
-            [p["number"] for p in process_inbox.overdue_prs([yesterday], now=now)], [8])
-
-    def test_reask_skips_pr_made_today(self):
-        """오늘 05:00 루틴이 만든 PR은 같은 날 어느 시각에 돌려도 건드리지
-        않는다 — 수동 실행 포함. 매일 오는 알림은 곧 읽히지 않는다."""
-        from datetime import datetime
-        import process_inbox
-        today_pr = self._pr_at(11, "auto/post-2026-08-08", "2026-08-08T05:20")
-        for hhmm in ("2026-08-08T05:30", "2026-08-08T13:54", "2026-08-08T23:59"):
-            now = datetime.fromisoformat(hhmm).replace(tzinfo=process_inbox.KST)
-            self.assertEqual(process_inbox.overdue_prs([today_pr], now=now), [],
-                             f"{hhmm} 에서 오늘 PR을 재질의했다")
-
-    def test_reask_uses_kst_not_utc_day(self):
-        """워크플로는 UTC 16시대에 돈다. UTC 날짜로 가르면 하루가 어긋난다."""
-        from datetime import datetime
-        import process_inbox
-        # KST 08-08 01:35 = UTC 08-07 16:35. UTC 날짜로는 아직 07일이라
-        # 08-07 05:00 PR이 '오늘'로 잡혀 걸러진다.
-        now = datetime.fromisoformat("2026-08-08T01:35").replace(tzinfo=process_inbox.KST)
-        self.assertEqual(now.astimezone(timezone.utc).day, 7)
-        yesterday = self._pr_at(8, "auto/post-2026-08-07", "2026-08-07T05:00")
-        self.assertEqual(len(process_inbox.overdue_prs([yesterday], now=now)), 1)
-
-    def test_reask_includes_pr_with_unreadable_created_at(self):
-        """생성 시각을 못 읽으면 재질의 대상에 넣는다 — 빠뜨리는 쪽이 더 나쁘다."""
-        from process_inbox import overdue_prs
-        broken = {"number": 9, "head": {"ref": "auto/post-2026-08-05"}, "created_at": ""}
-        self.assertEqual([p["number"] for p in overdue_prs([broken])], [9])
-
-    def test_reask_mode_does_not_touch_telegram_queue(self):
-        """재질의는 오프셋을 소비하지 않는다. 소비하면 아침 실행이 새벽
-        회차가 읽어야 할 판정을 가로채 그대로 버린다."""
-        import process_inbox
-        stale = self._pr(8, "auto/post-2026-08-04", 30)
-        polled = []
-
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        sent = []
-        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r"}), \
-             patch.object(sys, "argv", ["process_inbox.py", "--reask"]), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [stale]), \
-             patch.object(process_inbox.requests, "get",
-                          lambda url, **kw: polled.append(url) or FakeResponse(200, {"result": []})), \
-             patch.object(process_inbox, "update_telegram_offset",
-                          lambda *a: self.fail("재질의가 오프셋을 썼다")), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
-
-        # 원장 조회(GitHub API)는 해도 되지만 텔레그램 큐는 건드리면 안 된다.
-        self.assertEqual([u for u in polled if "api.telegram.org" in u], [])
-        self.assertEqual(len(sent), 1)
-        self.assertIn("#P0804", sent[0])
-        self.assertIn("유실", sent[0])
-
-    def test_reask_silent_when_nothing_overdue(self):
-        """정상 운영에서는 아침에 아무 말도 하지 않는다."""
-        fresh = self._pr(11, "auto/post-2026-08-08", 3)
-        self.assertEqual(
-            self._run_main([fresh], ["process_inbox.py", "--reask"]), [])
-
-    def test_reask_demands_token_only_when_ambiguous(self):
-        """1건이면 토큰 없이 '승인'만으로 되는데 토큰을 요구하면 사람이
-        괜히 한 왕복을 더 쓴다."""
-        from process_inbox import reask_message
-        one = [self._pr(8, "auto/post-2026-08-04", 30)]
-        two = one + [self._pr(9, "auto/post-2026-08-05", 30)]
-        self.assertNotIn("토큰이 필요", reask_message(one))
-        self.assertIn("토큰이 필요", reask_message(two))
-        self.assertIn("#P0805", reask_message(two))
-
-    def test_token_reply_matches_while_backlogged(self):
-        """적체 경보를 보고 사람이 토큰을 붙여 답장한 그 경로.
-
-        2026-08-06~08에 "승인 #P0804"가 처리되지 않았던 것은 이 매칭이
-        틀려서가 아니라 폴링이 하루 한 번이라 텔레그램(24시간 보관)이 그
-        메시지를 먼저 지웠기 때문이다. 매칭 자체는 여기서 고정한다."""
-        import process_inbox
-        open_prs = [
-            {"number": 10, "head": {"ref": "auto/post-2026-08-06"}},
-            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
-            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
-        ]
-        up = {"message": {"chat": {"id": 1}, "text": "승인 #P0804"}}
-
-        self.assertEqual(process_inbox.parse_verdict("승인 #P0804"), "APPROVED")
-        pr, status = process_inbox.match_target_pr(up, open_prs)
-        self.assertEqual(status, "TOKEN_MATCH")
-        # 08-04는 목록의 첫 줄이 아니다 — 순서가 아니라 토큰으로 골라야 한다.
-        self.assertEqual(pr["number"], 8)
-
-    def test_guidance_messages_state_poll_cadence(self):
-        """이 루프는 웹훅이 아니라 폴링이다. 답장 직후 조용한 것이 정상인데
-        그걸 모르면 '인식되지 않았다'고 읽고 같은 답장을 다시 보낸다."""
-        import process_inbox
-        open_prs = [
-            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
-            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
-        ]
-        self.assertIn(process_inbox.POLL_NOTE, process_inbox.reask_message(open_prs))
-
-        sent = []
-        up = {"message": {"chat": {"id": 1}, "text": "승인"}}
-        with patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.handle_update(up, open_prs, "o/r", "p", "tok", "1")
-        self.assertIn(process_inbox.POLL_NOTE, sent[0])
-
-    def test_normal_run_sends_no_unsolicited_alert(self):
-        """새벽 회차는 판정만 처리한다. 적체 경보를 여기서 내면 01:30에
-        휴대폰이 울리고, 게다가 폴링 **전에** 나가던 옛 경보는 방금 승인된
-        PR까지 목록에 실어 '승인했는데 또 물어본다'가 됐다."""
-        open_prs = [
-            {"number": 8, "head": {"ref": "auto/post-2026-08-04"}},
-            {"number": 9, "head": {"ref": "auto/post-2026-08-05"}},
-        ]
-        self.assertEqual(self._run_main(open_prs, ["process_inbox.py"]), [])
-
-    def test_merge_retries_transient_405(self):
-        """커밋을 민 직후 GitHub의 mergeable은 null이고 PUT /merge는 405를 준다 — 재시도 대상이다."""
-        import process_inbox
-        pr_ready = {"state": "open", "mergeable": True, "head": {"sha": "abc"}}
-        calls = []
-
-        def fake_get(url, **kw):
-            return FakeResponse(200, pr_ready)
-
-        def fake_put(url, headers=None, json=None, timeout=None):
-            calls.append(json["merge_method"])
-            if len(calls) == 1:
-                return FakeResponse(405, {"message": "Pull Request is not mergeable"})
-            return FakeResponse(200, {"merged": True})
-
-        with patch.object(process_inbox.requests, "get", fake_get), \
-             patch.object(process_inbox.requests, "put", fake_put):
-            process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
-
-        self.assertEqual(calls, ["squash", "squash"])
-
-    def test_merge_falls_back_when_squash_disabled(self):
-        import process_inbox
-        pr_ready = {"state": "open", "mergeable": True, "head": {"sha": "abc"}}
-        calls = []
-
-        def fake_put(url, headers=None, json=None, timeout=None):
-            calls.append(json["merge_method"])
-            if json["merge_method"] == "squash":
-                return FakeResponse(405, {"message": "Squash merges are not allowed on this repository."})
-            return FakeResponse(200, {"merged": True})
-
-        with patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, pr_ready)), \
-             patch.object(process_inbox.requests, "put", fake_put):
-            process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
-
-        # squash는 한 번만 시도하고(영구 거부) 곧장 merge로 내려간다
-        self.assertEqual(calls, ["squash", "merge"])
-
-    def test_merge_reports_github_reason(self):
-        """raise_for_status()는 본문을 버린다. 텔레그램에 실제 사유가 실려야 한다."""
-        import process_inbox
-        pr_blocked = {"state": "open", "mergeable": False, "mergeable_state": "dirty", "head": {"sha": "abc"}}
-        with patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, pr_blocked)):
-            with self.assertRaises(RuntimeError) as ctx:
-                process_inbox.merge_pr("o/r", 7, "pat", sleep=lambda s: None)
-        self.assertIn("dirty", str(ctx.exception))
-
-    def test_failed_verdict_goes_to_ledger_before_offset_is_consumed(self):
-        """집행이 실패하면 판정을 원장에 적고 **그 다음에** 오프셋을 소비한다.
-
-        예전에는 오프셋을 붙들어 두는 것이 안전장치였지만, 이 루프는 하루 1회이고
-        텔레그램은 미확인 업데이트를 24시간만 보관한다 — 재시도 시점에는 이미
-        지워져 있어 한 번도 성립할 수 없었다(2026-08-20 '승인 #P0819' 실증).
-        """
-        import process_inbox
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        updates = [{"update_id": 100, "message": {"chat": {"id": 1}, "text": "승인"}}]
-        order, saved, sent = [], [], []
-
-        def boom(*args, **kwargs):
-            raise RuntimeError("PR #7 병합 실패: 405 Pull Request is not mergeable")
-
-        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
-        with patch.dict(os.environ, env), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [{"number": 7, "head": {"ref": "auto/post-2026-08-03"}}]), \
-             patch.object(process_inbox, "load_pending_verdicts", lambda *a: []), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": updates})), \
-             patch.object(process_inbox, "execute_approved_post", boom), \
-             patch.object(process_inbox, "save_pending_verdicts",
-                          lambda r, p, e: (order.append("ledger"), saved.append(e))), \
-             patch.object(process_inbox, "update_telegram_offset",
-                          lambda r, p, o: (order.append("offset"), saved.append(o))), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            with self.assertRaises(SystemExit) as ctx:
-                process_inbox.main()
-
-        self.assertEqual(ctx.exception.code, 1)          # 실패는 실패로 보고한다
-        self.assertEqual(order, ["ledger", "offset"])    # 원장이 먼저, 오프셋이 나중
-        self.assertIn(101, saved)                        # 오프셋은 전진했다
-        entry = saved[0][0]
-        self.assertEqual(entry["pr"], 7)
-        self.assertEqual(entry["verdict"], "APPROVED")
-        self.assertEqual(entry["attempts"], 1)
-        self.assertIn("405", entry["last_error"])
-        self.assertTrue(any("405" in str(s) for s in sent))       # 사유가 실려 나갔다
-        self.assertTrue(any("원장" in str(s) for s in sent))       # 재시도됨을 알렸다
-
-    def test_ledger_is_retried_before_telegram_and_cleared_on_success(self):
-        """원장에 남은 판정은 텔레그램 큐와 무관하게 먼저 재집행되고, 성공하면 지워진다."""
-        import process_inbox
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        pr = {"number": 25, "head": {"ref": "auto/post-2026-08-19"}}
-        ledger = [{"pr": 25, "branch": "auto/post-2026-08-19",
-                   "verdict": "APPROVED", "attempts": 1, "last_error": "dirty"}]
-        saved, executed, sent = [], [], []
-
-        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
-        with patch.dict(os.environ, env), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [pr]), \
-             patch.object(process_inbox, "load_pending_verdicts", lambda *a: list(ledger)), \
-             patch.object(process_inbox, "save_pending_verdicts", lambda r, p, e: saved.append(e)), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
-             patch.object(process_inbox, "execute_approved_post",
-                          lambda *a: executed.append(a[0]["number"]) or True), \
-             patch.object(process_inbox, "update_telegram_offset", lambda *a: None), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
-
-        self.assertEqual(executed, [25])       # 텔레그램에 아무것도 없어도 집행됐다
-        self.assertEqual(saved, [[]])          # 원장이 비워졌다
-        self.assertTrue(any("승인 처리 완료" in s for s in sent))
-
-    def test_ledger_retry_failure_increments_attempts_and_keeps_entry(self):
-        """재집행이 또 실패하면 항목을 남기고 시도 횟수를 올린다."""
-        import process_inbox
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        pr = {"number": 25, "head": {"ref": "auto/post-2026-08-19"}}
-        ledger = [{"pr": 25, "branch": "auto/post-2026-08-19",
-                   "verdict": "APPROVED", "attempts": 2, "last_error": "dirty"}]
-        saved, sent = [], []
-
-        def boom(*args, **kwargs):
-            raise RuntimeError("병합 중단: 병합 불가 (mergeable_state=dirty)")
-
-        env = {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}
-        with patch.dict(os.environ, env), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [pr]), \
-             patch.object(process_inbox, "load_pending_verdicts", lambda *a: list(ledger)), \
-             patch.object(process_inbox, "save_pending_verdicts", lambda r, p, e: saved.append(e)), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": []})), \
-             patch.object(process_inbox, "execute_approved_post", boom), \
-             patch.object(process_inbox, "update_telegram_offset", lambda *a: None), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            with self.assertRaises(SystemExit) as ctx:
-                process_inbox.main()
-
-        self.assertEqual(ctx.exception.code, 1)
-        self.assertEqual(len(saved[0]), 1)
-        self.assertEqual(saved[0][0]["attempts"], 3)     # 2 → 3
-        self.assertEqual(saved[0][0]["pr"], 25)
-        self.assertTrue(any("재집행 실패" in s for s in sent))
-
-    def test_reask_skips_prs_waiting_in_the_ledger(self):
-        """원장에서 재시도 중인 PR은 다시 묻지 않는다 — '승인했는데 또 물어본다'가 된다."""
-        import process_inbox
-        stale = self._pr(8, "auto/post-2026-08-04", 30)
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        sent = []
-
-        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r"}), \
-             patch.object(sys, "argv", ["process_inbox.py", "--reask"]), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [stale]), \
-             patch.object(process_inbox, "load_pending_verdicts",
-                          lambda *a: [{"pr": 8, "verdict": "APPROVED", "attempts": 1}]), \
-             patch.object(process_inbox, "send_telegram", lambda *a: sent.append(a[2])):
-            process_inbox.main()
-
-        self.assertEqual(sent, [])   # 조용하다
-
-    def test_ledger_bookkeeping_helpers(self):
-        import process_inbox
-        pr = {"number": 7, "head": {"ref": "auto/post-2026-08-03"}}
-
-        # 새 항목은 attempts 1로 들어간다
-        entries = process_inbox.record_pending_verdict([], pr, "APPROVED", "boom")
-        self.assertEqual(entries[0]["attempts"], 1)
-        self.assertEqual(entries[0]["branch"], "auto/post-2026-08-03")
-
-        # 같은 PR이 또 실패하면 항목이 늘지 않고 횟수만 오른다
-        entries = process_inbox.record_pending_verdict(entries, pr, "APPROVED", "boom again")
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["attempts"], 2)
-        self.assertEqual(entries[0]["last_error"], "boom again")
-        self.assertEqual(entries[0]["first_failed_at"], entries[0].get("first_failed_at"))
-
-        # 닫힌 PR의 항목은 버린다 (사람이 손으로 병합·반려한 경우)
-        self.assertEqual(process_inbox.drop_settled_verdicts(entries, []), [])
-        self.assertEqual(len(process_inbox.drop_settled_verdicts(entries, [pr])), 1)
-
-    def test_ledger_survives_unreadable_variable(self):
-        """원장 변수가 깨져 있어도 죽지 않는다 — 죽으면 새 판정까지 막힌다."""
-        import process_inbox
-        with patch.object(process_inbox, "get_repo_variable", lambda *a: "not json{"):
-            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
-        with patch.object(process_inbox, "get_repo_variable", lambda *a: ""):
-            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
-        with patch.object(process_inbox, "get_repo_variable", lambda *a: '{"pr": 1}'):
-            self.assertEqual(process_inbox.load_pending_verdicts("o/r", "p"), [])
-
-    def test_successful_verdict_consumes_update(self):
-        import process_inbox
-        creds = json.dumps({"telegram": {"bot_token": "tok", "chat_id": "1"}})
-        updates = [{"update_id": 100, "message": {"chat": {"id": 1}, "text": "승인"}}]
-        offsets = []
-
-        with patch.dict(os.environ, {"CREDENTIALS_JSON": creds, "PAT": "p", "REPO": "o/r", "TELEGRAM_OFFSET": "99"}), \
-             patch.object(process_inbox, "get_open_prs", lambda *a: [{"number": 7, "head": {"ref": "auto/post-2026-08-03"}}]), \
-             patch.object(process_inbox.requests, "get", lambda url, **kw: FakeResponse(200, {"result": updates})), \
-             patch.object(process_inbox, "execute_approved_post", lambda *a: True), \
-             patch.object(process_inbox, "update_telegram_offset", lambda *a: offsets.append(a[2])), \
-             patch.object(process_inbox, "send_telegram", lambda *a: None):
-            process_inbox.main()
-
-        self.assertEqual(offsets, [101])
-
-    def test_telegram_offset_parsing(self):
-        with patch.dict(os.environ, {"TELEGRAM_OFFSET": ""}):
-            raw_offset = os.environ.get("TELEGRAM_OFFSET", "").strip()
-            offset_val = int(raw_offset) if raw_offset.isdigit() else 0
-            self.assertEqual(offset_val, 0)
-
-    def test_resolve_terms_conflict(self):
-        from process_inbox import resolve_terms_conflict
-        
-        # 1. 서로 다른 표제어 두 건 → 양쪽 모두 살아남고 중복 0
-        conflict_diff = (
-            "apple:\n  title: A\n"
-            "<<<<<<< HEAD\n"
-            "banana:\n  title: B\n"
-            "=======\n"
-            "cherry:\n  title: C\n"
-            ">>>>>>> main\n"
-        )
-        resolved = resolve_terms_conflict(conflict_diff)
-        self.assertIsNotNone(resolved)
-        self.assertIn("banana:", resolved)
-        self.assertIn("cherry:", resolved)
-        
-        # 2. 같은 슬러그가 양쪽에 있으면 → 병합하지 않고 실패로 낸다
-        conflict_dup = (
-            "<<<<<<< HEAD\n"
-            "banana:\n  title: B\n"
-            "=======\n"
-            "banana:\n  title: B2\n"
-            ">>>>>>> main\n"
-        )
-        self.assertIsNone(resolve_terms_conflict(conflict_dup))
-        
-        # 4. 해소 결과가 표제어 사이 빈 줄 규약을 지킨다
-        self.assertIn("\n\ncherry:", resolved)
-        self.assertIn("\n\nbanana:", resolved)
-
-
 class TestAutomationAlert(unittest.TestCase):
     def test_alert_contains_workflow_reason_and_url(self):
         from telegram_notify import format_automation_alert
@@ -766,13 +242,13 @@ class TestAutomationAlert(unittest.TestCase):
         self.assertIn("후보 12건 중 body_ok 0건", msg)
         self.assertIn("https://github.com/x/y/actions/runs/1", msg)
 
-    def test_alert_does_not_match_audit_summary_filter(self):
-        """경보는 §9-1 PR 본문 계약과 다른 경로다. 감사 요약 필터에 걸리면 안 된다."""
-        from telegram_notify import format_automation_alert, SUMMARY_LINE
+    def test_alert_is_not_mistaken_for_a_summary_block(self):
+        """경보는 요약 블록 계약과 다른 경로다. `## 점검 요약` 헤딩이 없으므로
+        `extract_block`이 아무것도 집어내지 못해야 한다."""
+        from telegram_notify import format_automation_alert, extract_block
         msg = format_automation_alert("fetch-candidates", "실패", "detail", "https://e.com")
-        for line in msg.splitlines():
-            self.assertIsNone(SUMMARY_LINE.match(line.strip()),
-                              f"경보 줄이 감사 요약 매처에 걸렸다: {line}")
+        self.assertEqual(extract_block(msg, "점검 요약"), [])
+        self.assertEqual(extract_block(msg, "발행"), [])
 
     @patch("telegram_notify.send_telegram_message")
     def test_main_alert_mode(self, mock_send_telegram):

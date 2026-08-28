@@ -1,20 +1,24 @@
-name: Telegram Audit Report Notification
+name: Telegram Health Check Notification
 
-# 주간 감사 리포트는 `main`으로 직행한다(2026-08-01 결정 — 감사 산출물은 관측치라
-# 반려 대상이 아니다). 그 경로에는 PR이 없어 `notify.yml`(pull_request: opened)이
-# 반응하지 않으므로, 리포트가 올라온 것을 알리는 경로가 따로 필요하다.
+# 격주 점검(`/health-check`)은 리포트를 `main`으로 직행시킨다. 리포트가 올라갔다는
+# 사실만으로는 알리지 않는다 — 사용자가 정한 기준이 "꼭 필요한 경우에만"이고,
+# 대부분의 회차는 점검이 스스로 고치고 끝나서 사람이 읽고 할 일이 없다.
 #
-# `auto/audit-*` 콘텐츠 PR은 여전히 `notify.yml`이 맡는다. 콘텐츠 수정이 있는 주에는
-# 두 알림이 각각 가며, 승인 대상은 PR 쪽뿐이다.
+# 보낼지 말지는 점검이 커밋 메시지 본문의 `알림:` 줄로 이미 판정해 놓는다. 그 판정을
+# 여기서 다시 하지 않는다 — 두 곳이 각자 판단하면 언젠가 갈린다.
+#
+# 알리는 경우는 넷뿐이다(`.claude/commands/health-check.md` §0):
+#   ① 월 1회 현황 리포트  ② 사람 승인이 필요한 변경
+#   ③ 사람만 할 수 있는 작업(GSC 제출, 네이버 조회 등)  ④ 중대한 고장
 
 on:
   push:
     branches: [main]
     paths:
-      - 'report/audit-*.md'
+      - 'report/health-*.md'
 
 concurrency:
-  group: notify-audit-report-${{ github.ref }}
+  group: notify-health-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -22,12 +26,14 @@ permissions:
 
 jobs:
   notify:
+    # 표현식을 큰따옴표로 감싼다 — 안의 `'알림: 필요'` 에 `: ` 가 들어 있어서, 따옴표
+    # 없이 쓰면 YAML이 그 자리를 매핑 구분자로 읽고 파일 전체가 파싱되지 않는다.
+    if: "contains(github.event.head_commit.message, '알림: 필요')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # HEAD~1과 비교해 이번 push가 추가한 리포트를 고른다.
           fetch-depth: 2
 
       - name: Set up Python
@@ -48,11 +54,10 @@ jobs:
       - name: Resolve report and commit message
         id: report
         run: |
-          # 무인 감사는 리포트를 단일 커밋으로 민다 — HEAD~1..HEAD면 충분하다.
-          REPORT=$(git diff --name-only HEAD~1 HEAD -- 'report/audit-*.md' 2>/dev/null | tail -1 || true)
+          REPORT=$(git diff --name-only HEAD~1 HEAD -- 'report/health-*.md' 2>/dev/null | tail -1 || true)
           # 얕은 클론이거나 첫 커밋이면 diff가 비어 있다. 디스크의 최신 리포트로 뒤를 받친다.
           if [ -z "$REPORT" ]; then
-            REPORT=$(ls -1 report/audit-*.md 2>/dev/null | sort | tail -1 || true)
+            REPORT=$(ls -1 report/health-*.md 2>/dev/null | sort | tail -1 || true)
           fi
           if [ -z "$REPORT" ]; then
             echo "리포트 파일을 찾지 못했다 — 알림을 보내지 않는다." >&2
@@ -75,4 +80,4 @@ jobs:
           COMMIT_BODY: ${{ steps.report.outputs.body }}
           REPORT_PATH: ${{ steps.report.outputs.path }}
           REPORT_URL: ${{ steps.report.outputs.url }}
-        run: python scripts/telegram_notify.py audit-report
+        run: python scripts/telegram_notify.py health

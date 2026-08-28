@@ -1,23 +1,24 @@
 ---
-description: 텔레그램으로 받은 오늘 초안을 수정해 바로 발행한다. 대화형 전용 — main 직행 + 그날 auto/post PR 닫기. 인자로 대상 날짜(YYYY-MM-DD)를 줄 수 있고, 없으면 오늘(KST)로 본다.
+description: 텔레그램으로 받은 오늘 글을 고쳐 다시 발행한다. 대화형 전용 — main 직행. 인자로 대상 날짜(YYYY-MM-DD)를 줄 수 있고, 없으면 오늘(KST)로 본다.
 ---
 
 ## 0. 모드 계약 (먼저 확인)
 
-**이 명령은 대화형 전용이다.** 사람이 텔레그램 알림을 보고 claude cloud session을
-직접 열어 실행하는 경로다. 무인 루틴에서 호출하지 않는다 — 무인 경로는
-`/daily-post`(초안 생성)와 `daily-collect.yml`의 인박스(승인 집행) 둘뿐이고,
-이 명령은 그 둘 사이에 사람이 끼어드는 지점이다.
+**이 명령은 대화형 전용이다.** 사람이 텔레그램으로 그날 글을 받아 읽고, 고치고 싶을 때
+claude cloud session을 직접 열어 실행하는 경로다. 무인 루틴에서 호출하지 않는다.
 
-승인 경로와 **다른 점 하나만** 기억하면 된다: 승인은 다음날 01:30 인박스가
-집행하지만, 수정은 **이 세션이 그 자리에서 집행한다.** `main`에 직접 커밋·푸시하고
-그날 `auto/post-YYYY-MM-DD` PR을 닫는다. 그래서 다음날 01:30 인박스는 열린 PR을
-찾지 못하고 아무 일도 하지 않는다 — 그것이 의도된 "sleep"이며, 따로 배선할
-것이 없다. 재질의(`--reask`)도 같은 이유로 조용하다.
+**2026-08-27 무인 운영 전환으로 이 명령의 성격이 바뀌었다.** 예전에는 승인 대기 중인
+초안을 사람이 가로채는 자리였다 — 초안은 `auto/post-*` 브랜치에만 있었고, PR을 닫는 것이
+이 명령의 마지막 일이었다. 지금은 글이 **이미 `main`에 있고 대개 이미 발행돼 있다.**
+그러니 이 명령이 하는 일은 가로채기가 아니라 **사후 수정**이다:
 
-`main` 직행은 무인 규약(「무인은 `main`에 절대 직접 푸시하지 않는다」)의 예외가
-아니다. 이 경로는 수동 모드이고, `/daily-post` 수동 모드가 이미 승인 뒤 `main`에
-푸시한다. **승인 게이트(§5)를 건너뛰면 그때 규약을 어기는 것이다.**
+- 글은 `main`의 `content/posts/`에 있다. 브랜치도 PR도 없다.
+- 사이트에는 이미 올라가 있다(`draft: false`). 고치면 다시 배포된다.
+- 예외: `/daily-post` §6이 검사 위반으로 **보류**한 글은 `draft: true`로 올라와 있다.
+  사이트에는 없으며, 이 명령이 위반을 고치고 발행으로 넘기는 것이 정규 경로다.
+
+승인 게이트(§6)는 그대로 남는다. 사람이 이 세션 안에 있는데도 확인 없이 미는 것은
+무인화와 무관하게 규약 위반이다.
 
 ## 1. 대상 특정
 
@@ -26,36 +27,29 @@ UTC로 계산하면 16시 이후에 하루가 어긋난다.
 
 ```bash
 TARGET="${1:-$(TZ=Asia/Seoul date +%F)}"
+git fetch origin main && git checkout -B main origin/main
+grep -l "^date: ${TARGET}" content/posts/*.md
 ```
 
-`auto/post-$TARGET` 브랜치와 그 브랜치를 head로 하는 열린 PR을 찾는다.
+front matter의 `date`가 진리원이다 — 파일명 슬러그에는 날짜가 없다.
 
-- **`gh`가 있으면** `gh pr list --head "auto/post-$TARGET" --state open`.
-- **`gh`가 없으면**(클라우드 세션이 보통 이쪽이다) GitHub MCP 도구
-  `list_pull_requests`(`state: open`)로 같은 head를 찾는다.
+찾지 못하면 **중단한다.** 그날 글이 없다는 뜻이고(1위 후보 8점 미만으로 조용히 종료됐거나
+수집이 실패했거나), 그건 이 명령이 할 일이 아니다. 사람에게 그렇게 보고하고 멈춘다.
 
-찾지 못하면 **중단한다.** 브랜치가 없다는 것은 (a) 그날 초안이 없거나 (b) 이미
-발행·반려됐다는 뜻이고, 둘 다 이 명령이 할 일이 아니다. 어느 쪽인지 사람에게
-보고하고 멈춘다.
+여러 건이 나오면 사람에게 목록을 보여주고 어느 것인지 확인받는다.
 
-## 2. 초안을 작업 트리로 가져오기
-
-초안은 `main`이 아니라 `auto/post-$TARGET`에만 있다. **브랜치를 체크아웃하지 않고
-파일만 `main` 위로 가져온다** — 아래 §6에서 `main`에 커밋할 것이기 때문이다.
+## 2. 현재 상태 확인
 
 ```bash
-git fetch origin main "auto/post-$TARGET"
-git checkout -B main origin/main
-git checkout "origin/auto/post-$TARGET" -- content/
-git status --short          # 가져온 경로가 그날 산출물뿐인지 눈으로 확인한다
+sed -n '1,20p' content/posts/<슬러그>.md      # front matter — draft 값을 본다
+git log --oneline -3 -- content/posts/<슬러그>.md
 ```
 
-`content/` 밖(예: `.claude/`, `layouts/`)은 가져오지 않는다. 초안 브랜치에는
-그날 포스트·사전 항목·`_terms.yaml` append 셋만 있어야 하고, 그 밖의 것이
-섞여 있으면 그 자리에서 사람에게 알리고 멈춘다.
+`draft: true`면 **보류된 글이다.** 커밋 메시지 본문의 `사유:` 줄이 무엇이 걸렸는지 말해
+준다(`git log -1 --format=%b <커밋>`). 그 위반을 먼저 고친다 — 고치지 않은 채 `draft: false`로
+넘기면 발행 게이트를 사람 손으로 우회하는 것이다.
 
-**`auto/post-$TARGET` 브랜치에는 어떤 커밋도 밀지 않는다.** `auto/**` 푸시는
-`open-auto-pr.yml`을 깨우고, 그 워크플로는 이 시점에 PR을 만들 이유가 없다.
+`draft: false`면 이미 사이트에 있다. 고친 내용은 푸시 직후 재배포된다.
 
 ## 3. 요청사항 확인
 
@@ -121,7 +115,8 @@ rm -rf public resources
 ## 6. 승인 게이트
 
 (a) 바꾼 내용을 diff로, (b) 검사 결과 한 줄을 보여주고
-**"draft: false로 바꿔 main에 푸시하고 PR #N을 닫을까요?"**라고 구체적으로 묻는다.
+**"이대로 main에 푸시할까요?"**(보류된 글이면 "draft: false로 바꿔 main에 푸시할까요?")
+라고 구체적으로 묻는다.
 
 명확한 긍정("네", "승인", "푸시해줘")만 승인으로 인정한다. **"좋아요"·"괜찮네요"는
 승인이 아니다** — 다시 명확히 묻는다. 승인 전에는 어떤 git 쓰기도 하지 않는다.
@@ -131,7 +126,7 @@ rm -rf public resources
 승인 후에만, 이 순서로 한다.
 
 ```bash
-# 1. draft 플립 — 포스트와 사전 항목 양쪽
+# 1. 보류된 글이었다면 draft 플립 — 포스트와 사전 항목 양쪽
 sed -i 's/^draft: true$/draft: false/' content/posts/<슬러그>.md content/dictionary/<슬러그>.md
 
 # 2. 대상 파일만 명시적으로 add한다 (글롭 금지)
@@ -139,28 +134,28 @@ git status --short
 git add content/posts/<슬러그>.md content/dictionary/<슬러그>.md content/dictionary/_terms.yaml
 
 # 3. main에 커밋·푸시 → hugo.yml이 배포한다
-git commit -m "post: <제목>"
+git pull --rebase origin main
+git commit -m "post(revise): <제목>"
 git push origin main
 ```
 
+**커밋 제목은 반드시 `post(revise): `로 시작한다.** `notify-post.yml`은 `post: ` 접두사만
+듣고 본문을 텔레그램으로 민다. `post: `로 커밋하면 사람이 방금 이 세션에서 읽은 글을
+텔레그램으로 한 번 더 받는다 — `post(revise): `는 그것을 걸러 내기 위한 접두사다.
+
 푸시가 네트워크 오류로 실패하면 2s·4s·8s·16s로 최대 4회 재시도한다.
 
-그다음 PR을 닫고 브랜치를 지운다. `gh`가 있으면 `gh pr close`, 없으면 GitHub MCP
-`update_pull_request`(`state: closed`)를 쓴다. **병합이 아니라 닫기다** — 내용은
-이미 `main`에 있고, 병합하면 `draft: true` 버전이 되살아난다.
-
-브랜치 삭제까지 끝나야 다음날 인박스가 이 PR을 보지 않는다. 다만 브랜치가 남아도
-PR이 닫혀 있으면 `get_open_prs()`가 걸러 내므로 교착은 생기지 않는다.
+닫을 PR도, 지울 브랜치도 없다. 승인 루프가 사라지면서 둘 다 없어졌다.
 
 ## 8. 보고
 
-사람에게 (a) 배포된 URL 경로, (b) 닫은 PR 번호, (c) 다음날 01:30 인박스가 할 일이
-없다는 사실을 한 번에 알린다.
+사람에게 세 줄로 보고한다.
+
+```
+발행: <배포된 URL 경로>
+상태: 보류 해제(draft:false) | 이미 발행된 글 수정
+검사: 통과 | 사람 지시로 위반 N건 남긴 채 발행
+```
 
 텔레그램에 따로 알림을 보내지 않는다 — 사람이 이 세션 안에 있으므로 같은 내용을
-두 번 받게 된다. 알림이 필요하면 사람이 요청할 때만 `scripts/telegram_notify.py`를 쓴다.
-
-**남아 있을 수 있는 것 하나**: 그날 텔레그램에 이미 `승인`이나 다른 답장을 보냈다면,
-그 업데이트는 다음날 01:30 인박스가 뒤늦게 소비하면서 "대기 중인 PR이 없습니다"
-또는 "지정한 토큰과 일치하는 대기 PR이 없습니다"를 돌려보낸다. 정상이며 조치할
-것이 없다 — 사람에게 그렇게 알린다.
+두 번 받게 된다. `post(revise): ` 접두사가 그것을 이미 막는다.
