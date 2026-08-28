@@ -218,6 +218,25 @@ with tempfile.TemporaryDirectory() as tmp:
         "2026년 7월 16일 기준금리는 2.80%입니다.\n")])
     check("한 파일 안의 불일치는 내지 않는다", n3_conflicts(fs, TERMS), [])
 
+# 규칙 4 — 값의 주어가 그 지표가 아니면 귀속하지 않는다.
+# 2026-08-28 실측 오탐: "기준금리 인상으로 주택담보대출 최고 금리가 연 7.54%"에서
+# 7.54%가 기준금리 값으로 묶여 2.75%와 충돌했다. 원인으로만 언급된 지표는 주어가 아니다.
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "2026년 7월 16일 기준금리는 2.75%입니다.\n"),
+        ("b.md", "2026년 7월 16일 기준금리 인상으로 "
+                 "주택담보대출 최고 금리가 연 7.54%까지 올랐습니다.\n"),
+    ])
+    check("원인으로만 언급된 지표에 값을 귀속하지 않는다", n3_conflicts(fs, TERMS), [])
+
+# 그러나 주어가 실제로 그 지표면 여전히 잡아야 한다 (위 규칙이 과잉 억제하지 않는지).
+with tempfile.TemporaryDirectory() as tmp:
+    fs = _files(tmp, [
+        ("a.md", "한국은행은 2026년 7월 16일 기준금리를 연 2.75%로 올렸습니다.\n"),
+        ("b.md", "한국은행은 2026년 7월 16일 기준금리를 연 3.25%로 올렸습니다.\n"),
+    ])
+    check("주어가 그 지표면 여전히 잡는다", len(n3_conflicts(fs, TERMS)), 1)
+
 print("N5 발행글 수치 전재")
 from numerics import n5_reprint  # noqa: E402
 

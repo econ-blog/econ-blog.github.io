@@ -263,6 +263,35 @@ def indicator_of(scope: str, terms: dict) -> str | None:
     return best[1] if best else None
 
 
+# 값 바로 앞에 오는 "무엇의" 수치인지를 말하는 명사구. 마지막 것이 그 수의 주어다.
+# 한 문장이 여러 지표를 언급할 때(원인 하나, 결과 하나) 이것이 둘을 가른다.
+METRIC_SUBJECT = re.compile(
+    r"[가-힣A-Za-z0-9·]+(?:\s+[가-힣A-Za-z0-9·]+){0,3}\s*"
+    r"(?:금리|가격|환율|지수|수익률|물가|성장률|실업률|잔액|비율)"
+)
+
+
+def subject_conflicts(scope: str, value: str, name: str) -> bool:
+    """값 바로 앞의 주어가 `name`(매칭된 사전 용어)이 아닌 다른 지표인가.
+
+    `indicator_of`는 scope 어디에 있든 가장 긴 용어를 고른다. 그래서 한 문장이
+    "기준금리 인상으로 주택담보대출 최고 금리가 연 7.54%" 처럼 **원인 지표와 결과
+    지표를 함께** 말하면, 7.54%가 기준금리 값으로 잘못 묶인다. 실제로 그렇게 묶여
+    2026-08-28까지 N3 오탐 1건이 남아 있었다.
+
+    값 앞 구간에서 마지막 지표 명사구를 찾아, 그것이 매칭된 용어를 포함하지 않으면
+    귀속을 거부한다. 거부만 하므로 새로운 위반을 만들어 내지 않는다 — 오탐만 준다.
+    """
+    idx = scope.find(value)
+    if idx < 0:
+        return False
+    prefix = MD_LINK.sub(r"\1", scope[:idx])
+    subjects = METRIC_SUBJECT.findall(prefix)
+    if not subjects:
+        return False
+    return name not in subjects[-1]
+
+
 def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
     """N3 — 같은 지표·기준일·단위에 값이 다른 경우. (AC #57 + 좁힌 세 규칙)
 
@@ -283,6 +312,10 @@ def n3_conflicts(files: list[Path], terms: dict) -> list[dict]:
             asof = norm_asof(c["scope"])
             if not slug or not asof:
                 continue
+            if any(subject_conflicts(c["scope"], c["value"], nm)
+                   for nm in [terms[slug]["title"], *terms[slug].get("aliases", [])]
+                   if nm and nm in c["scope"]):
+                continue  # 값의 주어가 이 지표가 아니다 — 원인으로만 언급된 경우
             buckets.setdefault((slug, asof, c["unit"]), []).append(
                 (norm_value(c["value"]), rel_path, c["line"], c["scope"]))
 
