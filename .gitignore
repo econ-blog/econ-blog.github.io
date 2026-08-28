@@ -33,3 +33,6 @@ creds.json
 # Python cache
 __pycache__/
 *.pyc
+
+# humanize-korean 스킬 작업 폴더 (cwd 기준으로 생성된다 — 산출물은 본문에만 반영한다)
+/_workspace/

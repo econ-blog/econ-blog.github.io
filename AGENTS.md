@@ -43,8 +43,16 @@
     - 일간 뉴스 해설 포스트 작성 및 발행.
     - 인자 없음 = 무인 모드 (`draft: false` + `main` 직행. 승인 없음, 브랜치·PR 없음).
     - `manual` 인자 = 대화형 수동 모드 (후보 3건 제시 -> 선택 -> 승인 후 `main` 푸시).
+    - 발행 전 `humanize-korean` 스킬로 본문을 윤문한다(§5.3). 윤문은 게이트가 아니라 품질 단계이고, 윤문 후 결정론 검사를 다시 돌려 위반이 생기면 되돌린다.
     - 게이트는 둘이다: 결정론 검사(N1~N5, T1~T4, Q6, contracts) + Hugo 빌드 **그리고** `post-reviewer` 서브에이전트 검토. 한쪽이라도 통과하지 못하면 `draft: true`로 보류해 `main`에 올린다.
   </command>
+
+  <skill name="humanize-korean" file=".claude/vendor/im-not-ai/skills/humanize-korean/SKILL.md">
+    - 한글 "AI 티"(번역투·기계적 대구·접속사 남발·균일한 리듬) 제거 윤문. 외부 스킬을 저장소 안에 벤더링한 것 — 출처·배치·갱신 절차는 `.claude/vendor/im-not-ai/VENDOR.md`.
+    - `/daily-post` §5.3이 발행 전에 부른다. 무인 회차는 standard가 상한이고, 윤문 후 결정론 검사를 다시 돌려 위반이 생기면 그 파일을 윤문 전으로 되돌린다.
+    - **게이트가 아니다.** 스킬이 없거나 실패하면 원문 그대로 발행 경로를 계속 간다.
+    - 작업 폴더 `_workspace/`는 `.gitignore` 대상이다. 커밋에 들어가면 안 된다.
+  </skill>
 
   <command name="/revise-post" file=".claude/commands/revise-post.md">
     - 이미 `main`에 있는 그날 글의 사후 수정. 대화형 전용, 승인 후 `main` 푸시.
@@ -151,6 +159,8 @@
   - **발행 게이트는 둘이고 둘 다 통과해야 한다**: 결정론 검사(N1~N5 · T1~T4 · Q6 볼드 · contracts · Hugo 빌드) `통과` **그리고** `post-reviewer` 검토 `발행 가능`. 한쪽이라도 미통과이거나 검사·검토가 불가능하면 발행하지 않는다. 버리지도 않는다 — `draft: true`로 `main`에 남겨 격주 점검의 Q4(방치 초안)와 `/revise-post`가 처리할 수 있게 한다.
 
   - **수동 불변조건**: 명확한 사용자 긍정 확인 후에만 `draft: false` 변경 및 `main` 푸시. "좋아요"·"괜찮네요"는 승인이 아니다.
+
+  - **윤문은 문체만 만진다**: `humanize-korean`이 수치·기준일·인용·H2 제목·front matter를 바꾸면 그것은 사고다. 윤문 뒤 `numerics`·`headings`·`contracts`·`quality`를 다시 돌리고, 하나라도 걸리면 윤문본을 버리고 윤문 전 본문으로 되돌린다.
 
   - **절대 쓰기 금지** (격주 점검 포함 모든 무인 경로): `hugo.toml`의 `baseURL`·`theme` · 자격증명 일체 · 발행된 글의 삭제와 비공개 전환 · **원문 대조 없는 사실·수치 변경**. 마지막 것이 중요하다 — 어느 쪽이 맞는지 알 수 없으므로 고치지 말고 사람 대기열로 올린다.
 
