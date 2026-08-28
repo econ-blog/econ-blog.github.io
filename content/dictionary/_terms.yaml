@@ -129,3 +129,7 @@ hbm:
 won-dollar-exchange-rate:
   title: "원/달러 환율"
   aliases: ["원달러 환율", "원/달러", "달러/원 환율", "원화 환율"]
+
+asset-allocation:
+  title: "자산배분"
+  aliases: ["자산 배분", "Asset Allocation", "포트폴리오 배분"]
