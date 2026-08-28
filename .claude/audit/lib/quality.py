@@ -1,4 +1,4 @@
-"""포스트 품질·내부 순환 축 (Q1·Q3·Q4·Q5·P2).
+"""포스트 품질·내부 순환 축 (Q1·Q3·Q4·Q5·Q6·P2).
 
 결정론적. stdlib + 정규식만. 어떤 파일도 수정하지 않는다 — ④는 읽기 전용이다(AC #34).
 Q2(미연결 용어)는 backfill.py가 같은 계산을 이미 하므로 재구현하지 않고 재사용한다.
@@ -133,6 +133,38 @@ STOPWORDS = {
 JOSA_SUFFIXES = ("에서", "으로", "보다", "에게", "부터", "까지", "인가", "이다", "가", "을", "를", "의", "은", "는", "이", "에", "로", "도", "와", "과")
 
 
+
+BOLD = re.compile(r"\*\*[^*\n]+\*\*")
+
+
+def bold_violations(content_root: Path) -> list[dict]:
+    """Q6 — 볼드체(`**`) 사용. writing-styles.md의 '볼드체 전면 금지'를 강제한다.
+
+    이 규칙은 2026-08-28까지 아무도 검사하지 않았고 발행글 39건 중 26건이 어겼다.
+    산문 규칙 중 유일하게 결정론적으로 판정 가능한 것이라 여기에 둔다 — 나머지
+    문체 규칙(선 정의 후 비유 등)은 정규식으로 셀 수 없어 post-reviewer의 몫이다.
+
+    코드 스팬·펜스 안의 `**`는 세지 않는다. 예시로 규칙 자체를 인용하는 경우가 있다.
+    """
+    out = []
+    for sub in ("posts", "dictionary"):
+        for path in sorted((content_root / sub).glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            _front, body = split_front_matter(path.read_text(encoding="utf-8"))
+            hits = []
+            for i, line in enumerate(strip_code_spans(body).split("\n"), 1):
+                for m in BOLD.finditer(line):
+                    hits.append({"line": i, "quote": m.group(0)[:40]})
+            if hits:
+                out.append({
+                    "file": path.relative_to(content_root).as_posix(),
+                    "count": len(hits),
+                    "hits": hits[:5],
+                })
+    return out
+
+
 def trim_josa(tok: str) -> str:
     """한국어 조사 접미사를 잘라내어 동일 명사의 격변화를 통합한다."""
     if len(tok) <= 2:
@@ -201,6 +233,7 @@ if __name__ == "__main__":
         "Q3": term_candidates(CONTENT_ROOT, terms)[:30],
         "Q4": stale_drafts(CONTENT_ROOT, today),
         "Q5": self_review_budget(ws),
+        "Q6": bold_violations(CONTENT_ROOT),
         "P2": internal_link_density(CONTENT_ROOT),
     }, ensure_ascii=False, indent=2))
 

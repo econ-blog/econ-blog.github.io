@@ -20,7 +20,7 @@ DATE = re.compile(r'^date:\s*"?(\d{4}-\d{2}-\d{2})', re.MULTILINE)
 TAGS = re.compile(r'^tags:\s*\[(.*)\]\s*$', re.MULTILINE)
 
 _THIS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _THIS_DIR.parents[3]
+_REPO_ROOT = _THIS_DIR.parents[2]
 CONTENT_ROOT = _REPO_ROOT / "content" if (_REPO_ROOT / "content").exists() else Path("content")
 EXCLUDE = {"_index.md", "welcome.md"}
 

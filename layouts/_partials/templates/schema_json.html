@@ -150,7 +150,9 @@
     "name": {{ site.Title }},
     "logo": {
       "@type": "ImageObject",
-      "url": {{ site.Params.assets.favicon | default "favicon.ico" | absURL }}
+      {{- /* favicon 은 Rich Results 의 publisher.logo 규격(최소 112x112, ImageObject)을
+             만족하지 못한다. og-default.png 를 쓰고 favicon 은 최후 폴백으로만 남긴다. */ -}}
+      "url": {{ site.Params.assets.publisherLogo | default "images/og-default.png" | absURL }}
     }
   }
 }
