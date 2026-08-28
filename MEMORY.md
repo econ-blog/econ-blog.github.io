@@ -15,7 +15,7 @@
 | 사이트 | Hugo + PaperMod(서브모듈), GitHub Pages | 라이브 |
 | 배포 | `.github/workflows/hugo.yml` — `main` push 시 Hugo 0.164.0 빌드 → `actions/deploy-pages` | 동작 중 (`gh-pages` 브랜치 없음) |
 | 작성 | `/daily-post` — 7단계 시퀀서 + 5개 스테이지 프롬프트 | 무인은 `main` 직행 발행 (2026-08-27~) |
-| 주간 유지보수 | `scripts/housekeeping.py` + `weekly-housekeeping.yml` — ①④⑥ 결정론 | 무인, `main` 직행, 텔레그램 없음 |
+| 주간 유지보수 | `scripts/housekeeping.py` + `weekly-collect.yml`의 `housekeeping` 잡 — ①④⑥ 결정론 | 무인, `main` 직행, 텔레그램 없음 (2026-08-28 워크플로 통합) |
 | 격주 점검 | `/health-check` — 시퀀서 + 5개 스테이지 + `.claude/audit/lib/` 13개 모듈·13개 테스트 | 2026-08-27 신설 (`/weekly-audit` 대체) |
 | 문체 루프 | **삭제됨** (2026-08-01) | §5 참조 |
 | 승인 루프 | **삭제됨** (2026-08-27) | §11 참조 |

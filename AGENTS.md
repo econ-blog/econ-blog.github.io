@@ -29,8 +29,7 @@
     |---|---|---|---|
     | 매일 01:30 KST | `daily-collect.yml` | 오늘 후보 수집 -> 사이드카 | 실패 시에만 경보 |
     | 매일 05:00 KST | `/daily-post` (무인) | 글 작성 -> `main` 직행 발행 | **매일 본문 전송** |
-    | 매주 일 01:20 KST | `weekly-collect.yml` | GA4·GSC·링크상태 -> 사이드카 | 실패 시에만 경보 |
-    | 매주 일 02:00 KST | `weekly-housekeeping.yml` | 결정론 유지보수 -> `main` 직행 | **아무것도 보내지 않음** |
+    | 매주 일 01:20 KST | `weekly-collect.yml` | GA4·GSC·링크상태 -> 사이드카, 이어서 결정론 유지보수 -> `main` 직행 | 수집 실패 시에만 경보 (유지보수는 아무것도 보내지 않음) |
     | 매주 일 06:00 KST | `/health-check` (무인) | 격주는 전수 점검 + 자율 수정·실험 -> `main` 직행, 나머지 주는 연속성만 확인 | **꼭 필요할 때만** |
 
     격주 점검이 사람을 부르는 경우는 넷뿐이다: ① 월 1회 현황 리포트 ② 사람 승인이 필요한
@@ -61,7 +60,9 @@
   </command>
 
   <command name="/weekly-housekeeping">
-    - 순수 Python 무인 유지보수 (`scripts/housekeeping.py`, GitHub Actions 매주 일요일).
+    - 순수 Python 무인 유지보수 (`scripts/housekeeping.py`). **`weekly-collect.yml`의
+      `housekeeping` 잡**으로 돈다 — 2026-08-28에 별개 워크플로를 접었다. `linkstate`
+      잡이 갱신한 링크 원장을 아티팩트로 받아 쓰므로 순서가 `needs:`로 못박혀 있다.
     - ① 링크 · ④ 스캔 · ⑥ 수치를 결정론적으로 돌리고 리포트·원장·본문 정정을 `main`에 직행시킨다.
     - **텔레그램을 쓰지 않는다.** 안전장치는 알림이 아니라 커밋 앞에 놓인 단위 테스트다.
   </command>
@@ -99,7 +100,7 @@
     |---|---|---|
     | `post: ` | `/daily-post` 발행·보류 | `notify-post.yml` -> 텔레그램 본문 전송 |
     | `post(revise): ` | `/revise-post` | **없음** (의도적 — 사람이 세션 안에 있다) |
-    | `audit: ` | `weekly-housekeeping.yml` | **없음** |
+    | `audit: ` | `weekly-collect.yml`의 `housekeeping` 잡 | **없음** |
     | `health: ` | `/health-check` | `notify-health.yml` (본문에 `알림: 필요`가 있을 때만) |
   </contract>
 

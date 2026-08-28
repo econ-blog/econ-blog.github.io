@@ -1,4 +1,4 @@
-name: Weekly Collection (Analytics + Link State)
+name: Weekly Chain (수집 + 유지보수)
 
 on:
   # 스케줄은 cron-job.org가 REST API로 건다 — 매주 일 01:20 KST.
@@ -8,10 +8,25 @@ on:
   # 일요일 감사 하나를 먹이므로 트리거가 갈릴 이유가 없다. 다만 **잡은 분리해
   # 병렬로** 둔다 — 스텝을 한 잡에 이어 붙이면 GA4 조회 실패가 링크 점검까지
   # 죽이고, 감사 ①이 근거 없이 '측정 안 함'으로 저하된다.
+  #
+  # weekly-housekeeping.yml도 여기로 합쳤다(2026-08-28). 별개 워크플로로 둘 이유가
+  # 없었을 뿐 아니라, 갈라 두는 것이 실제로 고장을 만들고 있었다:
+  #
+  #   1. 원장이 끊겼다. `linkstate`가 `.claude/audit/link-state.json`을 갱신하지만
+  #      이 워크플로는 `contents: read`라 커밋하지 않는다. 커밋은 유지보수 쪽 몫인데
+  #      그쪽은 갱신된 원장을 볼 방법이 없어 저장소의 지난주 것을 읽었다. 그래서
+  #      원장이 2026-08-23에 멈췄고, `confirmed_dead`는 "하드 2회 + 5일"을 요구하므로
+  #      **어떤 링크도 사망 판정에 도달할 수 없었다.** 리포트의 "확정 사망 0건"은
+  #      건강 신호가 아니라 계측이 멈춘 신호였다. 이제 아티팩트로 넘긴다.
+  #   2. 순서가 시계에 의존했다. 40분 간격에 기대는 대신 `needs:`로 못박는다.
+  #   3. 트리거가 둘이면 cron-job.org 잡도 둘이고, 하나가 빠지면 조용히 안 돈다.
+  #      실제로 유지보수 잡은 만들어진 적이 없다.
+  #
+  # `housekeeping` 잡만 `contents: write` + PAT을 쓴다. 수집 잡들은 읽기 그대로다.
   workflow_dispatch:
 
 concurrency:
-  group: weekly-collect
+  group: weekly-chain
   cancel-in-progress: true
 
 permissions:
@@ -157,12 +172,95 @@ jobs:
           PAT: ${{ secrets.PAT }}
         run: bash scripts/sidecar_push.sh linkstate_out linkstate
 
+      # 갱신된 원장을 유지보수 잡에 넘긴다. 이것이 없으면 유지보수는 저장소에 커밋된
+      # (즉 지난주의) 원장을 읽는다 — 2026-08-27 전환 이후 실제로 그 상태였고, 원장이
+      # 2026-08-23에서 멈춰 어떤 링크도 사망 판정에 도달할 수 없었다.
+      - name: Upload refreshed link ledger
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-state
+          path: .claude/audit/link-state.json
+          retention-days: 7
+
       - name: Alert on failure
         if: failure()
         env:
           CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
         run: |
           python scripts/telegram_notify.py alert \
-            "fetch-linkstate" "워크플로 실패" \
+            "weekly-chain/linkstate" "워크플로 실패" \
             "링크 조회가 완료되지 않았다. 이번 주 감사 ①은 '측정 안 함'으로 저하된다." \
             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  housekeeping:
+    name: 유지보수 실행 (무인)
+    needs: linkstate
+    # linkstate 가 실패해도 돈다. 유지보수는 링크(①) 말고도 스캔(④)·수치(⑥)를 하며,
+    # 구글 API 나 외부 사이트 사정으로 그 셋을 통째로 건너뛸 이유가 없다. 원장을
+    # 못 받으면 저장소에 커밋된 것을 그대로 쓰고, 그 사실은 리포트에 남는다.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # 기본 GITHUB_TOKEN 으로 푸시하면 GitHub 이 다른 워크플로를 발화시키지 않아
+          # 유지보수가 고친 본문이 `hugo.yml` 을 깨우지 못한다.
+          token: ${{ secrets.PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: '0.164.0'
+          extended: true
+
+      - name: Download refreshed link ledger
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: link-state
+          path: .claude/audit/
+
+      # 승인 게이트가 없어진 뒤로 이 스텝이 유일한 게이트다. 실패하면 여기서 멈춘다.
+      - name: Run Unit Tests
+        run: |
+          for f in .claude/audit/lib/test_*.py; do python "$f" || exit 1; done
+          for f in scripts/test_*.py; do python "$f" || exit 1; done
+
+      - name: Run Housekeeping
+        id: hk
+        env:
+          TZ: Asia/Seoul
+        run: python scripts/housekeeping.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "bjh7790"
+          git config --global user.email "bjh7790@gmail.com"
+
+          # 리포트·원장·본문 정정을 **한 커밋**으로 main에 올린다. 셋을 갈라 놓으면
+          # "무엇을 보고 무엇을 고쳤나"가 커밋 경계에서 끊긴다.
+          #
+          # `content/`를 여기 함께 넣어도 `notify-post.yml`은 반응하지 않는다 —
+          # 그쪽은 `post: ` 접두사만 본다(이 커밋은 `audit:`).
+          git add -A report/ .claude/audit/link-state.json content/
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋하지 않는다"
+            exit 0
+          fi
+          git commit -m "audit: 무인 유지보수 (${{ steps.hk.outputs.summary }})" \
+                     -m "확정 사망 링크 제거 및 내부 링크 백필 정정"
+          # 유지보수가 도는 사이 다른 커밋이 main에 들어왔을 수 있다(발행은 매일 돈다).
+          git pull --rebase origin main
+          git push origin main

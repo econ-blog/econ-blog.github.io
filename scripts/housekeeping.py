@@ -26,17 +26,22 @@ def run_helper(args, timeout=120):
         return {"error": True, "traceback": str(e), "args": args}
 
 def run_links():
-    import glob
-    sys.path.append(".claude/audit/lib")
-    import mdtext
-    files = sorted(glob.glob("content/posts/*.md")) + sorted(glob.glob("content/dictionary/*.md"))
-    try:
-        inv = mdtext.inventory(files)
-        urls = sorted({u for rec in inv.values() for u in (rec.get("external") or []) if u})
-    except Exception:
-        urls = []
-    
-    link = run_helper([".claude/audit/lib/linkcheck.py", ".claude/audit/link-state.json"] + urls)
+    """① 링크 축. **네트워크를 쓰지 않는다 — 원장만 읽는다.**
+
+    URL 목록을 일부러 넘기지 않는다. `linkcheck.py`는 URL이 비면
+    `active_urls = list(ledger.keys())`로 떨어져 조회 없이 원장 상태에서
+    `confirmed_dead`·`manual_review`를 계산한다. 그것이 여기서 필요한 전부다.
+
+    **URL을 넘기도록 "고치지 마라.** 원장 갱신은 같은 워크플로의 `linkstate` 잡이
+    이미 한다(`weekly-collect.yml`). 여기서 또 조회하면 `update_ledger()`가
+    같은 날 `consecutive_hard_failures`를 두 번 올린다 — 그 카운터는 "서로 다른 날의
+    연속 실패"를 뜻하므로 하루에 두 번 세면 사망 판정이 실제보다 빨리 선다.
+
+    2026-08-28까지 이 함수는 `mdtext.inventory(files)`를 리스트로 불러 TypeError를
+    내고 `except`가 그것을 삼켜 결과적으로 URL 0개를 넘기고 있었다. 동작은 맞았지만
+    이유가 사고였다. 의도를 코드로 적어 다음 사람이 "버그"로 보고 되돌리지 않게 한다.
+    """
+    link = run_helper([".claude/audit/lib/linkcheck.py", ".claude/audit/link-state.json"])
     bf = run_helper([".claude/audit/lib/backfill.py"])
     il = run_helper([".claude/audit/lib/internal_links.py"])
     return {"link": link, "backfill": bf, "internal": il}
