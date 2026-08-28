@@ -30,7 +30,19 @@ description: 오늘의 경제뉴스를 골라 해설 포스트를 쓰고 바로 
 
     <stage id="5" name="draft" file=".claude/daily-post/draft.md">
       - Read 후 포스트 및 (필요 시) 사전 초안 작성.
-      - 발행 전 결정론 검사(N1~N5, T1~T4, contracts) 실행. 결과를 §6으로 전달 (`통과` | `남은 위반 N건` | `검사 불가`).
+      - 발행 전 결정론 검사 실행. 결과를 §6으로 전달 (`통과` | `남은 위반 N건` | `검사 불가`).
+
+```bash
+.venv/bin/python .claude/audit/lib/numerics.py                  # N1~N5
+.venv/bin/python .claude/audit/lib/headings.py --file content/posts/<슬러그>.md   # T1~T4
+.venv/bin/python .claude/audit/lib/contracts.py                 # 계약 전체
+.venv/bin/python .claude/audit/lib/quality.py                   # Q6 = 볼드체(`**`) 금지
+```
+
+      - **볼드체(Q6)는 `남은 위반`으로 센다.** `writing-styles.md`가 가장 강한 어조로
+        금지한 규칙인데 2026-08-28까지 검사기가 없었고, 그동안 발행글 39건 중 26건이
+        어겼다. 같은 기간 검사기가 붙어 있던 headings·FAQ 규칙은 위반이 0이었다 —
+        규칙 문구가 아니라 검사기가 준수를 만든다. 검사기 없이 두면 이 규칙은 다시 샌다.
     </stage>
 
     <stage id="5.5" name="independent_review" agent="post-reviewer">
@@ -87,6 +99,22 @@ git push origin main
 사유: <보류일 때만 — 무엇이 걸렸고 무엇을 고쳐야 하는지 한 문장>
 ```
 
+      - **푸시 전에 Hugo 빌드를 확인한다.** front matter가 깨진 파일은 `draft` 값과
+        무관하게 빌드를 실패시키고(초안도 front matter는 파싱된다), 그러면 `hugo.yml`이
+        죽어 **사이트 전체가 그날 배포되지 않는다.** 그런데 `notify-post.yml`은 커밋
+        접두사만 보므로 텔레그램에는 "발행됨"이 그대로 나간다 — 실패가 조용하다.
+
+```bash
+bash scripts/bootstrap_sandbox.sh && export PATH="$HOME/.local/bin:$PATH"
+git submodule update --init --depth 1 themes/PaperMod
+hugo --gc --minify && rm -rf public resources
+```
+
+      - [빌드 성공] -> 위 판정대로 푸시한다.
+      - [빌드 실패] -> `draft: true`로 바꾸고 **다시 빌드한다.** 통과하면 보류로 푸시한다.
+      - [`draft: true`로도 실패] -> **푸시하지 않는다.** 이때만은 파일을 남기지 않는다 —
+        글 한 건을 잃는 것보다 사이트 전체를 내리는 쪽이 크다. §7 최종 보고에
+        `빌드 실패`와 원인을 적어 격주 점검이 ④ 중대 고장으로 집어내게 한다.
       - 푸시가 네트워크 오류로 실패하면 2s·4s·8s·16s로 최대 4회 재시도한다.
       - 푸시 직전에 `git pull --rebase origin main`을 한 번 한다. 유지보수·점검이 같은 날 `main`을 건드렸을 수 있다.
     </stage>

@@ -196,7 +196,7 @@ description: 이 블로그를 키우는 담당자로서 격주로 전체를 점�
 ```bash
 .venv/bin/python .claude/audit/lib/numerics.py
 .venv/bin/python .claude/audit/lib/headings.py
-.venv/bin/python .claude/audit/lib/contracts.py --check terms
+.venv/bin/python .claude/audit/lib/contracts.py            # all_checks — 4필드·사전 정합·중복 키·자가검토 예산·리포트 형식
 for f in .claude/audit/lib/test_*.py scripts/test_*.py; do .venv/bin/python "$f" || echo "FAIL $f"; done
 bash scripts/bootstrap_sandbox.sh && export PATH="$HOME/.local/bin:$PATH"
 git submodule update --init --depth 1 themes/PaperMod

@@ -385,19 +385,48 @@ def main_flow(dry_run=False):
         dead_urls = set(links["link"].get("confirmed_dead", [])) if links.get("link") and isinstance(links["link"], dict) else set()
         dead_list = []
         if dead_urls:
+            # 2026-08-28 이전 이 블록은 한 번도 동작한 적이 없다. `mdtext.inventory()`는
+            # 파일 목록이 아니라 **파일 하나의 원문 문자열**을 받는데 리스트를 넘겼고,
+            # 거기서 난 TypeError를 `except Exception: pass`가 통째로 삼켰다. 죽은 링크가
+            # 있어도 아무 일도 일어나지 않았고 로그에도 남지 않았다. 위 리포트 미기록
+            # 사고와 같은 종류의 침묵이라 예외를 다시 삼키지 않고 리포트에 남긴다.
             import glob
+            sys.path.append(".claude/audit/lib")
+            import mdtext
             files = sorted(glob.glob("content/posts/*.md")) + sorted(glob.glob("content/dictionary/*.md"))
-            try:
-                sys.path.append(".claude/audit/lib")
-                import mdtext
-                inv = mdtext.inventory(files)
-                for file_path, rec in inv.items():
-                    for u in rec.get("external", []):
-                        if u in dead_urls:
-                            kind = "external" if u in rec.get("related_urls", []) else "internal"
-                            dead_list.append({"file": file_path, "target": u, "kind": kind})
-            except Exception:
-                pass
+            scan_errors = []
+            for file_path in files:
+                try:
+                    raw = Path(file_path).read_text(encoding="utf-8")
+                    front, body = mdtext.split_front_matter(raw)
+                    fmurls = mdtext.extract_front_matter_urls(front)
+                    body_links = mdtext.extract_links(body)
+                except Exception as exc:
+                    scan_errors.append(f"{file_path}: {type(exc).__name__} {exc}")
+                    continue
+
+                # related_articles 의 죽은 URL — front matter 에서 항목째 제거한다.
+                for u in fmurls["related_urls"]:
+                    if u in dead_urls:
+                        dead_list.append({"file": file_path, "target": u,
+                                          "kind": "external"})
+
+                # 본문 마크다운 링크의 죽은 URL — 앵커 텍스트만 남기고 링크를 푼다.
+                # `apply_edits()`가 `[앵커](대상)` 문자열을 그대로 찾으므로 앵커가
+                # 반드시 함께 실려야 한다. 이 키가 빠져 있던 것이 두 번째 결함이었다.
+                for ln in body_links:
+                    if ln["target"] in dead_urls:
+                        dead_list.append({"file": file_path, "target": ln["target"],
+                                          "anchor": ln["anchor"], "kind": "internal"})
+
+                # `source_url` 은 죽어도 건드리지 않는다 — 필수 front matter 필드라
+                # 지우면 Q1(필드 완비)이 깨진다. 사람 대기열로 가야 할 사안이다.
+
+            if scan_errors:
+                with open(report_path(date), "a", encoding="utf-8") as f:
+                    f.write("\n## ⚠ 죽은 링크 스캔 오류\n\n")
+                    for e in scan_errors:
+                        f.write(f"- {e}\n")
         bf_list = links["backfill"] if isinstance(links.get("backfill"), list) else []
         apply_edits(".", dead_list, bf_list)
 
