@@ -187,8 +187,10 @@ print("CLI — 원장을 stdout으로만 낸다")
 import subprocess  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PY = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(HERE))),
-                  ".venv", "bin", "python")
+# test_contracts.py 와 같은 이유로 `.venv` 경로를 짐작하지 않는다. 러너가 첫 실패에서
+# 멈추는 탓에 2026-08-30 고장 때 이 파일은 돌지도 못했고, 앞엣것만 고쳤다면 다음 주에
+# 똑같은 예외가 여기서 떴을 것이다.
+PY = sys.executable
 CLI = os.path.join(HERE, "hypothesis.py")
 
 

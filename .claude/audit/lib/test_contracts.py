@@ -120,9 +120,18 @@ import subprocess  # noqa: E402
 from contracts import REPO_ROOT  # noqa: E402
 
 LIB = os.path.dirname(os.path.abspath(__file__))
-# 상대경로 ".venv/bin/python"은 CWD 의존이라 저장소 루트 밖에서 돌리면 죽는다.
-# contracts.py 자신이 REPO_ROOT로 앵커된 이유와 같은 함정이다.
-PY = str(REPO_ROOT / ".venv/bin/python")
+# 서브프로세스도 **지금 이 테스트를 돌리는 인터프리터**로 부른다.
+#
+# 앞서 두 번 틀렸다. 처음엔 상대경로 ".venv/bin/python"이라 CWD 의존이었고, 그것을
+# REPO_ROOT로 앵커해 고쳤다. 그런데 그 수정은 더 나쁜 가정을 남겼다 — `.venv`가
+# 있다는 가정이다. weekly-collect.yml 의 housekeeping 잡은 setup-python + pip 로
+# 붙어 `.venv`를 만들지 않으므로 그 경로는 거기 존재한 적이 없고, 2026-08-30
+# 첫 발화에서 FileNotFoundError 로 유지보수 전체를 세웠다.
+#
+# 로컬과 점검 샌드박스는 bootstrap.sh 가 `.venv`를 만들어 주므로 이 결함은
+# 그쪽에서 절대 재현되지 않는다. 인터프리터 경로를 **짐작하지 않는 것**이 유일한
+# 해법이다. scripts/test_read_snapshot.py 가 처음부터 이렇게 하고 있었다.
+PY = sys.executable
 
 
 def run_cli(*args):
