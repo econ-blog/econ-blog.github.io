@@ -2,6 +2,10 @@ nand-flash:
   title: "낸드플래시"
   aliases: ["낸드", "NAND", "낸드 플래시"]
 
+capital-labor-substitution:
+  title: "자본-노동 대체"
+  aliases: ["자본-노동 대체효과", "노동의 자본 대체"]
+
 base-rate:
   title: "기준금리"
   aliases: ["정책금리", "기준 금리"]
