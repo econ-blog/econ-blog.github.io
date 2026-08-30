@@ -16,7 +16,6 @@ related_articles:
     url: "https://www.sentv.co.kr/article/view/sentv202608060079"
     source: "SEN"
 ---
-
 코스피가 7주 연속 하락하며 6200대에서 제자리걸음을 하고 있습니다. 시장이 꼽는 반전 카드는 삼성전자와 SK하이닉스, 이른바 '삼전닉스'의 대규모 주주환원입니다.
 
 > 💡 핵심 3줄 요약
