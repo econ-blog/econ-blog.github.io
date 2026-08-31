@@ -137,3 +137,7 @@ won-dollar-exchange-rate:
 asset-allocation:
   title: "자산배분"
   aliases: ["자산 배분", "Asset Allocation", "포트폴리오 배분"]
+
+treasury-yield:
+  title: "국채 수익률"
+  aliases: ["국채금리", "채권금리", "채권수익률", "국채 금리"]
