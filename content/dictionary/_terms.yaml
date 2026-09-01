@@ -141,3 +141,7 @@ asset-allocation:
 treasury-yield:
   title: "국채 수익률"
   aliases: ["국채금리", "채권금리", "채권수익률", "국채 금리"]
+
+stablecoin:
+  title: "스테이블코인"
+  aliases: ["스테이블 코인", "stablecoin", "달러 스테이블코인"]
