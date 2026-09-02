@@ -145,3 +145,7 @@ treasury-yield:
 stablecoin:
   title: "스테이블코인"
   aliases: ["스테이블 코인", "stablecoin", "달러 스테이블코인"]
+
+consumer-price-index:
+  title: "소비자물가지수"
+  aliases: ["CPI", "소비자물가", "소비자 물가지수"]
