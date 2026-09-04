@@ -2,6 +2,10 @@ nand-flash:
   title: "낸드플래시"
   aliases: ["낸드", "NAND", "낸드 플래시"]
 
+long-term-agreement:
+  title: "장기공급계약"
+  aliases: ["LTA", "장기 공급계약", "장기 공급 계약"]
+
 loan-spread-rate:
   title: "가산금리"
   aliases: ["가산 금리", "대출 가산금리"]
