@@ -210,6 +210,69 @@ with tempfile.TemporaryDirectory() as tmp:
           any("시작" in i["issue"] for i in front_matter_delimiter_issues(root)), True)
 
 
+
+# --- Q9 문장 리듬 / Q10 정보 이득 ----------------------------------------
+from quality import (  # noqa: E402
+    sentence_rhythm, rhythm_violations, information_gain,
+    RHYTHM_SOFT_MIN, RHYTHM_HARD_MIN,
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    # 모든 문장이 같은 길이 -> CV 0 -> hard
+    uniform = "\n".join(["가" * 40 + "습니다." for _ in range(10)])
+    write(tmp, "posts", "uniform.md", FULL_POST.replace("본문\n", uniform + "\n"))
+    r = sentence_rhythm(root / "posts" / "uniform.md")
+    check("균일한 글은 CV 0에 가깝다", r["cv"] < 0.05, True)
+    check("균일한 글은 hard", r["level"], "hard")
+
+    # 길이를 크게 섞으면 통과
+    varied = "\n".join(
+        "가" * n + "습니다." for n in (12, 90, 25, 130, 40, 15, 75, 110, 30, 60))
+    write(tmp, "posts", "varied.md", FULL_POST.replace("본문\n", varied + "\n"))
+    r2 = sentence_rhythm(root / "posts" / "varied.md")
+    check("리듬 있는 글은 통과", r2["level"], "ok")
+    check("CV가 하한 위", r2["cv"] > RHYTHM_SOFT_MIN, True)
+
+    # 표본이 적으면 판정하지 않는다 (없는 위반을 만들지 않는다)
+    write(tmp, "posts", "tiny.md", FULL_POST.replace("본문\n", "가" * 30 + "습니다.\n"))
+    check("문장 5개 미만은 판정 안 함", sentence_rhythm(root / "posts" / "tiny.md"), None)
+
+    # 표·인용·헤딩은 리듬 표본이 아니다
+    tabled = uniform + "\n\n| 지표 | 값 |\n|---|---|\n| 금리 | 3.0% |\n"
+    write(tmp, "posts", "tabled.md", FULL_POST.replace("본문\n", tabled + "\n"))
+    check("표 행은 문장 수에 안 들어감",
+          sentence_rhythm(root / "posts" / "tabled.md")["sentences"], 10)
+
+    names = [v["file"].split("/")[-1] for v in rhythm_violations(root)]
+    check("전수에 균일한 글 포함", "uniform.md" in names, True)
+    check("전수에 리듬 있는 글 제외", "varied.md" in names, False)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "none.md", FULL_POST)
+    g = information_gain(root / "posts" / "none.md")
+    check("이득 없는 글", g["has_gain"], False)
+
+    prim = "한국은행 [기준금리](https://ecos.bok.or.kr/x) 자료입니다.\n"
+    write(tmp, "posts", "prim.md", FULL_POST.replace("본문\n", prim))
+    g2 = information_gain(root / "posts" / "prim.md")
+    check("1차 출처 링크 인식", g2["primary_links"], 1)
+    check("1차 출처면 이득 있음", g2["has_gain"], True)
+
+    # 뉴스 링크는 1차 출처가 아니다
+    news = "기사 [원문](https://www.hankyung.com/x) 입니다.\n"
+    write(tmp, "posts", "news.md", FULL_POST.replace("본문\n", news))
+    check("뉴스는 1차 출처 아님",
+          information_gain(root / "posts" / "news.md")["has_gain"], False)
+
+    calc = "직접 계산해 보면 월 3만원 차이가 납니다.\n"
+    write(tmp, "posts", "calc.md", FULL_POST.replace("본문\n", calc))
+    g3 = information_gain(root / "posts" / "calc.md")
+    check("직접 계산 표지 인식", g3["derived_figures"], 1)
+    check("계산만 있어도 이득 있음", g3["has_gain"], True)
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

@@ -394,6 +394,32 @@ check("front matter 없음", _n.is_draft("본문만 있다\n"), False)
 check("본문의 draft: true 는 세지 않는다",
       _n.is_draft('---\ntitle: "t"\n---\n\ndraft: true 라고 적었다\n'), False)
 
+
+# --- protected_sentences / new_n1_after ----------------------------------
+print("protected_sentences")
+_PROT = (
+    "---\ntitle: \"t\"\ndate: 2026-09-06T05:00:00+09:00\n---\n\n"
+    "2026년 7월 기준 기준금리는 3.0%입니다.\n"
+    "환율은 계속 움직이고 있습니다.\n"
+)
+_prot = _n.protected_sentences(_PROT)
+check("기준일 있는 수치 문장은 보호", len(_prot), 1)
+check("보호 문장에 기준일", _prot[0]["asof"], "2026년 7월")
+
+# 기준일이 없으면 이미 N1이며 윤문이 만든 문제가 아니므로 보호 대상이 아니다.
+_NOASOF = _PROT.replace("2026년 7월 기준 ", "")
+check("기준일 없는 문장은 보호 대상 아님", len(_n.protected_sentences(_NOASOF)), 0)
+
+# 윤문이 문장을 쪼개 기준일과 수치를 갈라놓은 상황 = N1 증가
+_SPLIT = _PROT.replace(
+    "2026년 7월 기준 기준금리는 3.0%입니다.",
+    "2026년 7월 기준으로 봅니다. 기준금리는 3.0%입니다.")
+check("분할이 N1을 새로 만든다", len(_n.new_n1_after(_PROT, _SPLIT)), 1)
+check("원본 대비 증가분만 센다", len(_n.new_n1_after(_PROT, _PROT)), 0)
+# 원래 있던 위반은 윤문 탓으로 세지 않는다.
+check("기존 위반은 증가분이 아니다", len(_n.new_n1_after(_NOASOF, _NOASOF)), 0)
+
+
 print()
 if FAILED:
     print("실패:")

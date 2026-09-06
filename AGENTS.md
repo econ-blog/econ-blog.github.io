@@ -11,6 +11,13 @@
     - 루틴 샌드박스는 외부 웹(뉴스 사이트, Google API, 텔레그램 API 등)에 도달할 수 없다 (GitHub, PyPI, npm만 허용).
     - WebFetch는 동작하지 않으며, WebSearch만 동작한다.
     - 외부 뉴스/데이터 수집은 GitHub Actions (`daily-collect.yml`, `weekly-collect.yml`)가 비공개 사이드카(`econ-blog/automation-data`)에 수집하여 스냅샷으로 제공한다.
+    - **샌드박스가 못 하는 일은 「붙여넣을 프롬프트」로 넘긴다.** 웹 조회·브라우저·검색
+      콘솔이 필요한 작업은 사람에게 *부탁*하는 것이 아니라, 웹 검색과 브라우저가 되는
+      새 세션에 **그대로 붙여넣을 수 있는 자립적 프롬프트**를 써서 알린다. 사람은 그것을
+      새 세션에 붙여넣고 결과만 가져다준다. 새 세션은 이 대화를 볼 수 없으므로 맥락·대상·
+      반환 형식이 프롬프트 안에 전부 들어 있어야 한다. 상세 형식은 `health-check.md` §8의
+      `<local_session_prompt>`. 이 경로는 격주 점검뿐 아니라 **모든 세션에 적용된다** —
+      막혔을 때 "샌드박스가 못 한다"로 끝내지 말고 프롬프트를 내라.
     - **Claude 세션은 텔레그램을 직접 보낼 수 없다.** 알림은 전부 "`main`에 파일을 커밋하면 워크플로가 그것을 보고 보낸다" 구조다. 세션이 `scripts/telegram_notify.py`를 직접 호출하려 하면 조용히 실패한다.
   </environment_constraints>
 
@@ -44,7 +51,7 @@
     - 인자 없음 = 무인 모드 (`draft: false` + `main` 직행. 승인 없음, 브랜치·PR 없음).
     - `manual` 인자 = 대화형 수동 모드 (후보 3건 제시 -> 선택 -> 승인 후 `main` 푸시).
     - 발행 전 `humanize-korean` 스킬로 본문을 윤문한다(§5.3). 윤문은 게이트가 아니라 품질 단계이고, 윤문 후 결정론 검사를 다시 돌려 위반이 생기면 되돌린다.
-    - 게이트는 둘이다: 결정론 검사(N1~N5, T1~T4, Q6, Q7 분량, contracts) + Hugo 빌드 **그리고** `post-reviewer` 서브에이전트 검토. 한쪽이라도 통과하지 못하면 `draft: true`로 보류해 `main`에 올린다.
+    - 게이트는 둘이다: 결정론 검사(N1~N5, T1~T4, Q6, Q7 분량, Q9 리듬, contracts) + Hugo 빌드 **그리고** `post-reviewer` 서브에이전트 검토. 한쪽이라도 통과하지 못하면 `draft: true`로 보류해 `main`에 올린다.
   </command>
 
   <skill name="humanize-korean" file=".claude/vendor/im-not-ai/skills/humanize-korean/SKILL.md">
@@ -156,7 +163,7 @@
 
   - **CCR 세션 지정 브랜치 우선순위**: Claude Code 세션이 별도의 "세션 지정 브랜치"(예: `claude/xxx`)를 요구하더라도, 무인 발행·점검 커밋은 `main`으로 간다. 시스템 자체를 고치는 작업(워크플로·스크립트·명령 파일 수정)은 지정 브랜치를 따른다 — 그쪽은 사람이 읽고 병합할 변경이다.
 
-  - **발행 게이트는 둘이고 둘 다 통과해야 한다**: 결정론 검사(N1~N5 · T1~T4 · Q6 볼드 · Q7 분량 · contracts · Hugo 빌드) `통과` **그리고** `post-reviewer` 검토 `발행 가능`. 한쪽이라도 미통과이거나 검사·검토가 불가능하면 발행하지 않는다. 버리지도 않는다 — `draft: true`로 `main`에 남겨 격주 점검의 Q4(방치 초안)와 `/revise-post`가 처리할 수 있게 한다.
+  - **발행 게이트는 둘이고 둘 다 통과해야 한다**: 결정론 검사(N1~N5 · T1~T4 · Q6 볼드 · Q7 분량 · Q9 리듬 · contracts · Hugo 빌드) `통과` **그리고** `post-reviewer` 검토 `발행 가능`. 한쪽이라도 미통과이거나 검사·검토가 불가능하면 발행하지 않는다. 버리지도 않는다 — `draft: true`로 `main`에 남겨 격주 점검의 Q4(방치 초안)와 `/revise-post`가 처리할 수 있게 한다.
 
   - **수동 불변조건**: 명확한 사용자 긍정 확인 후에만 `draft: false` 변경 및 `main` 푸시. "좋아요"·"괜찮네요"는 승인이 아니다.
 

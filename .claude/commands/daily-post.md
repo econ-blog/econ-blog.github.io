@@ -37,7 +37,7 @@ description: 오늘의 경제뉴스를 골라 해설 포스트를 쓰고 바로 
 .venv/bin/python .claude/audit/lib/headings.py --file content/posts/<슬러그>.md   # T1~T4
 .venv/bin/python .claude/audit/lib/contracts.py                 # 계약 전체
 .venv/bin/python .claude/audit/lib/quality.py                   # Q6 = 볼드체(`**`) 금지
-.venv/bin/python .claude/audit/lib/quality.py --file content/posts/<슬러그>.md   # Q7 = 분량
+.venv/bin/python .claude/audit/lib/quality.py --file content/posts/<슬러그>.md   # Q7 분량 · Q9 리듬 · Q10 정보이득
 ```
 
       - **분량(Q7)도 `남은 위반`으로 센다.** 상한 3,000자를 넘으면 `level: hard`이고
@@ -62,6 +62,18 @@ description: 오늘의 경제뉴스를 골라 해설 포스트를 쓰고 바로 
       - 벤더링된 `humanize-korean` 스킬(`.claude/vendor/im-not-ai`, VENDOR.md 참조)로 §5에서 쓴 본문을 윤문한다.
       - cwd는 저장소 루트다. 작업 폴더 `_workspace/`는 `.gitignore`에 있으니 **절대 커밋에 넣지 않는다.**
 
+      - **윤문을 부르기 전에 보호 문장 목록을 뽑아 스킬에 함께 넘긴다.**
+
+```bash
+.venv/bin/python .claude/audit/lib/numerics.py --protected content/posts/<슬러그>.md
+```
+
+        여기 나온 문장은 표현을 바꿔도 되지만 **분할하면 안 되고, 기준일이 수치와 같은
+        문장에 남아야 한다.** 2026-08-24~09-06 실측에서 윤문 11회 중 4회가 롤백됐고
+        사유는 매번 같았다 — 리듬을 만들려고 문장을 쪼개자 수치와 기준일이 서로 다른
+        문장으로 갈라져 N1이 걸렸다. 수치를 바꾼 것이 아닌데도 전량 롤백되므로 이
+        사이트의 주된 AI 티 제거 수단이 절반쯤 꺼져 있었다. 사후에 잡지 말고 미리 준다.
+
       <scope>
         - 윤문 대상은 **H2 4개 사이의 산문 문단뿐**이다.
         - 손대지 않는 것: front matter 전체(`title`·`description`·`tags`·`faq`·`related_articles`), H2 제목 4개, 모든 수치와 기준일, 인용된 원문 표현, `[용어](/dictionary/slug/)` 링크, 투자 관점 섹션의 3단계 인과 사슬과 시소 매트릭스 구조.
@@ -77,7 +89,10 @@ description: 오늘의 경제뉴스를 골라 해설 포스트를 쓰고 바로 
       <verification>
         - 윤문 전 본문을 그대로 들고 있다가, 윤문본을 파일에 쓴 뒤 **§5의 결정론 검사 4개를 다시 돌린다** (`numerics`·`headings`·`contracts`·`quality`).
         - [재검사 통과] -> 윤문본을 채택한다. §6으로 넘기는 검사 결과는 **이 재검사 결과**다.
-        - [재검사에서 위반 발생] -> 윤문본을 버리고 **윤문 전 본문으로 되돌린다.** 고쳐 쓰지 않는다 — 윤문이 깨뜨린 것이 무엇인지 모르는 채로 다시 손대면 수치가 조용히 틀어진다. §7 보고에 `윤문 롤백`과 걸린 검사를 적는다.
+        - 재검사에서 N1이 걸리면 `--compare`로 **윤문이 만든 것인지 원래 있던 것인지**를 가른다:
+          `.venv/bin/python .claude/audit/lib/numerics.py --compare <윤문전> <윤문후>`
+          `total: 0`이면 원래 있던 위반이므로 윤문 탓이 아니다 — 롤백하지 말고 그대로 §6으로 간다.
+        - [윤문이 만든 위반] -> 윤문본을 버리고 **윤문 전 본문으로 되돌린다.** 고쳐 쓰지 않는다 — 윤문이 깨뜨린 것이 무엇인지 모르는 채로 다시 손대면 수치가 조용히 틀어진다. §7 보고에 `윤문 롤백`과 걸린 검사를 적는다.
         - 스킬이 없거나(`SKILL_ROOT` 유도 실패) 윤문이 실패하면 **원문 그대로 §5.5로 간다.** 이 단계는 발행을 막지 않는다 — 윤문은 품질 향상이지 게이트가 아니다. 다만 §7에 `윤문 건너뜀`과 이유를 남긴다.
       </verification>
 
