@@ -19,6 +19,8 @@ from kstdate import kst_today  # noqa: E402
 from mdtext import inventory, split_front_matter, strip_code_spans  # noqa: E402
 
 DESC_MIN, DESC_MAX = 50, 160
+# Q7 본문 분량 — soft는 목표 이탈, hard는 발행 게이트가 잡는 선.
+BODY_SOFT_MAX, BODY_HARD_MAX = 2600, 3000
 
 FIELD = {
     "title": re.compile(r"^title:\s*\S", re.MULTILINE),
@@ -165,6 +167,77 @@ def bold_violations(content_root: Path) -> list[dict]:
     return out
 
 
+def body_length_violations(content_root: Path) -> list[dict]:
+    """Q7 — 본문 분량. 아무 규칙도 없어서 조용히 길어진 축이다.
+
+    2026-09-06 실측: 발행 48건의 본문이 전반부 평균 2,437자에서 최근 5건 평균
+    3,324자로 36% 늘었고, 최근 14건은 2,813자에서 3,715자까지 단조 증가했다.
+    분량은 `writing-styles.md`에 목표도 상한도 없던 유일한 축이다 — 회차 1이
+    확인한 인과("검사기가 붙은 규칙만 수렴한다")대로, 규칙도 검사기도 없으면
+    글은 길어지는 쪽으로만 표류한다.
+
+    본문 전체 글자수를 센다. 표·인용블록도 독자가 읽는 분량이므로 포함하고,
+    코드 스팬만 제외한다(마크다운 예시는 읽는 분량이 아니다).
+    공지는 분량 규율 대상이 아니다.
+    """
+    out = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        hit = body_length_of(path)
+        if hit:
+            hit["file"] = path.relative_to(content_root).as_posix()
+            out.append(hit)
+    return out
+
+
+def body_length_of(path: Path) -> dict | None:
+    """단일 포스트의 분량 판정. 목표 이내면 None. 발행 게이트(`--file`)가 쓴다."""
+    raw = path.read_text(encoding="utf-8")
+    if NOTICE_TAG.search(raw):
+        return None
+    _front, body = split_front_matter(raw)
+    chars = len(strip_code_spans(body).strip())
+    if chars <= BODY_SOFT_MAX:
+        return None
+    return {
+        "chars": chars,
+        "level": "hard" if chars > BODY_HARD_MAX else "soft",
+        "over": chars - BODY_SOFT_MAX,
+    }
+
+
+def front_matter_delimiter_issues(content_root: Path) -> list[dict]:
+    """Q8 — front matter 종료 구분자 위생.
+
+    2026-09-06에 12파일(포스트 9·사전 3)이 `---본문` 형태로 종료 구분자와 첫
+    본문 줄이 붙어 있는 것을 발견했다. Hugo는 이것을 관대하게 파싱해 사이트는
+    멀쩡했고, 그래서 아무도 몰랐다. 그러나 `mdtext.split_front_matter`는
+    `\\n---\\n`을 요구하므로 매칭에 실패했고, 실패하면 예외 대신 ('', raw)를
+    돌려준다 — front matter 전체가 본문으로 취급되며 그 사실은 어디에도
+    보고되지 않는다. Q1·Q6·Q7·numerics가 전부 그 12파일을 잘못 읽고 있었다.
+
+    조용히 틀리는 것이 이 결함의 본질이므로 재발을 여기서 잡는다.
+    """
+    out = []
+    for sub in ("posts", "dictionary"):
+        for path in sorted((content_root / sub).glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            raw = path.read_text(encoding="utf-8")
+            if not raw.startswith("---\n"):
+                out.append({
+                    "file": path.relative_to(content_root).as_posix(),
+                    "issue": "front matter 시작 구분자 없음",
+                })
+            elif split_front_matter(raw)[0] == "":
+                out.append({
+                    "file": path.relative_to(content_root).as_posix(),
+                    "issue": "종료 구분자가 본문과 붙어 있음 (`---본문`)",
+                })
+    return out
+
+
 def trim_josa(tok: str) -> str:
     """한국어 조사 접미사를 잘라내어 동일 명사의 격변화를 통합한다."""
     if len(tok) <= 2:
@@ -215,7 +288,27 @@ def term_candidates(
     return out
 
 
+def _file_mode(target: Path) -> int:
+    """포스트 1건의 분량 게이트. hard 초과일 때만 종료코드 1."""
+    hit = body_length_of(target)
+    chars = hit["chars"] if hit else len(
+        strip_code_spans(split_front_matter(
+            target.read_text(encoding="utf-8"))[1]).strip())
+    level = hit["level"] if hit else "ok"
+    print(json.dumps({
+        "file": target.as_posix(),
+        "chars": chars,
+        "target_max": BODY_SOFT_MAX,
+        "hard_max": BODY_HARD_MAX,
+        "level": level,
+        "total": 1 if level == "hard" else 0,
+    }, ensure_ascii=False, indent=2))
+    return 1 if level == "hard" else 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--file":
+        sys.exit(_file_mode(Path(sys.argv[2])))
     today = sys.argv[1] if len(sys.argv) > 1 else kst_today()
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
     files = sorted((CONTENT_ROOT / "posts").glob("*.md")) + \
@@ -234,6 +327,8 @@ if __name__ == "__main__":
         "Q4": stale_drafts(CONTENT_ROOT, today),
         "Q5": self_review_budget(ws),
         "Q6": bold_violations(CONTENT_ROOT),
+        "Q7": body_length_violations(CONTENT_ROOT),
+        "Q8": front_matter_delimiter_issues(CONTENT_ROOT),
         "P2": internal_link_density(CONTENT_ROOT),
     }, ensure_ascii=False, indent=2))
 

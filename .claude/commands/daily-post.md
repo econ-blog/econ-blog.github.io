@@ -37,7 +37,14 @@ description: 오늘의 경제뉴스를 골라 해설 포스트를 쓰고 바로 
 .venv/bin/python .claude/audit/lib/headings.py --file content/posts/<슬러그>.md   # T1~T4
 .venv/bin/python .claude/audit/lib/contracts.py                 # 계약 전체
 .venv/bin/python .claude/audit/lib/quality.py                   # Q6 = 볼드체(`**`) 금지
+.venv/bin/python .claude/audit/lib/quality.py --file content/posts/<슬러그>.md   # Q7 = 분량
 ```
+
+      - **분량(Q7)도 `남은 위반`으로 센다.** 상한 3,000자를 넘으면 `level: hard`이고
+        종료코드 1이다. 2026-09-06 실측에서 본문이 전반부 평균 2,437자에서 최근 5건
+        3,324자로 표류한 것이 확인됐고, 원인은 `writing-styles.md`에 분량 규칙이
+        한 줄도 없었다는 것 하나였다. Q6와 같은 인과다 — 검사기가 없는 축은 샌다.
+        줄일 때는 수치·기준일이 아니라 중복 서술과 완충 표현을 지운다.
 
       - **볼드체(Q6)는 `남은 위반`으로 센다.** `writing-styles.md`가 가장 강한 어조로
         금지한 규칙인데 2026-08-28까지 검사기가 없었고, 그동안 발행글 39건 중 26건이

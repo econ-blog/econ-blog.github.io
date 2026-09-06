@@ -15,7 +15,9 @@ related_articles:
   - title: "삼성 \"조만간\"·SK \"연말까지\"…주주환원 확대 예고"
     url: "https://www.sentv.co.kr/article/view/sentv202608060079"
     source: "SEN"
----코스피가 7주 연속 하락하며 6200대에서 제자리걸음을 하고 있습니다. 시장이 꼽는 반전 카드는 삼성전자와 SK하이닉스, 이른바 '삼전닉스'의 대규모 [주주환원](/dictionary/shareholder-return/)입니다.
+---
+
+코스피가 7주 연속 하락하며 6200대에서 제자리걸음을 하고 있습니다. 시장이 꼽는 반전 카드는 삼성전자와 SK하이닉스, 이른바 '삼전닉스'의 대규모 [주주환원](/dictionary/shareholder-return/)입니다.
 
 > 💡 핵심 3줄 요약
 > - 코스피지수는 지난 7일 6258.77에 마감해 7주 연속 하락했습니다

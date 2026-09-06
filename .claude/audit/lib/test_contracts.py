@@ -51,6 +51,7 @@ from contracts import (  # noqa: E402
     check_self_review_budget,
     check_topic_report_format,
     check_duplicate_keys,
+    WRITING_STYLES_PATH,
 )
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -87,6 +88,17 @@ check("자가검토 항목 3개", count_self_review_items(WS), 3)
 check("예산 내 → 위반 0", check_self_review_budget(WS, 12), [])
 BIG = "## AI 흔적 자가검토\n" + "\n".join(f"{i}. 항목" for i in range(1, 14))
 check("13개 → 예산 위반", len(check_self_review_budget(BIG, 12)), 1)
+
+# 절 번호가 붙은 실제 형식. 위 WS 픽스처가 번호 없는 헤딩을 쓴 탓에 이 검사는
+# 도입 이후 줄곧 실제 파일에서 0개를 세고 있었고, 실패가 예외가 아니라
+# "여유 12개"라는 거짓 안심으로 나왔다. 픽스처가 현실과 다르면 검사는 통과한다.
+WS_NUM = WS.replace("## AI 흔적 자가검토", "## 7. AI 흔적 자가검토")
+check("번호 붙은 헤딩도 인식", count_self_review_items(WS_NUM), 3)
+
+# 픽스처가 아니라 저장소의 실제 파일을 센다 — 위와 같은 괴리를 다시 만들지 않는다.
+_ws_real = WRITING_STYLES_PATH.read_text(encoding="utf-8")
+check("실제 writing-styles.md에서 0개가 아님", count_self_review_items(_ws_real) > 0, True)
+check("실제 파일이 예산 안", check_self_review_budget(_ws_real, 12), [])
 
 print("check_topic_report_format")
 check("파일 부재 → 위반 0 (정상)", check_topic_report_format(None), [])

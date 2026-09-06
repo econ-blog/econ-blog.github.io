@@ -152,6 +152,64 @@ with tempfile.TemporaryDirectory() as tmp:
     tokens2 = [c["token"] for c in term_candidates(root, TERMS_Q3, 2, 3)]
     check("단일 포스트 토큰 제외", "고용" not in tokens2, True)
 
+
+# --- Q7 분량 / Q8 front matter 구분자 -------------------------------------
+from quality import (  # noqa: E402
+    body_length_violations, body_length_of, front_matter_delimiter_issues,
+    BODY_SOFT_MAX, BODY_HARD_MAX,
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    short = "가" * 100
+    soft = "가" * (BODY_SOFT_MAX + 50)
+    hard = "가" * (BODY_HARD_MAX + 50)
+    write(tmp, "posts", "short.md", FULL_POST.replace("본문\n", short + "\n"))
+    write(tmp, "posts", "soft.md", FULL_POST.replace("본문\n", soft + "\n"))
+    write(tmp, "posts", "hard.md", FULL_POST.replace("본문\n", hard + "\n"))
+
+    hits = {h["file"].split("/")[-1]: h for h in body_length_violations(root)}
+    check("목표 이내는 보고 안 함", "short.md" in hits, False)
+    check("soft 초과 보고", hits["soft.md"]["level"], "soft")
+    check("hard 초과 보고", hits["hard.md"]["level"], "hard")
+
+    check("단일 파일 판정 (통과)", body_length_of(root / "posts" / "short.md"), None)
+    check("단일 파일 판정 (hard)",
+          body_length_of(root / "posts" / "hard.md")["level"], "hard")
+
+    # 코드 스팬은 읽는 분량이 아니므로 세지 않는다.
+    fenced = "가" * 100 + "\n\n```\n" + "x" * (BODY_HARD_MAX + 500) + "\n```\n"
+    write(tmp, "posts", "fenced.md", FULL_POST.replace("본문\n", fenced))
+    check("펜스 코드는 분량에서 제외",
+          body_length_of(root / "posts" / "fenced.md"), None)
+
+    # 공지는 분량 규율 대상이 아니다.
+    notice = FULL_POST.replace('tags: ["금리"]', 'tags: ["공지"]')
+    write(tmp, "posts", "notice.md", notice.replace("본문\n", hard + "\n"))
+    check("공지는 면제", body_length_of(root / "posts" / "notice.md"), None)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "ok.md", FULL_POST)
+    check("정상 파일은 위반 없음", front_matter_delimiter_issues(root), [])
+
+    # 2026-09-06에 실제로 12파일에서 발견된 형태: 종료 구분자와 본문이 붙어 있다.
+    fused = FULL_POST.replace("---\n\n본문\n", "---본문\n")
+    write(tmp, "posts", "fused.md", fused)
+    issues = front_matter_delimiter_issues(root)
+    check("융합 구분자 적발", len(issues), 1)
+    check("적발 파일명", issues[0]["file"].endswith("fused.md"), True)
+
+    # 이 결함의 본질은 조용히 틀리는 것이다 — 예외가 아니라 ('', raw)로 돌아온다.
+    from mdtext import split_front_matter as _sfm  # noqa: E402
+    check("split_front_matter가 조용히 실패함을 고정",
+          _sfm(fused)[0], "")
+
+    write(tmp, "posts", "nohead.md", "제목 없이 시작하는 본문\n")
+    check("시작 구분자 없음도 적발",
+          any("시작" in i["issue"] for i in front_matter_delimiter_issues(root)), True)
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")
