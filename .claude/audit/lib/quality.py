@@ -16,9 +16,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contracts import WRITING_STYLES_PATH, count_self_review_items  # noqa: E402
 from internal_links import CONTENT_ROOT, TERMS_PATH, load_terms  # noqa: E402
 from kstdate import kst_today  # noqa: E402
-from mdtext import inventory, split_front_matter, strip_code_spans  # noqa: E402
+from mdtext import (  # noqa: E402
+    MD_LINK, inventory, split_front_matter, strip_code_spans,
+)
+# 1차 출처 호스트 목록은 numerics 가 단일 진리원이다 — 여기서 다시 세지 않는다.
+from numerics import is_primary as _is_primary_host  # noqa: E402
 
 DESC_MIN, DESC_MAX = 50, 160
+# Q7 본문 분량 — soft는 목표 이탈, hard는 발행 게이트가 잡는 선.
+BODY_SOFT_MAX, BODY_HARD_MAX = 2200, 2500
+# Q9 문장 리듬 — 변동계수 하한. 실측 25퍼센타일 0.403, 중앙 0.463 기준.
+RHYTHM_SOFT_MIN, RHYTHM_HARD_MIN = 0.40, 0.30
+# 소수점과 문장 끝을 가르는 신호는 마침표 앞 글자가 한글인지다(numerics 와 동일).
+SENT_END_Q = re.compile(r"(?<=[가-힣])\.(?=\s|$)")
+# 우리가 직접 계산했다고 본문이 명시한 자리. 원문 인용과 구분되는 유일한 표지다.
+DERIVED_MARK = re.compile(r"직접 계산|계산해 보면|환산하면|나눠 보면|따져 보면")
 
 FIELD = {
     "title": re.compile(r"^title:\s*\S", re.MULTILINE),
@@ -165,6 +177,196 @@ def bold_violations(content_root: Path) -> list[dict]:
     return out
 
 
+def body_length_violations(content_root: Path) -> list[dict]:
+    """Q7 — 본문 분량. 아무 규칙도 없어서 조용히 길어진 축이다.
+
+    2026-09-06 실측: 발행 48건의 본문이 전반부 평균 2,437자에서 최근 5건 평균
+    3,324자로 36% 늘었고, 최근 14건은 2,813자에서 3,715자까지 단조 증가했다.
+    분량은 `writing-styles.md`에 목표도 상한도 없던 유일한 축이다 — 회차 1이
+    확인한 인과("검사기가 붙은 규칙만 수렴한다")대로, 규칙도 검사기도 없으면
+    글은 길어지는 쪽으로만 표류한다.
+
+    임계는 구조가 강제하는 바닥에서 역산했다. 최근 14건 구간별 중앙값은
+    서론+3줄요약 423자 · 본문 H2 1~3 1,425자 · 투자 관점 1,017자다. 투자 관점은
+    시소표·인과 사슬·공부 포인트가 고정이라 압축 여지가 가장 작아 약 740자가
+    바닥이고, 나머지를 눌러도 전체 바닥은 약 2,090자다. 그래서 상한을 2,500자에
+    두면 바닥 위로 400자가 남는다 — 조이되 발행을 막지 않는 선이다.
+
+    본문 전체 글자수를 센다. 표·인용블록도 독자가 읽는 분량이므로 포함하고,
+    코드 스팬만 제외한다(마크다운 예시는 읽는 분량이 아니다).
+    공지는 분량 규율 대상이 아니다.
+    """
+    out = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        hit = body_length_of(path)
+        if hit:
+            hit["file"] = path.relative_to(content_root).as_posix()
+            out.append(hit)
+    return out
+
+
+def body_length_of(path: Path) -> dict | None:
+    """단일 포스트의 분량 판정. 목표 이내면 None. 발행 게이트(`--file`)가 쓴다."""
+    raw = path.read_text(encoding="utf-8")
+    if NOTICE_TAG.search(raw):
+        return None
+    _front, body = split_front_matter(raw)
+    chars = len(strip_code_spans(body).strip())
+    if chars <= BODY_SOFT_MAX:
+        return None
+    return {
+        "chars": chars,
+        "level": "hard" if chars > BODY_HARD_MAX else "soft",
+        "over": chars - BODY_SOFT_MAX,
+    }
+
+
+def front_matter_delimiter_issues(content_root: Path) -> list[dict]:
+    """Q8 — front matter 종료 구분자 위생.
+
+    2026-09-06에 12파일(포스트 9·사전 3)이 `---본문` 형태로 종료 구분자와 첫
+    본문 줄이 붙어 있는 것을 발견했다. Hugo는 이것을 관대하게 파싱해 사이트는
+    멀쩡했고, 그래서 아무도 몰랐다. 그러나 `mdtext.split_front_matter`는
+    `\\n---\\n`을 요구하므로 매칭에 실패했고, 실패하면 예외 대신 ('', raw)를
+    돌려준다 — front matter 전체가 본문으로 취급되며 그 사실은 어디에도
+    보고되지 않는다. Q1·Q6·Q7·numerics가 전부 그 12파일을 잘못 읽고 있었다.
+
+    조용히 틀리는 것이 이 결함의 본질이므로 재발을 여기서 잡는다.
+    """
+    out = []
+    for sub in ("posts", "dictionary"):
+        for path in sorted((content_root / sub).glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            raw = path.read_text(encoding="utf-8")
+            if not raw.startswith("---\n"):
+                out.append({
+                    "file": path.relative_to(content_root).as_posix(),
+                    "issue": "front matter 시작 구분자 없음",
+                })
+            elif split_front_matter(raw)[0] == "":
+                out.append({
+                    "file": path.relative_to(content_root).as_posix(),
+                    "issue": "종료 구분자가 본문과 붙어 있음 (`---본문`)",
+                })
+    return out
+
+
+def _prose_sentence_lengths(body: str) -> list[int]:
+    """산문 문단의 문장 길이. 표·인용·헤딩·불릿은 리듬 대상이 아니라 제외한다."""
+    out = []
+    for line in body.split("\n"):
+        s = line.strip()
+        if not s or s.startswith(("#", "|", ">", "-", "*", "```")):
+            continue
+        for sent in SENT_END_Q.split(s):
+            sent = sent.strip()
+            if len(sent) >= 8:
+                out.append(len(sent))
+    return out
+
+
+def sentence_rhythm(path: Path) -> dict | None:
+    """Q9 — 문장 길이 변동계수(CV). 낮을수록 균일하고, 균일함이 AI 티의 핵심이다.
+
+    AI 탐지기가 실제로 보는 것은 어휘가 아니라 통계적 리듬(burstiness)이다.
+    `writing-styles.md` §7-5가 "문장 길이가 획일적인가"를 이미 묻고 있었지만
+    검사기가 없었다 — 회차 1의 인과대로 그런 규칙은 무작위로 어겨진다.
+
+    2026-09-06 실측(포스트 46건): CV 최소 0.255 · 25% 0.403 · 중앙 0.463 ·
+    최대 0.837. 사람이 쓴 한국어 산문은 대체로 0.5 이상이다. 하한을 25퍼센타일
+    근처인 0.40(soft)에 두고, 실제로 발행을 막는 선은 0.30(hard)으로 둔다 —
+    현재 코퍼스에서 0.30 미만은 2건뿐이라 게이트가 상시로 걸리지 않는다.
+    """
+    raw = path.read_text(encoding="utf-8")
+    if NOTICE_TAG.search(raw):
+        return None
+    _front, body = split_front_matter(raw)
+    lengths = _prose_sentence_lengths(strip_code_spans(body))
+    if len(lengths) < 5:
+        return None  # 표본이 없으면 판정하지 않는다
+    mean = sum(lengths) / len(lengths)
+    var = sum((x - mean) ** 2 for x in lengths) / len(lengths)
+    cv = (var ** 0.5) / mean if mean else 0.0
+    level = "ok"
+    if cv < RHYTHM_HARD_MIN:
+        level = "hard"
+    elif cv < RHYTHM_SOFT_MIN:
+        level = "soft"
+    return {
+        "cv": round(cv, 3),
+        "sentences": len(lengths),
+        "mean_len": round(mean, 1),
+        "level": level,
+    }
+
+
+def rhythm_violations(content_root: Path) -> list[dict]:
+    """Q9 전수. 목표 미달(soft·hard)만 낸다."""
+    out = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        r = sentence_rhythm(path)
+        if r and r["level"] != "ok":
+            r["file"] = path.relative_to(content_root).as_posix()
+            out.append(r)
+    return out
+
+
+def information_gain(path: Path) -> dict:
+    """Q10 — 정보 이득. 원문을 옮겨 적기만 한 글인지 본다.
+
+    2026년 3월 코어 업데이트 이후 검색이 실제로 가르는 축은 "AI가 썼는가"가
+    아니라 "이 글에만 있는 것이 있는가"다. 경쟁자가 복사할 수 없는 것은
+    1차 출처를 직접 짚은 수치와 우리가 계산한 값 둘뿐이다.
+
+    2026-09-06 실측: 1차 출처 링크를 가진 포스트는 48건 중 14건(29%)뿐이다.
+    그래서 이것은 게이트가 아니라 계측이다 — 지금 막으면 71%가 보류된다.
+    먼저 세고, 비율이 올라온 뒤에 조인다.
+    """
+    raw = path.read_text(encoding="utf-8")
+    _front, body = split_front_matter(raw)
+    body = strip_code_spans(body)
+    hosts = []
+    for _anchor, target in MD_LINK.findall(body):
+        m = re.match(r"^https?://([^/]+)", target)
+        if m:
+            hosts.append(m.group(1))
+    primary = sorted({h for h in hosts if _is_primary_host(h)})
+    derived = len(DERIVED_MARK.findall(body))
+    return {
+        "primary_links": len(primary),
+        "primary_hosts": primary,
+        "derived_figures": derived,
+        "has_gain": bool(primary) or derived > 0,
+    }
+
+
+def _information_gain_summary(content_root: Path) -> dict:
+    """Q10 전수 요약. 게이트가 아니라 비율 계측이다."""
+    rows = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        raw = path.read_text(encoding="utf-8")
+        if NOTICE_TAG.search(raw):
+            continue
+        g = information_gain(path)
+        g["file"] = path.relative_to(content_root).as_posix()
+        rows.append(g)
+    total = len(rows)
+    with_gain = sum(1 for r in rows if r["has_gain"])
+    return {
+        "posts": total,
+        "with_gain": with_gain,
+        "ratio": round(with_gain / total, 3) if total else 0.0,
+        "without_gain": [r["file"] for r in rows if not r["has_gain"]][:20],
+    }
+
+
 def trim_josa(tok: str) -> str:
     """한국어 조사 접미사를 잘라내어 동일 명사의 격변화를 통합한다."""
     if len(tok) <= 2:
@@ -215,7 +417,40 @@ def term_candidates(
     return out
 
 
+def _file_mode(target: Path) -> int:
+    """포스트 1건의 발행 게이트 — Q7 분량 · Q9 리듬 · Q10 정보 이득.
+
+    `total` 은 hard 인 축의 수다. Q10 은 계측이므로 total 에 넣지 않는다 —
+    현재 코퍼스의 37%만 충족하므로 게이트로 쓰면 대부분이 보류된다.
+    """
+    hit = body_length_of(target)
+    chars = hit["chars"] if hit else len(
+        strip_code_spans(split_front_matter(
+            target.read_text(encoding="utf-8"))[1]).strip())
+    q7_level = hit["level"] if hit else "ok"
+
+    rhythm = sentence_rhythm(target)
+    q9_level = rhythm["level"] if rhythm else "ok"
+
+    hard = sum(1 for lv in (q7_level, q9_level) if lv == "hard")
+    print(json.dumps({
+        "file": target.as_posix(),
+        "Q7": {
+            "chars": chars,
+            "target_max": BODY_SOFT_MAX,
+            "hard_max": BODY_HARD_MAX,
+            "level": q7_level,
+        },
+        "Q9": rhythm or {"level": "ok", "note": "문장 5개 미만 — 판정 안 함"},
+        "Q10": information_gain(target),
+        "total": hard,
+    }, ensure_ascii=False, indent=2))
+    return 1 if hard else 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--file":
+        sys.exit(_file_mode(Path(sys.argv[2])))
     today = sys.argv[1] if len(sys.argv) > 1 else kst_today()
     terms = load_terms(TERMS_PATH.read_text(encoding="utf-8"))
     files = sorted((CONTENT_ROOT / "posts").glob("*.md")) + \
@@ -234,6 +469,10 @@ if __name__ == "__main__":
         "Q4": stale_drafts(CONTENT_ROOT, today),
         "Q5": self_review_budget(ws),
         "Q6": bold_violations(CONTENT_ROOT),
+        "Q7": body_length_violations(CONTENT_ROOT),
+        "Q8": front_matter_delimiter_issues(CONTENT_ROOT),
+        "Q9": rhythm_violations(CONTENT_ROOT),
+        "Q10": _information_gain_summary(CONTENT_ROOT),
         "P2": internal_link_density(CONTENT_ROOT),
     }, ensure_ascii=False, indent=2))
 

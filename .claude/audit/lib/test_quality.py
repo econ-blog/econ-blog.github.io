@@ -152,6 +152,127 @@ with tempfile.TemporaryDirectory() as tmp:
     tokens2 = [c["token"] for c in term_candidates(root, TERMS_Q3, 2, 3)]
     check("단일 포스트 토큰 제외", "고용" not in tokens2, True)
 
+
+# --- Q7 분량 / Q8 front matter 구분자 -------------------------------------
+from quality import (  # noqa: E402
+    body_length_violations, body_length_of, front_matter_delimiter_issues,
+    BODY_SOFT_MAX, BODY_HARD_MAX,
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    short = "가" * 100
+    soft = "가" * (BODY_SOFT_MAX + 50)
+    hard = "가" * (BODY_HARD_MAX + 50)
+    write(tmp, "posts", "short.md", FULL_POST.replace("본문\n", short + "\n"))
+    write(tmp, "posts", "soft.md", FULL_POST.replace("본문\n", soft + "\n"))
+    write(tmp, "posts", "hard.md", FULL_POST.replace("본문\n", hard + "\n"))
+
+    hits = {h["file"].split("/")[-1]: h for h in body_length_violations(root)}
+    check("목표 이내는 보고 안 함", "short.md" in hits, False)
+    check("soft 초과 보고", hits["soft.md"]["level"], "soft")
+    check("hard 초과 보고", hits["hard.md"]["level"], "hard")
+
+    check("단일 파일 판정 (통과)", body_length_of(root / "posts" / "short.md"), None)
+    check("단일 파일 판정 (hard)",
+          body_length_of(root / "posts" / "hard.md")["level"], "hard")
+
+    # 코드 스팬은 읽는 분량이 아니므로 세지 않는다.
+    fenced = "가" * 100 + "\n\n```\n" + "x" * (BODY_HARD_MAX + 500) + "\n```\n"
+    write(tmp, "posts", "fenced.md", FULL_POST.replace("본문\n", fenced))
+    check("펜스 코드는 분량에서 제외",
+          body_length_of(root / "posts" / "fenced.md"), None)
+
+    # 공지는 분량 규율 대상이 아니다.
+    notice = FULL_POST.replace('tags: ["금리"]', 'tags: ["공지"]')
+    write(tmp, "posts", "notice.md", notice.replace("본문\n", hard + "\n"))
+    check("공지는 면제", body_length_of(root / "posts" / "notice.md"), None)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "ok.md", FULL_POST)
+    check("정상 파일은 위반 없음", front_matter_delimiter_issues(root), [])
+
+    # 2026-09-06에 실제로 12파일에서 발견된 형태: 종료 구분자와 본문이 붙어 있다.
+    fused = FULL_POST.replace("---\n\n본문\n", "---본문\n")
+    write(tmp, "posts", "fused.md", fused)
+    issues = front_matter_delimiter_issues(root)
+    check("융합 구분자 적발", len(issues), 1)
+    check("적발 파일명", issues[0]["file"].endswith("fused.md"), True)
+
+    # 이 결함의 본질은 조용히 틀리는 것이다 — 예외가 아니라 ('', raw)로 돌아온다.
+    from mdtext import split_front_matter as _sfm  # noqa: E402
+    check("split_front_matter가 조용히 실패함을 고정",
+          _sfm(fused)[0], "")
+
+    write(tmp, "posts", "nohead.md", "제목 없이 시작하는 본문\n")
+    check("시작 구분자 없음도 적발",
+          any("시작" in i["issue"] for i in front_matter_delimiter_issues(root)), True)
+
+
+
+# --- Q9 문장 리듬 / Q10 정보 이득 ----------------------------------------
+from quality import (  # noqa: E402
+    sentence_rhythm, rhythm_violations, information_gain,
+    RHYTHM_SOFT_MIN, RHYTHM_HARD_MIN,
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    # 모든 문장이 같은 길이 -> CV 0 -> hard
+    uniform = "\n".join(["가" * 40 + "습니다." for _ in range(10)])
+    write(tmp, "posts", "uniform.md", FULL_POST.replace("본문\n", uniform + "\n"))
+    r = sentence_rhythm(root / "posts" / "uniform.md")
+    check("균일한 글은 CV 0에 가깝다", r["cv"] < 0.05, True)
+    check("균일한 글은 hard", r["level"], "hard")
+
+    # 길이를 크게 섞으면 통과
+    varied = "\n".join(
+        "가" * n + "습니다." for n in (12, 90, 25, 130, 40, 15, 75, 110, 30, 60))
+    write(tmp, "posts", "varied.md", FULL_POST.replace("본문\n", varied + "\n"))
+    r2 = sentence_rhythm(root / "posts" / "varied.md")
+    check("리듬 있는 글은 통과", r2["level"], "ok")
+    check("CV가 하한 위", r2["cv"] > RHYTHM_SOFT_MIN, True)
+
+    # 표본이 적으면 판정하지 않는다 (없는 위반을 만들지 않는다)
+    write(tmp, "posts", "tiny.md", FULL_POST.replace("본문\n", "가" * 30 + "습니다.\n"))
+    check("문장 5개 미만은 판정 안 함", sentence_rhythm(root / "posts" / "tiny.md"), None)
+
+    # 표·인용·헤딩은 리듬 표본이 아니다
+    tabled = uniform + "\n\n| 지표 | 값 |\n|---|---|\n| 금리 | 3.0% |\n"
+    write(tmp, "posts", "tabled.md", FULL_POST.replace("본문\n", tabled + "\n"))
+    check("표 행은 문장 수에 안 들어감",
+          sentence_rhythm(root / "posts" / "tabled.md")["sentences"], 10)
+
+    names = [v["file"].split("/")[-1] for v in rhythm_violations(root)]
+    check("전수에 균일한 글 포함", "uniform.md" in names, True)
+    check("전수에 리듬 있는 글 제외", "varied.md" in names, False)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    write(tmp, "posts", "none.md", FULL_POST)
+    g = information_gain(root / "posts" / "none.md")
+    check("이득 없는 글", g["has_gain"], False)
+
+    prim = "한국은행 [기준금리](https://ecos.bok.or.kr/x) 자료입니다.\n"
+    write(tmp, "posts", "prim.md", FULL_POST.replace("본문\n", prim))
+    g2 = information_gain(root / "posts" / "prim.md")
+    check("1차 출처 링크 인식", g2["primary_links"], 1)
+    check("1차 출처면 이득 있음", g2["has_gain"], True)
+
+    # 뉴스 링크는 1차 출처가 아니다
+    news = "기사 [원문](https://www.hankyung.com/x) 입니다.\n"
+    write(tmp, "posts", "news.md", FULL_POST.replace("본문\n", news))
+    check("뉴스는 1차 출처 아님",
+          information_gain(root / "posts" / "news.md")["has_gain"], False)
+
+    calc = "직접 계산해 보면 월 3만원 차이가 납니다.\n"
+    write(tmp, "posts", "calc.md", FULL_POST.replace("본문\n", calc))
+    g3 = information_gain(root / "posts" / "calc.md")
+    check("직접 계산 표지 인식", g3["derived_figures"], 1)
+    check("계산만 있어도 이득 있음", g3["has_gain"], True)
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)}건 실패:")

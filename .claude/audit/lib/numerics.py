@@ -160,6 +160,49 @@ def n1_missing_asof(raw: str) -> list[dict]:
     ]
 
 
+def protected_sentences(raw: str) -> list[dict]:
+    """윤문이 쪼개면 안 되는 문장. `--protected` 로 humanize 단계에 넘긴다.
+
+    2026-08-24~09-06 실측에서 `humanize-korean` 윤문 11회 중 4회가 롤백됐고
+    사유는 매번 같았다 — 리듬을 만들려고 문장을 분할하자 수치와 기준일이
+    서로 다른 문장으로 갈라졌고, N1의 scope가 문장 단위라 없던 위반이 생겼다.
+    수치를 바꾼 것이 아닌데도 전량 롤백되므로, 사이트의 주된 AI 티 제거 수단이
+    절반쯤 꺼져 있었다.
+
+    사후에 잡는 대신 사전에 알려 준다. 여기서 나오는 문장은 표현을 바꿔도 되지만
+    **분할하면 안 되고, 기준일이 수치와 같은 문장에 남아야 한다.**
+
+    표 행은 제외한다 — 윤문 범위가 산문 문단뿐이라 애초에 건드리지 않는다.
+    """
+    out, seen = [], set()
+    for c in claims(raw):
+        if c["in_table"]:
+            continue
+        scope = c["scope"]
+        if not ASOF.search(scope):
+            continue  # 기준일이 없으면 이미 N1이며 윤문이 만든 문제가 아니다
+        key = (c["line"], scope)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "line": c["line"],
+            "sentence": scope,
+            "asof": ASOF.search(scope).group(0),
+            "rule": "분할 금지 — 수치와 기준일이 같은 문장에 남아야 한다",
+        })
+    return out
+
+
+def new_n1_after(before: str, after: str) -> list[dict]:
+    """윤문 전후 N1 증가분. 원래 있던 위반은 윤문의 잘못이 아니므로 뺀다."""
+    old = {(c["value"], c["unit"], c["scope"][:30]) for c in n1_missing_asof(before)}
+    return [
+        c for c in n1_missing_asof(after)
+        if (c["value"], c["unit"], c["scope"][:30]) not in old
+    ]
+
+
 def is_primary(host: str) -> bool:
     """1차 출처 호스트인가. 서브도메인은 허용하되 상위 도메인은 아니다."""
     host = host.lower()
@@ -500,7 +543,7 @@ def check_file(path: Path) -> dict:
     return out
 
 
-USAGE = "usage: numerics.py [--file <경로>]"
+USAGE = "usage: numerics.py [--file <경로>] [--protected <경로>] [--compare <전> <후>]"
 
 
 def main() -> None:
@@ -511,6 +554,26 @@ def main() -> None:
         if len(argv) != 2:
             sys.exit(f"{USAGE}\n--file 은 경로 인자 하나를 요구한다.")
         print(json.dumps(check_file(Path(argv[1])), ensure_ascii=False, indent=2))
+        return
+    if argv[:1] == ["--protected"]:
+        if len(argv) != 2:
+            sys.exit(f"{USAGE}\n--protected 는 경로 인자 하나를 요구한다.")
+        raw = Path(argv[1]).read_text(encoding="utf-8")
+        print(json.dumps({
+            "file": argv[1],
+            "protected": protected_sentences(raw),
+        }, ensure_ascii=False, indent=2))
+        return
+    if argv[:1] == ["--compare"]:
+        if len(argv) != 3:
+            sys.exit(f"{USAGE}\n--compare 는 윤문 전·후 두 경로를 요구한다.")
+        before = Path(argv[1]).read_text(encoding="utf-8")
+        after = Path(argv[2]).read_text(encoding="utf-8")
+        added = new_n1_after(before, after)
+        print(json.dumps({
+            "added_n1": added,
+            "total": len(added),
+        }, ensure_ascii=False, indent=2))
         return
     if argv:
         sys.exit(f"{USAGE}\n알 수 없는 인자: {' '.join(argv)}")

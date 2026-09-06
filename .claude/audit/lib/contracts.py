@@ -29,7 +29,10 @@ DICT_DIR = CONTENT_ROOT / "dictionary"
 TERMS_PATH = DICT_DIR / "_terms.yaml"
 TOPIC_REPORT_PATH = REPO_ROOT / ".claude/audit/topic-report.md"
 
-SELF_REVIEW_HEADING = "## AI 흔적 자가검토"
+# 절 번호가 붙어도("## 7. AI 흔적 자가검토") 찾도록 정규식으로 둔다.
+# 상수를 문자열로 두었던 탓에 이 검사는 도입 이후 줄곧 0개를 세고 있었다 —
+# 실패가 예외가 아니라 "항목 0개, 예산 12개 여유"라는 거짓 안심으로 나왔다.
+SELF_REVIEW_HEADING = re.compile(r"^## (?:\d+\.\s*)?AI 흔적 자가검토\s*$", re.MULTILINE)
 NUMBERED_ITEM = re.compile(r"^\s*(\d+)\.\s+\S", re.MULTILINE)
 CREATED_AT = re.compile(r"^생성일:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
 # 부호를 선택으로 둔다 — `[+-]\d+`만 받으면 `(조정치: 9)`처럼 표기가 어긋난
@@ -103,10 +106,10 @@ def check_duplicate_keys(terms_text: str) -> list[dict]:
 
 def count_self_review_items(writing_styles_text: str) -> int:
     """'## AI 흔적 자가검토' 아래 번호 항목 수. 다음 ## 헤딩 전까지."""
-    idx = writing_styles_text.find(SELF_REVIEW_HEADING)
-    if idx < 0:
+    m = SELF_REVIEW_HEADING.search(writing_styles_text)
+    if not m:
         return 0
-    rest = writing_styles_text[idx + len(SELF_REVIEW_HEADING):]
+    rest = writing_styles_text[m.end():]
     nxt = rest.find("\n## ")
     section = rest if nxt < 0 else rest[:nxt]
     return len(NUMBERED_ITEM.findall(section))
