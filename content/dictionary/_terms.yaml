@@ -161,3 +161,7 @@ stablecoin:
 consumer-price-index:
   title: "소비자물가지수"
   aliases: ["CPI", "소비자물가", "소비자 물가지수"]
+
+yen-carry-trade:
+  title: "엔캐리 트레이드"
+  aliases: ["엔캐리", "엔 캐리 트레이드", "yen carry trade"]
