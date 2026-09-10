@@ -165,3 +165,7 @@ consumer-price-index:
 yen-carry-trade:
   title: "엔캐리 트레이드"
   aliases: ["엔캐리", "엔 캐리 트레이드", "yen carry trade"]
+
+final-payment-loan:
+  title: "잔금대출"
+  aliases: ["잔금 대출", "잔금 대출금"]
