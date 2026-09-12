@@ -9,6 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from quality import front_matter_issues  # noqa: E402
+from quality import (  # noqa: E402
+    date_anomalies, gate_claim_mismatches, publish_date_issue,
+)
 
 FAILED = []
 
@@ -272,6 +275,54 @@ with tempfile.TemporaryDirectory() as tmp:
     check("직접 계산 표지 인식", g3["derived_figures"], 1)
     check("계산만 있어도 이득 있음", g3["has_gain"], True)
 
+
+print("Q11 — 발행일이 KST 오늘인가 (파일 모드 게이트)")
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    ok_post = write(tmp, "posts", "ok.md",
+                    FULL_POST.replace("date: 2026-07-21T19:30:00+09:00",
+                                      "date: 2026-09-13T05:15:00+09:00"))
+    check("오늘이면 위반 없음", publish_date_issue(ok_post, "2026-09-13"), None)
+
+    late = write(tmp, "posts", "late.md",
+                 FULL_POST.replace("date: 2026-07-21T19:30:00+09:00",
+                                   "date: 2026-09-12T05:15:00+09:00"))
+    hit = publish_date_issue(late, "2026-09-13")
+    check("하루 밀리면 hard", hit and hit["level"], "hard")
+    check("기대값을 알려 준다", hit and hit["expected"], "2026-09-13")
+    check("실제값을 알려 준다", hit and hit["got"], "2026-09-12")
+
+print("Q11 — 코퍼스 모드 날짜 이상")
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    def dated(name, d):
+        return write(tmp, "posts", name,
+                     FULL_POST.replace("date: 2026-07-21T19:30:00+09:00",
+                                       f"date: {d}T05:15:00+09:00"))
+    dated("a.md", "2026-09-11")
+    dated("b.md", "2026-09-12")
+    check("정상 코퍼스는 빈 목록", date_anomalies(root, "2026-09-13"), [])
+    dated("c.md", "2026-09-12")
+    got = date_anomalies(root, "2026-09-13")
+    check("같은 날짜 두 건을 잡는다", [g.get("date") for g in got], ["2026-09-12"])
+    dated("d.md", "2026-09-20")
+    check("미래 날짜를 잡는다",
+          any("미래" in g["issue"] for g in date_anomalies(root, "2026-09-13")), True)
+
+print("Q12 — 게이트 발효 이후 발행분만 센다")
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    long_body = "가나다라마바사아자차카타파하 " * 200  # 2,500자 초과
+    old = FULL_POST.replace("date: 2026-07-21T19:30:00+09:00",
+                            "date: 2026-08-01T05:15:00+09:00")
+    write(tmp, "posts", "old.md", old.replace("본문\n", long_body + "\n"))
+    check("게이트 발효 전 긴 글은 누수가 아니다",
+          gate_claim_mismatches(root), [])
+    new = FULL_POST.replace("date: 2026-07-21T19:30:00+09:00",
+                            "date: 2026-09-10T05:15:00+09:00")
+    write(tmp, "posts", "new.md", new.replace("본문\n", long_body + "\n"))
+    got = gate_claim_mismatches(root)
+    check("발효 후 긴 글은 누수로 잡는다", [g["file"] for g in got], ["posts/new.md"])
 
 print()
 if FAILED:

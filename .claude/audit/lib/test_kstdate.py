@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kstdate import KST, kst_today  # noqa: E402
+from kstdate import KST, kst_stamp, kst_today  # noqa: E402
 
 FAILED = []
 
@@ -56,6 +56,19 @@ check("YYYY-MM-DD 형식", len(today) == 10 and today[4] == "-" and today[7] == 
 check("UTC 오늘과 최대 1일 차",
       abs((datetime.strptime(today, "%Y-%m-%d").date()
            - datetime.now(UTC).date()).days) <= 1, True)
+
+print("kst_stamp — front matter 의 date 값")
+check("KST 00:00~09:00 구간은 KST 날짜로 찍는다",
+      kst_stamp(datetime(2026, 9, 12, 20, 31, tzinfo=UTC)),
+      "2026-09-13T05:31:00+09:00")
+check("stamp 의 날짜부는 kst_today 와 언제나 같다",
+      kst_stamp(datetime(2026, 9, 12, 20, 31, tzinfo=UTC))[:10],
+      kst_today(datetime(2026, 9, 12, 20, 31, tzinfo=UTC)))
+try:
+    kst_stamp(datetime(2026, 9, 12, 20, 31))
+    check("kst_stamp 도 naive 는 거절", "예외 없음", "ValueError")
+except ValueError:
+    check("kst_stamp 도 naive 는 거절", "ValueError", "ValueError")
 
 print()
 if FAILED:

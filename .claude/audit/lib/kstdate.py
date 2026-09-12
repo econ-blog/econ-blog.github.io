@@ -11,8 +11,10 @@ KST 00:00–09:00 구간의 실행이 **전날** 날짜를 찍는다. 주간 감
 각자 갖는다 — 값은 같아야 한다.
 
 사용:
-    .venv/bin/python .claude/audit/lib/kstdate.py   # YYYY-MM-DD (KST)
+    .venv/bin/python .claude/audit/lib/kstdate.py           # YYYY-MM-DD (KST)
+    .venv/bin/python .claude/audit/lib/kstdate.py --stamp   # front matter 의 date: 값 그대로
 """
+import sys
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
@@ -30,5 +32,23 @@ def kst_today(now: datetime | None = None) -> str:
     return moment.astimezone(KST).strftime("%Y-%m-%d")
 
 
+def kst_stamp(now: datetime | None = None) -> str:
+    """포스트 front matter 의 `date:` 값 — `YYYY-MM-DDTHH:MM:SS+09:00`.
+
+    2026-09-13 발행분이 `date: 2026-09-12`로 나갔다. 하루가 밀린 것도 문제지만
+    진짜 문제는 **같은 날 두 건, 빈 날 하루**가 되어 발행 연속성 계측이
+    결번을 잘못 세게 된 것이다. 원인은 하나다 — `draft.md`가 날짜를
+    `<현재시각 KST>`라고만 적어 두고 아무 헬퍼도 부르지 않았다. 사람이든
+    모델이든 손으로 적는 값은 언젠가 틀린다. 그래서 여기서 찍어 준다.
+
+    `kst_today()`와 같은 시각을 본다 — 두 값이 갈리면 게이트(quality Q11)가
+    스스로를 못 믿게 되므로 상수도 구현도 하나로 둔다.
+    """
+    moment = datetime.now(timezone.utc) if now is None else now
+    if moment.tzinfo is None:
+        raise ValueError("naive datetime은 받지 않는다 — tz-aware로 넘긴다")
+    return moment.astimezone(KST).strftime("%Y-%m-%dT%H:%M:%S+09:00")
+
+
 if __name__ == "__main__":
-    print(kst_today())
+    print(kst_stamp() if "--stamp" in sys.argv[1:] else kst_today())

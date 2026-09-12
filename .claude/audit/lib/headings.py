@@ -9,8 +9,12 @@
 규약: 표준 라이브러리 + 정규식만(`AGENTS.md`의 「.claude/audit/lib/ 규약」). 형태소 분석기를
 쓰지 않으므로 조사만 잘라 낸다 — 어미는 건드리지 않는다.
 
+`--all`은 그 예외다. 격주 점검이 backlog 크기를 **세기 위해** 부르는 읽기 전용
+집계이며, 발행 경로에는 배선하지 않는다. 세지 못하면 줄었는지도 알 수 없다.
+
 사용:
     .venv/bin/python .claude/audit/lib/headings.py --file content/posts/<slug>.md
+    .venv/bin/python .claude/audit/lib/headings.py --all    # 코퍼스 집계 (점검 전용)
 """
 import json
 import re
@@ -34,6 +38,7 @@ TITLE = re.compile(r'^title:\s*"(.*)"\s*$', re.MULTILINE)
 TOKEN = re.compile(r"[가-힣A-Za-z0-9]{2,}")
 PARTICLE = re.compile(r"(으로|에서|에게|까지|부터|은|는|이|가|을|를|의|에|도|와|과|로)$")
 PUNCT = re.compile(r"[\s.,!?·…\-—:;'\"()\[\]]")
+NOTICE_TAG = re.compile(r'^tags:\s*\[[^\]]*"공지"', re.MULTILINE)
 
 
 def _norm(text: str) -> str:
@@ -102,12 +107,38 @@ def check_file(path: Path) -> dict:
     return {"file": path.as_posix(), "issues": issues, "total": len(issues)}
 
 
-USAGE = "usage: headings.py --file <경로>"
+USAGE = "usage: headings.py --file <경로> | --all"
+POSTS_ROOT = Path(__file__).resolve().parents[3] / "content" / "posts"
+
+
+def check_all(posts_root: Path = POSTS_ROOT) -> dict:
+    """코퍼스 전수 집계. 섹션 파일(`_`)과 공지는 4단 구성 대상이 아니므로 뺀다."""
+    files = []
+    counts: dict[str, int] = {}
+    for path in sorted(posts_root.glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        if NOTICE_TAG.search(path.read_text(encoding="utf-8")):
+            continue
+        got = check_file(path)
+        if got["total"]:
+            files.append(got)
+            for issue in got["issues"]:
+                counts[issue["check"]] = counts.get(issue["check"], 0) + 1
+    return {
+        "files": len(files),
+        "counts": counts,
+        "total": sum(counts.values()),
+        "rows": files,
+    }
 
 
 def main() -> None:
     argv = sys.argv[1:]
     # numerics.py 와 같은 규약 — 알아듣지 못한 호출을 통과로 흘리지 않는다.
+    if argv[:1] == ["--all"] and len(argv) == 1:
+        print(json.dumps(check_all(), ensure_ascii=False, indent=2))
+        return
     if argv[:1] != ["--file"] or len(argv) != 2:
         sys.exit(USAGE)
     print(json.dumps(check_file(Path(argv[1])), ensure_ascii=False, indent=2))

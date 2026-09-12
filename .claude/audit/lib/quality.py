@@ -417,11 +417,117 @@ def term_candidates(
     return out
 
 
+DATE_FIELD = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
+# Q7·Q9 게이트가 `daily-post.md`에 배선돼 발효된 첫 발행일(병합 4551f56, 2026-09-06).
+# 그 이전 글이 지금 임계로 hard 인 것은 게이트 누수가 아니라 알려진 backlog다.
+GATE_EFFECTIVE = "2026-09-07"
+
+
+def publish_date_of(path: Path) -> str | None:
+    """front matter 의 `date:` 날짜 부분. 없으면 None."""
+    front, _ = split_front_matter(path.read_text(encoding="utf-8"))
+    m = DATE_FIELD.search(front)
+    return m.group(1) if m else None
+
+
+def publish_date_issue(target: Path, today: str) -> dict | None:
+    """Q11(파일 모드) — 발행하려는 글의 `date:`가 KST 오늘인가.
+
+    2026-09-13 05:31 KST 에 나간 글이 `date: 2026-09-12`를 달고 발행됐다.
+    그 하루 밀림 자체는 사소하지만 결과가 사소하지 않다 — 09-12 에 두 건,
+    09-13 에 0 건이 되어 **발행 연속성 계측이 있지도 않은 결번을 세게 된다.**
+    연속 발행은 이 시스템에서 가장 비싼 자산이고, 그 자산을 재는 자가
+    거짓으로 울리면 다음 회차는 없는 고장을 쫓는다.
+
+    원인은 회차 1이 세운 인과의 다섯 번째 사례다(볼드·분량·리듬·고정요소에
+    이어): `draft.md`가 `date: <현재시각 KST, +09:00>`라고만 적고 어떤
+    헬퍼도 부르지 않았다. 검사기 없는 규칙은 지켜지지 않는다.
+
+    hard 로 둔다. 고치는 데 판단이 필요 없고(`kstdate.py --stamp` 한 줄),
+    그래서 게이트에 걸려도 그 회차 안에서 닫힌다 — 결번을 만들지 않는다.
+    """
+    got = publish_date_of(target)
+    if got is None:
+        return {"level": "hard", "expected": today, "got": None,
+                "note": "front matter 에 date 가 없다"}
+    if got != today:
+        return {"level": "hard", "expected": today, "got": got,
+                "note": "`.venv/bin/python .claude/audit/lib/kstdate.py --stamp` 값으로 고친다"}
+    return None
+
+
+def date_anomalies(content_root: Path, today: str) -> list[dict]:
+    """Q11(코퍼스 모드) — 같은 날짜 두 건, 미래 날짜, 날짜 없음.
+
+    파일 모드가 막지 못하고 지나간 것이 여기 흔적으로 남는다. 중복 날짜는
+    "그날 하나도 안 나갔다"와 짝을 이루므로, 연속성을 셀 때 이 목록을 먼저
+    본다.
+    """
+    seen: dict[str, list[str]] = {}
+    out = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        raw = path.read_text(encoding="utf-8")
+        if NOTICE_TAG.search(raw):
+            continue  # 공지는 발행 리듬의 일부가 아니다
+        rel = path.relative_to(content_root).as_posix()
+        got = publish_date_of(path)
+        if got is None:
+            out.append({"file": rel, "issue": "date 없음"})
+            continue
+        if got > today:
+            out.append({"file": rel, "issue": f"미래 날짜 {got}"})
+        seen.setdefault(got, []).append(rel)
+    for day, files in sorted(seen.items()):
+        if len(files) > 1:
+            out.append({"date": day, "issue": f"같은 날짜 {len(files)}건",
+                        "files": files})
+    return out
+
+
+def gate_claim_mismatches(content_root: Path) -> list[dict]:
+    """Q12 — 발행된 글 중 지금 게이트를 다시 돌리면 hard 인 것.
+
+    커밋 본문의 `검사: 통과`를 검증하는 장치가 하나도 없었다. 실제로
+    2026-09-07 발행분은 Q7 2,543자(hard)인데 `검사: 통과`로 나갔다.
+    게이트가 돌지 않았는지 윤문 뒤 재검사를 건너뛰었는지는 여기서 알 수
+    없지만, **알 수 없다는 것이 문제다** — 게이트는 통과했다고 말하는
+    쪽이 아니라 다시 세어 보는 쪽이 진실이어야 한다.
+
+    계측이고 게이트가 아니다. 여기 뜬 글은 이미 발행됐으므로 고칠 대상은
+    그 글이 아니라 파이프라인이다. 게이트 발효(`GATE_EFFECTIVE`) 이후
+    발행분만 센다 — 그 전 글까지 세면 알려진 backlog 36건에 묻혀
+    정작 봐야 할 한 건이 안 보인다.
+    """
+    out = []
+    for path in sorted((content_root / "posts").glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        raw = path.read_text(encoding="utf-8")
+        if re.search(r"^draft:\s*true\s*$", raw, re.MULTILINE):
+            continue
+        published = publish_date_of(path)
+        if not published or published < GATE_EFFECTIVE:
+            continue  # 게이트 발효 전 글은 backlog 이지 누수가 아니다
+        hit = body_length_of(path)
+        rhythm = sentence_rhythm(path)
+        axes = []
+        if hit and hit["level"] == "hard":
+            axes.append(f"Q7 {hit['chars']}자")
+        if rhythm and rhythm["level"] == "hard":
+            axes.append(f"Q9 cv {rhythm['cv']}")
+        if axes:
+            out.append({"file": path.relative_to(content_root).as_posix(),
+                        "hard": axes})
+    return out
+
+
 def _file_mode(target: Path) -> int:
-    """포스트 1건의 발행 게이트 — Q7 분량 · Q9 리듬 · Q10 정보 이득.
+    """포스트 1건의 발행 게이트 — Q7 분량 · Q9 리듬 · Q11 발행일 (· Q10 계측).
 
     `total` 은 hard 인 축의 수다. Q10 은 계측이므로 total 에 넣지 않는다 —
-    현재 코퍼스의 37%만 충족하므로 게이트로 쓰면 대부분이 보류된다.
+    현재 코퍼스의 41%만 충족하므로 게이트로 쓰면 대부분이 보류된다.
     """
     hit = body_length_of(target)
     chars = hit["chars"] if hit else len(
@@ -432,7 +538,10 @@ def _file_mode(target: Path) -> int:
     rhythm = sentence_rhythm(target)
     q9_level = rhythm["level"] if rhythm else "ok"
 
-    hard = sum(1 for lv in (q7_level, q9_level) if lv == "hard")
+    today = kst_today()
+    q11 = publish_date_issue(target, today)
+
+    hard = sum(1 for lv in (q7_level, q9_level) if lv == "hard") + (1 if q11 else 0)
     print(json.dumps({
         "file": target.as_posix(),
         "Q7": {
@@ -443,6 +552,7 @@ def _file_mode(target: Path) -> int:
         },
         "Q9": rhythm or {"level": "ok", "note": "문장 5개 미만 — 판정 안 함"},
         "Q10": information_gain(target),
+        "Q11": q11 or {"level": "ok", "date": today},
         "total": hard,
     }, ensure_ascii=False, indent=2))
     return 1 if hard else 0
@@ -473,6 +583,8 @@ if __name__ == "__main__":
         "Q8": front_matter_delimiter_issues(CONTENT_ROOT),
         "Q9": rhythm_violations(CONTENT_ROOT),
         "Q10": _information_gain_summary(CONTENT_ROOT),
+        "Q11": date_anomalies(CONTENT_ROOT, today),
+        "Q12": gate_claim_mismatches(CONTENT_ROOT),
         "P2": internal_link_density(CONTENT_ROOT),
     }, ensure_ascii=False, indent=2))
 
