@@ -217,7 +217,8 @@ description: 이 블로그를 키우는 담당자로서 격주로 전체를 점�
 
 ```bash
 .venv/bin/python .claude/audit/lib/numerics.py
-.venv/bin/python .claude/audit/lib/headings.py
+.venv/bin/python .claude/audit/lib/headings.py --all       # 인자 없이 부르면 usage 에러다 (2026-09-13 발견)
+.venv/bin/python .claude/audit/lib/quality.py              # Q8 구분자 · Q11 날짜 이상 · Q12 게이트 자기대조
 .venv/bin/python .claude/audit/lib/contracts.py            # all_checks — 4필드·사전 정합·중복 키·자가검토 예산·리포트 형식
 for f in .claude/audit/lib/test_*.py scripts/test_*.py; do .venv/bin/python "$f" || echo "FAIL $f"; done
 bash scripts/bootstrap_sandbox.sh && export PATH="$HOME/.local/bin:$PATH"
@@ -225,9 +226,14 @@ git submodule update --init --depth 1 themes/PaperMod
 hugo --gc --minify && rm -rf public resources
 ```
 
-      `numerics`·`headings`의 `total`이 0, `contracts`가 `[]`, 단위 테스트 전부 통과,
-      Hugo 종료 코드 0이어야 한다. 하나라도 실패하면 **그 파일의 수정을
-      `git checkout --`으로 되돌리고** 소견으로만 남긴다.
+      `contracts`가 `[]`, 단위 테스트 전부 통과, Hugo 종료 코드 0이어야 한다.
+      `numerics`·`headings`는 **0이 아니라 「회차 시작값을 넘지 않을 것」이 기준이다** —
+      원문 대조가 필요해 이 세션이 못 고치는 N3 같은 항목이 상시로 남아 있고, 그것을
+      0으로 만들려면 사실을 바꿔야 한다. 회차 시작에 두 값을 적어 두고 끝에 비교해라.
+      하나라도 늘었으면 **그 파일의 수정을 `git checkout --`으로 되돌리고** 소견으로만 남긴다.
+
+      (2026-09-13 회차 2가 실제로 걸렸다: 새 H2 제목에 `연 7.5%`·`3.4%`를 넣자 N1이
+      3건 늘었다. H2는 기준일을 달 자리가 아니므로 수치를 뺀 제목으로 다시 썼다.)
 
       본문 산문을 고친 글이 있으면 `post-reviewer` 서브에이전트로 한 건 표집 검토한다.
       검토자가 차단을 내면 그 수정을 되돌린다 — 고치려다 나빠진 것이다.

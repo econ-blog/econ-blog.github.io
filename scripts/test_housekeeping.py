@@ -197,6 +197,35 @@ class TestHousekeepingApplyEdits(unittest.TestCase):
             
         self.assertEqual(total_backfills_applied + 3, 20)
 
+    def test_apply_edits_preserves_front_matter_delimiter(self):
+        """2026-09-13 점검이 찾은 래칫. `apply_edits`가 종료 구분자 뒤 개행을 매번
+        하나씩 지우고 있었다. 두 번 처리된 파일은 `---본문`이 되어 front matter 전체가
+        본문으로 오인되고, numerics·headings·Q7 세 검사기가 동시에 거짓 위반을 낸다.
+
+        기존 테스트들이 전부 `assertIn`으로 본문 조각만 확인해 이 손상을 못 봤다.
+        여기서는 **바이트 단위로** 앞부분을 고정한다."""
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            ".claude", "audit", "lib"))
+        import mdtext
+
+        for label, head in (("빈 줄 있음", "---\ntitle: T\n---\n\n"),
+                            ("빈 줄 없음", "---\ntitle: T\n---\n")):
+            path = f"content/delim_{len(label)}.md"
+            body = "본문에서 기준금리가 중요하다.\n"
+            self._write_file(path, head + body)
+            backfills = [{"file": path, "term": "기준금리", "slug": "base-rate"}]
+
+            # 두 번 돌린다 — 래칫은 1회차에 드러나지 않는다.
+            housekeeping.apply_edits(self.root, [], backfills)
+            housekeeping.apply_edits(self.root, [], backfills)
+
+            updated = self._read_file(path)
+            self.assertTrue(updated.startswith(head),
+                            f"{label}: 종료 구분자 뒤 개행이 사라졌다 — {updated[:40]!r}")
+            self.assertNotEqual(mdtext.split_front_matter(updated)[0], "",
+                                f"{label}: split_front_matter가 front matter를 못 읽는다")
+
     def test_apply_edits_handles_error_dicts_safely(self):
         # Passing error dict or non-list should not raise exception
         housekeeping.apply_edits(self.root, {"error": True}, {"error": True})

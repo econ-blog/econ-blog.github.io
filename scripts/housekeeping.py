@@ -347,7 +347,19 @@ def apply_edits(repo_root: str, dead_links: list, backfills: list):
                 global_backfills += 1
 
         unmasked_body = unmask_protected_markdown("".join(lines), placeholders)
-        new_content = f"---\n{fm}\n---" + unmasked_body if fm_match else unmasked_body
+        # 종료 구분자 뒤 개행을 반드시 되돌린다. 위 정규식의 `(?:\n|$)`가 그 개행을
+        # 삼키고 group(2)에 넘기지 않으므로, 여기서 붙이지 않으면 이 함수가 만지는
+        # 파일이 매번 개행을 하나씩 잃는다. 래칫이다 —
+        #   1회차: `---\n\n본문` -> `---\n본문` (빈 줄만 사라져 아직 파싱된다)
+        #   2회차: `---\n본문`   -> `---본문`   (여기서 무너진다)
+        # `mdtext.split_front_matter`는 `\n---\n`을 요구하는데 매칭 실패 시 예외 대신
+        # ('', raw)를 돌려주므로 front matter 전체가 본문으로 취급되고 그 사실은 어디에도
+        # 보고되지 않는다. 2026-09-13 점검이 6파일에서 이 손상을 발견했고, 그때
+        # numerics·headings·Q7 세 검사기가 동시에 거짓 위반을 내고 있었다.
+        # 개행을 붙이면 두 형태 모두 바이트 단위로 보존된다:
+        #   `---\n\n본문` -> group(2)=`\n본문` -> `---\n` + `\n본문` (원본 그대로)
+        #   `---\n본문`   -> group(2)=`본문`   -> `---\n` + `본문`   (원본 그대로)
+        new_content = f"---\n{fm}\n---\n" + unmasked_body if fm_match else unmasked_body
 
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(new_content)
