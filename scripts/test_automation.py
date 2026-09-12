@@ -66,6 +66,29 @@ class TestTelegramNotify(unittest.TestCase):
         self.assertIn("GSC 28일: 클릭 41 · 노출 2,180", out)
         self.assertIn("• 색인 제출 · /posts/ymtc-nand/", out)
 
+    def test_git_trailers_stay_out_of_the_message(self):
+        """커밋 규약이 본문 끝에 붙이는 `Co-Authored-By:`·`Claude-Session:` 은
+        `키: 값` 모양이라 요약 필드로 오인된다. 요약 블록이 본문의 마지막 헤딩이면
+        다음 `## `가 없어 `extract_block`이 트레일러까지 함께 잘라 온다 —
+        헤딩 범위로 자르는 방식의 유일한 빈틈이고, 2026-09-13 점검 커밋에서 실제로
+        두 줄이 알림까지 실려 나갔다."""
+        from telegram_notify import extract_block, summarize_block
+        body = (
+            "health: 2026-09-13 격주 점검\n\n"
+            "## 점검 요약\n"
+            "알림: 필요\n"
+            "자동 수정: 20건\n"
+            "리포트: report/health-2026-09-13.md\n"
+            "Co-Authored-By: Someone <noreply@example.com>\n"
+            "Claude-Session: https://example.com/session_x\n"
+        )
+        lines = extract_block(body, "점검 요약")
+        self.assertIn("Co-Authored-By: Someone <noreply@example.com>", lines)
+        out = summarize_block(lines)
+        self.assertNotIn("Co-Authored-By", out)
+        self.assertNotIn("Claude-Session", out)
+        self.assertIn("자동 수정: 20건", out)
+
     def test_routing_fields_stay_out_of_the_message(self):
         """`알림:`은 발신 스위치이고 `리포트:`는 URL로 따로 붙는다. 둘 다 사람이
         읽을 내용이 아니라 배선이다."""

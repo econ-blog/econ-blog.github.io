@@ -62,6 +62,13 @@ def extract_block(body: str, heading: str) -> list:
 # 아래에서 클릭 가능한 URL로 다시 붙는다.
 ROUTING_FIELDS = ("알림", "리포트", "상태", "사유")
 
+# git 트레일러 — 커밋 규약이 본문 끝에 붙이는 줄이고 `키: 값` 모양이라 요약 필드로
+# 오인된다. 2026-09-13 점검 커밋에서 실제로 두 줄이 텔레그램까지 실려 나갔다.
+# 요약 블록이 본문 마지막 헤딩이면 다음 `## `가 없어 트레일러까지 함께 잘린다 —
+# 헤딩 범위로 자르는 방식의 유일한 빈틈이다. 자르는 쪽이 아니라 거르는 쪽에서 막는다.
+TRAILER_FIELDS = ("Co-Authored-By", "Claude-Session", "Signed-off-by",
+                  "Co-authored-by", "Reviewed-by")
+
 
 def summarize_block(lines: list, limit: int = 12) -> str:
     """요약 블록에서 알림에 실을 줄만 남긴다.
@@ -78,7 +85,8 @@ def summarize_block(lines: list, limit: int = 12) -> str:
             kept.append(LEADING_BULLET.sub("• ", line))
         else:
             m = SUMMARY_FIELD.match(line)
-            if m and m.group(1).strip() not in ROUTING_FIELDS:
+            key = m.group(1).strip() if m else ""
+            if m and key not in ROUTING_FIELDS and key not in TRAILER_FIELDS:
                 kept.append(line)
     return "\n".join(kept[:limit]) if kept else "요약 정보 없음"
 
