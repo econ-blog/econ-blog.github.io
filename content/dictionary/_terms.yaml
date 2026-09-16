@@ -177,3 +177,7 @@ yen-carry-trade:
 final-payment-loan:
   title: "잔금대출"
   aliases: ["잔금 대출", "잔금 대출금"]
+
+fund-sourcing-plan:
+  title: "자금조달계획서"
+  aliases: ["자금조달계획서", "주택취득자금 조달계획서", "자금 조달계획서"]
