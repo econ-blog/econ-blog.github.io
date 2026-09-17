@@ -181,3 +181,7 @@ final-payment-loan:
 fund-sourcing-plan:
   title: "자금조달계획서"
   aliases: ["자금조달계획서", "주택취득자금 조달계획서", "자금 조달계획서"]
+
+housing-subscription-account:
+  title: "청약통장"
+  aliases: ["주택청약종합저축", "청약저축", "청약통장 가입"]
