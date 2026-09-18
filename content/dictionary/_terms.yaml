@@ -2,6 +2,10 @@ earned-income-tax-credit:
   title: "근로장려금"
   aliases: ["EITC", "근로장려세제", "근로장려금 제도"]
 
+financial-income-comprehensive-tax:
+  title: "금융소득종합과세"
+  aliases: ["금융소득 종합과세", "금융소득 종합소득세"]
+
 dividend-yield:
   title: "배당수익률"
   aliases: ["배당 수익률", "시가배당률", "배당률"]
