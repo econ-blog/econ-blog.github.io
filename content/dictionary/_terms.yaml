@@ -189,3 +189,7 @@ fund-sourcing-plan:
 housing-subscription-account:
   title: "청약통장"
   aliases: ["주택청약종합저축", "청약저축", "청약통장 가입"]
+
+concentrated-etf:
+  title: "압축형 ETF"
+  aliases: ["압축ETF", "TOP2 ETF", "집중형 ETF"]
