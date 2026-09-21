@@ -164,11 +164,17 @@ def main():
     if args.recent > 0:
         urls_to_submit.extend(get_recent_posts(limit=args.recent))
 
+    if not urls_to_submit and not args.recent:
+        env_files = os.environ.get("POST_FILES", "").strip()
+        if env_files:
+            file_list = [f.strip() for f in env_files.splitlines() if f.strip()]
+            urls_to_submit.extend(resolve_urls_from_files(file_list))
+
     # 중복 제거
     urls_to_submit = sorted(set(urls_to_submit))
 
     if not urls_to_submit:
-        print("⚠️ 제출할 대상 URL이 없습니다. (--urls, --files, --recent 중 하나를 지정하세요)")
+        print("⚠️ 제출할 대상 URL이 없습니다. (--urls, --files, --recent 또는 POST_FILES 환경변수를 지정하세요)")
         sys.exit(0)
 
     res = submit_indexnow(urls_to_submit, dry_run=args.dry_run)

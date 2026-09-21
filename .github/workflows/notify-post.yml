@@ -76,6 +76,12 @@ jobs:
           COMMIT_BODY: ${{ steps.posts.outputs.body }}
         run: python scripts/telegram_notify.py post
 
+      - name: Ping IndexNow (Naver & Bing)
+        env:
+          POST_FILES: ${{ steps.posts.outputs.files }}
+        run: python scripts/indexnow.py || echo "⚠️ IndexNow ping warning (non-fatal)"
+
+
       - name: Alert on failure
         if: failure()
         env:

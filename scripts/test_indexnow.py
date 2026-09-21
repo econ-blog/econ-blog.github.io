@@ -52,6 +52,14 @@ class TestIndexNow(unittest.TestCase):
         self.assertTrue(res["dry_run"])
         self.assertEqual(res["payload"]["urlList"], ["https://econ-blog.github.io/posts/test/"])
 
+    @patch.dict(os.environ, {"POST_FILES": "content/posts/my-new-post.md\ncontent/dictionary/my-term.md"})
+    def test_post_files_env(self):
+        urls = indexnow.resolve_urls_from_files(os.environ["POST_FILES"].splitlines())
+        self.assertEqual(len(urls), 2)
+        self.assertIn("https://econ-blog.github.io/posts/my-new-post/", urls)
+        self.assertIn("https://econ-blog.github.io/dictionary/my-term/", urls)
+
 
 if __name__ == "__main__":
     unittest.main()
+
