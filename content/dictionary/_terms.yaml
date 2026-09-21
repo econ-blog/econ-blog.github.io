@@ -193,3 +193,7 @@ housing-subscription-account:
 concentrated-etf:
   title: "압축형 ETF"
   aliases: ["압축ETF", "TOP2 ETF", "집중형 ETF"]
+
+public-rental-housing:
+  title: "공공임대주택"
+  aliases: ["공공임대", "보편형 공공임대", "영구임대", "국민임대"]
