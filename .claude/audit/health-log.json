@@ -14,6 +14,13 @@
       "notified": true,
       "fixes": 20,
       "human_items": 6
+    },
+    {
+      "date": "2026-09-21",
+      "monthly_report": false,
+      "notified": true,
+      "fixes": 1,
+      "human_items": 2
     }
   ]
 }
