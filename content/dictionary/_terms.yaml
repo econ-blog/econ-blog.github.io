@@ -2,6 +2,10 @@ earned-income-tax-credit:
   title: "근로장려금"
   aliases: ["EITC", "근로장려세제", "근로장려금 제도"]
 
+producer-price-index:
+  title: "생산자물가지수"
+  aliases: ["PPI", "생산자물가", "생산자 물가지수"]
+
 financial-income-comprehensive-tax:
   title: "금융소득종합과세"
   aliases: ["금융소득 종합과세", "금융소득 종합소득세"]
