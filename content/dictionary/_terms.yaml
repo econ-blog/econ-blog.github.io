@@ -201,3 +201,7 @@ concentrated-etf:
 public-rental-housing:
   title: "공공임대주택"
   aliases: ["공공임대", "보편형 공공임대", "영구임대", "국민임대"]
+
+urban-redevelopment-project:
+  title: "정비사업"
+  aliases: ["재건축", "재개발", "도시정비사업", "정비구역"]
