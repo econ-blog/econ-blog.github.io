@@ -205,3 +205,7 @@ public-rental-housing:
 urban-redevelopment-project:
   title: "정비사업"
   aliases: ["재건축", "재개발", "도시정비사업", "정비구역"]
+
+cma-account:
+  title: "CMA"
+  aliases: ["종합자산관리계좌", "CMA 계좌"]
