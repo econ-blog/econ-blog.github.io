@@ -209,3 +209,7 @@ urban-redevelopment-project:
 cma-account:
   title: "CMA"
   aliases: ["종합자산관리계좌", "CMA 계좌"]
+
+real-estate-brokerage-fee:
+  title: "중개수수료"
+  aliases: ["복비", "중개보수", "부동산 중개수수료"]
