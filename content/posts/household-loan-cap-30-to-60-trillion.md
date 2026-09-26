@@ -38,7 +38,7 @@ related_articles:
 
 상반기 은행권이 총량 목표를 예상보다 빠르게 소진하면서, 주택담보대출을 받으려는 사람들이 창구가 열리자마자 몰려드는 이른바 대출 오픈런이 곳곳에서 벌어졌습니다. 은행들은 월별·분기별로 대출 취급 규모를 제한했고, 일부 상품은 접수가 시작되자마자 한도가 동나기도 했습니다. [새벽부터 벌어졌던 카카오뱅크 대출 오픈런](/posts/kakaobank-mortgage-openrun-loan-cap/)도 같은 흐름 위에 있었습니다.
 
-금융위는 이렇게 늘어난 여력을 재건축·재개발 이주비, 중도금·[잔금대출](/dictionary/final-payment-loan/) 등 주택 공급과 직결된 자금과 청년·실수요자 대출에 먼저 배정하기로 했습니다. [이주비·PF 대출규제를 손질했던](/posts/housing-supply-financial-regulation-easing/) 앞선 조치의 연장선입니다. 반면 최근 빠르게 늘고 있는 신용대출은 이번 총량 확대 대상에서 빼고 금융회사 자율 관리에 맡기기로 했습니다.
+금융위는 이렇게 늘어난 여력을 [재건축](/dictionary/urban-redevelopment-project/)·재개발 이주비, 중도금·[잔금대출](/dictionary/final-payment-loan/) 등 주택 공급과 직결된 자금과 청년·실수요자 대출에 먼저 배정하기로 했습니다. [이주비·PF 대출규제를 손질했던](/posts/housing-supply-financial-regulation-easing/) 앞선 조치의 연장선입니다. 반면 최근 빠르게 늘고 있는 신용대출은 이번 총량 확대 대상에서 빼고 금융회사 자율 관리에 맡기기로 했습니다.
 
 ## 가계대출 확대가 내 잔금대출·전세대출에 닿는 길
 
