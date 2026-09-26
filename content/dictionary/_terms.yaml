@@ -213,3 +213,7 @@ cma-account:
 real-estate-brokerage-fee:
   title: "중개수수료"
   aliases: ["복비", "중개보수", "부동산 중개수수료"]
+
+investment-leading-room:
+  title: "리딩방"
+  aliases: ["투자리딩방", "종목리딩방", "주식리딩방"]
