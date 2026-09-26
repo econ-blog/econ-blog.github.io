@@ -99,8 +99,17 @@ description: 이 블로그를 키우는 담당자로서 격주로 전체를 점�
       -->
       가벼운 연속성 확인만 하고 끝낸다. 5분 안에 끝나야 한다.
 
-      - 최근 7일 발행 건수 (`content/posts/*.md`의 `date`).
-      - `draft: true` 포스트 수.
+      **눈으로 세지 않는다.** 결번·보류·정지는 검사기가 답한다:
+
+```bash
+.venv/bin/python .claude/audit/lib/continuity.py --days 14
+```
+
+      `findings`가 판정 원문이다 — `C1` 결번 · `C2` 보류 3건 이상 · `C3` 발행 정지.
+      (2026-09-27 회차 4가 붙였다. 그 전에는 이 자리가 산문 지시였고, 회차 3이
+      2026-09-21 결번을 놓치고 「결번 0건」이라고 적었다.)
+
+      - 위 `findings`.
       - 최신 `report/housekeeping-*.md` 날짜.
       - 최신 커밋 이력에 `post:`가 매일 있는지.
 
@@ -114,8 +123,17 @@ description: 이 블로그를 키우는 담당자로서 격주로 전체를 점�
     </stage>
 
     <stage id="2" name="continuity" file=".claude/audit/system-scan.md">
-      - 발행 연속성: 최근 14일 발행 건수, 결번 날짜와 그 사유(후보 8점 미만이었나, 수집이 실패했나).
-      - **보류 초안**: `draft: true` 포스트를 세고 각각 왜 보류됐는지 커밋 본문의 `사유:`에서 확인한다. 3건 이상이면 게이트가 상시로 걸린다는 뜻이다 — 게이트가 빡빡한 것인지 글이 나쁜 것인지 갈라서 적는다. 전자면 §7에서 규칙을 고치는 것이 개별 글을 고치는 것보다 낫다.
+      - 발행 연속성: `continuity.py`로 센다(눈으로 세지 않는다 — §1b의 이유와 같다).
+
+```bash
+.venv/bin/python .claude/audit/lib/continuity.py --days 21
+```
+
+        `C1` 결번이 뜨면 **그 사유를 갈라 적는다**: 사이드카
+        `automation-data/candidates/<날짜>.json`의 `candidates` 길이와 `feed_errors`를
+        보고, 후보가 있었으면 1위 후보 8점 미만(정상 종료)이고 후보가 0이거나
+        `feed_errors`가 있으면 수집 실패다. 둘은 처분이 다르다.
+      - **보류 초안**: `continuity.py`의 `held`를 받아 각각 왜 보류됐는지 커밋 본문의 `사유:`에서 확인한다. 3건 이상이면 게이트가 상시로 걸린다는 뜻이다 — 게이트가 빡빡한 것인지 글이 나쁜 것인지 갈라서 적는다. 전자면 §7에서 규칙을 고치는 것이 개별 글을 고치는 것보다 낫다.
       - **검토자 신호**: 최근 회차 커밋 본문의 `검토:` 줄을 훑는다. `post-reviewer`가 반복해서 같은 축을 지적하면 그것은 개별 글 문제가 아니라 `draft.md`·`writing-styles.md` 문제다.
       - 유지보수 생사: `ls -1 report/housekeeping-*.md | tail -3`.
         **"0건 = 고장"이 아니다.** 스케줄이 돌 기회가 있었는지를 먼저 본다 — 유지보수는 2026-08-28부터 `weekly-collect.yml`의 `housekeeping` 잡이며 cron-job.org가 **매주 일 01:20 KST**에 그 워크플로를 부른다. 지난 회차 이후 그 시각이 한 번도 지나지 않았으면 리포트가 없는 것이 정상이다. 기회가 한 번 이상 있었는데도 0건일 때만 ④ 중대 고장이다.
@@ -219,6 +237,7 @@ description: 이 블로그를 키우는 담당자로서 격주로 전체를 점�
 .venv/bin/python .claude/audit/lib/numerics.py
 .venv/bin/python .claude/audit/lib/headings.py --all       # 인자 없이 부르면 usage 에러다 (2026-09-13 발견)
 .venv/bin/python .claude/audit/lib/quality.py              # Q8 구분자 · Q11 날짜 이상 · Q12 게이트 자기대조
+.venv/bin/python .claude/audit/lib/continuity.py           # C1 결번 · C2 보류 · C3 발행 정지
 .venv/bin/python .claude/audit/lib/contracts.py            # all_checks — 4필드·사전 정합·중복 키·자가검토 예산·리포트 형식
 for f in .claude/audit/lib/test_*.py scripts/test_*.py; do .venv/bin/python "$f" || echo "FAIL $f"; done
 bash scripts/bootstrap_sandbox.sh && export PATH="$HOME/.local/bin:$PATH"

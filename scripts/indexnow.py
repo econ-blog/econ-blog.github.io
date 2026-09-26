@@ -41,15 +41,59 @@ def find_indexnow_key(repo_root: Path = REPO_ROOT) -> tuple[str | None, str | No
     return None, None
 
 
-def resolve_urls_from_files(file_paths: list[str]) -> list[str]:
-    """파일 경로(포스트/사전)로부터 퍼머링크 URL 목록을 도출합니다."""
+DRAFT_TRUE = re.compile(r"^draft:\s*true\s*$", re.M)
+
+
+def front_matter(path: Path) -> str:
+    """파일 맨 앞 `---` 블록만 돌려준다. 없으면 빈 문자열.
+
+    바이트 윈도로 앞부분만 읽는 방식(`get_recent_posts`가 쓰던 1024자)은 front
+    matter에 `faq`·`related_articles`가 붙으면 `draft:` 줄을 놓칠 수 있다. 블록을
+    정확히 잘라 읽는다.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if not text.startswith("---"):
+        return ""
+    end = text.find("\n---", 3)
+    return text[:end] if end != -1 else text
+
+
+def is_draft(path: Path) -> bool:
+    """front matter가 `draft: true`인가.
+
+    읽을 수 없으면 초안이라고 단정하지 않는다(False). 워크플로는 `--diff-filter=d`로
+    삭제 파일을 이미 걸러 넘기므로, 여기서 못 읽는 경로는 예외 상황이고 그때는
+    기존 동작(제출)을 유지하는 쪽이 안전하다.
+    """
+    return bool(DRAFT_TRUE.search(front_matter(path)))
+
+
+def resolve_urls_from_files(file_paths: list[str],
+                            repo_root: Path = REPO_ROOT) -> list[str]:
+    """파일 경로(포스트/사전)로부터 퍼머링크 URL 목록을 도출합니다.
+
+    **`draft: true`인 파일은 제외한다.** Hugo는 초안을 렌더하지 않으므로 그 URL은
+    사이트에 존재하지 않는다. 발행 게이트가 글을 보류하면(`draft: true`로 `main`에
+    남긴다) 커밋 제목은 여전히 `post: `이고, `notify-post.yml`은 그 접두사만 보므로
+    IndexNow 단계까지 그대로 내려온다 — 즉 보류될 때마다 404 URL을 네이버·빙에
+    제출하고 있었다. 2026-09-24·09-27 두 회차가 실제로 그렇게 나갔다.
+    """
     urls = []
     for fp in file_paths:
         p = Path(fp)
         name = p.stem
+        if "content/posts" in fp or "content/dictionary" in fp:
+            if p.name.startswith("_"):
+                continue
+            abs_p = p if p.is_absolute() else repo_root / fp
+            if is_draft(abs_p):
+                continue
         if "content/posts" in fp:
             urls.append(f"{SITE_BASE}/posts/{name}/")
-        elif "content/dictionary" in fp and not p.name.startswith("_"):
+        elif "content/dictionary" in fp:
             urls.append(f"{SITE_BASE}/dictionary/{name}/")
         elif fp.endswith("index.html") or fp in ("/", "index.html"):
             urls.append(f"{SITE_BASE}/")
@@ -61,17 +105,14 @@ def get_recent_posts(repo_root: Path = REPO_ROOT, limit: int = 5) -> list[str]:
     posts = []
     pattern = str(repo_root / "content/posts/*.md")
     for fp in glob.glob(pattern):
-        try:
-            with open(fp, "r", encoding="utf-8") as f:
-                head = f.read(1024)
-            date_m = re.search(r"^date:\s*([^\n]+)", head, re.M)
-            draft_m = re.search(r"^draft:\s*(true|false)", head, re.M)
-            is_draft = draft_m and draft_m.group(1) == "true"
-            if not is_draft and date_m:
-                d_val = date_m.group(1).strip("\"' ")
-                posts.append((d_val, Path(fp).stem))
-        except Exception:
+        # front matter 블록을 통째로 본다 — 앞 1024자만 읽으면 description·faq가 긴
+        # 글에서 `draft:` 줄이 창 밖으로 밀려 초안이 발행분으로 섞인다.
+        front = front_matter(Path(fp))
+        if not front or DRAFT_TRUE.search(front):
             continue
+        date_m = re.search(r"^date:\s*([^\n]+)", front, re.M)
+        if date_m:
+            posts.append((date_m.group(1).strip("\"' "), Path(fp).stem))
 
     posts.sort(key=lambda x: x[0], reverse=True)
     return [f"{SITE_BASE}/posts/{stem}/" for _, stem in posts[:limit]]
