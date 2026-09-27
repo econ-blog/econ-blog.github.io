@@ -217,3 +217,7 @@ real-estate-brokerage-fee:
 investment-leading-room:
   title: "리딩방"
   aliases: ["투자리딩방", "종목리딩방", "주식리딩방"]
+
+overseas-retail-investor:
+  title: "서학개미"
+  aliases: ["서학 개미", "해외주식 개인투자자"]
