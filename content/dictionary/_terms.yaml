@@ -221,3 +221,7 @@ investment-leading-room:
 overseas-retail-investor:
   title: "서학개미"
   aliases: ["서학 개미", "해외주식 개인투자자"]
+
+pre-subscription:
+  title: "사전청약"
+  aliases: ["사전청약 제도", "본청약"]
