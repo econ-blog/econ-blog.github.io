@@ -5,8 +5,13 @@
   - 날짜 ≠ 오늘 KST  → stale        (어제 뉴스로 글 쓰는 것 차단)
   - body_ok 후보 0건 → no_usable    (기존 "원문 읽기 실패 → 후보 폐기" 사상)
 
+`--days N`(N > 1)은 주 1회 발행용이다(2026-10-02~). 수집은 그대로 매일 24시간 창으로
+하고, 발행하는 날 지난 N일치 일간 스냅샷을 합쳐 그 주의 후보 전체에서 고른다. 오늘
+스냅샷 하나만 보면 월요일 새벽에는 일요일 하루치 뉴스만 남는다. 창 안의 파일이 하나도
+없을 때만 no_snapshot이고, 하루 빠진 날은 `missing_dates`로만 알린다.
+
 사용:
-    .venv/bin/python scripts/read_snapshot.py [--sidecar PATH] [--allow-local-fetch]
+    .venv/bin/python scripts/read_snapshot.py [--sidecar PATH] [--days N] [--allow-local-fetch]
 """
 import argparse
 import json
@@ -14,7 +19,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -52,6 +57,44 @@ def load_snapshot(sidecar: str, subdir: str, date_str: str) -> dict:
     path = os.path.join(sidecar, subdir, f"{date_str}.json")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def load_window(sidecar: str, subdir: str, today: str, days: int) -> dict:
+    """오늘부터 `days`일 거슬러 올라간 일간 스냅샷을 후보 스냅샷 하나로 합친다.
+
+    같은 기사(url)는 가장 최근 날짜의 사본만 남긴다. 각 후보에 `snapshot_path`를
+    단다 — `post-reviewer`는 스냅샷 파일 하나를 받아 url로 원문을 찾으므로, 합친 뒤에도
+    고른 후보가 어느 파일에서 왔는지 알아야 한다. `generated_at`은 오늘로 둔다 —
+    신선도는 창이 정하므로 gate()의 stale 판정이 다시 걸지 않게 한다.
+    """
+    t = date.fromisoformat(today)
+    candidates, seen, used, missing = [], set(), [], []
+    feeds_used, feed_errors = [], []
+    for i in range(days):
+        d = (t - timedelta(days=i)).isoformat()
+        path = os.path.abspath(os.path.join(sidecar, subdir, f"{d}.json"))
+        try:
+            snap = load_snapshot(sidecar, subdir, d)
+        except (FileNotFoundError, json.JSONDecodeError):
+            missing.append(d)
+            continue
+        used.append(d)
+        for feed in snap.get("feeds_used", []):
+            if feed not in feeds_used:
+                feeds_used.append(feed)
+        feed_errors.extend(snap.get("feed_errors", []))
+        for c in snap.get("candidates", []):
+            key = c.get("url") or c.get("title")
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append({**c, "snapshot_path": path, "snapshot_date": d})
+    if not used:
+        raise FileNotFoundError(f"{subdir}/{missing[-1]}~{missing[0]} 창 안에 스냅샷 없음")
+    return {"generated_at": f"{today}T00:00:00+09:00", "candidates": candidates,
+            "feeds_used": feeds_used, "feed_errors": feed_errors,
+            "window_days": days, "snapshot_dates": sorted(used),
+            "missing_dates": sorted(missing)}
 
 
 def load_snapshot_dir(sidecar: str, subdir: str, date_str: str) -> dict:
@@ -124,6 +167,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sidecar")
     ap.add_argument("--subdir", default="candidates")
+    ap.add_argument("--days", type=int, default=1,
+                    help="후보 창(일). 1이면 오늘 스냅샷만, N이면 지난 N일 스냅샷을 합친다.")
     ap.add_argument("--allow-local-fetch", action="store_true",
                     help="수동 모드 전용. 스냅샷이 없으면 직접 수집한다.")
     ap.add_argument("--dir-mode", action="store_true",
@@ -149,6 +194,9 @@ def main() -> int:
         if args.dir_mode:
             snapshot = load_snapshot_dir(sidecar, args.subdir, today)
             snapshot_path = os.path.abspath(os.path.join(sidecar, args.subdir, today))
+        elif args.days > 1:
+            snapshot = load_window(sidecar, args.subdir, today, args.days)
+            snapshot_path = os.path.abspath(os.path.join(sidecar, args.subdir))
         else:
             snapshot = load_snapshot(sidecar, args.subdir, today)
             snapshot_path = os.path.abspath(
@@ -160,13 +208,21 @@ def main() -> int:
             snapshot_path = None  # 파일에서 읽은 게 아니라 그 자리에서 수집한 것 — 가리킬 경로가 없다
         else:
             missing = f"{args.subdir}/{today}" + ("" if args.dir_mode else ".json")
-            reason = f"{missing} 없음" if isinstance(exc, FileNotFoundError) else f"{missing} 손상됨 (JSONDecodeError)"
+            if args.days > 1 and not args.dir_mode:
+                reason = str(exc)
+            elif isinstance(exc, FileNotFoundError):
+                reason = f"{missing} 없음"
+            else:
+                reason = f"{missing} 손상됨 (JSONDecodeError)"
             print(json.dumps({"status": "no_snapshot", "candidates": [],
                               "reason": reason,
                               "sidecar_via": how}, ensure_ascii=False))
             return 1
 
     result = build_result(snapshot, today, how, snapshot_path)
+    if "window_days" in snapshot:
+        for key in ("window_days", "snapshot_dates", "missing_dates"):
+            result[key] = snapshot[key]
     if args.dir_mode:
         # gate()는 "candidates" 키 부재 스냅샷을 날짜 신선도만으로 ok 처리한다 — 그건
         # analytics 디렉터리가 존재한다는 사실 자체로 이미 참이다(경로에 today가 박혀

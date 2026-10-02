@@ -209,5 +209,59 @@ class TestDirMode(unittest.TestCase):
             self.assertIn("손상됨 (JSONDecodeError)", out["reason"])
 
 
+class TestWindow(unittest.TestCase):
+    """주 1회 발행(2026-10-02~)은 지난 7일치 일간 스냅샷을 합쳐 고른다."""
+
+    def _write(self, tmp, d, candidates):
+        import json
+        sub = os.path.join(tmp, "candidates")
+        os.makedirs(sub, exist_ok=True)
+        with open(os.path.join(sub, f"{d}.json"), "w", encoding="utf-8") as fh:
+            json.dump(snap(d, candidates), fh, ensure_ascii=False)
+
+    def _cand(self, url, chars=800):
+        return {**cand(chars=chars), "url": url}
+
+    def test_merges_days_and_keeps_newest_copy(self):
+        import tempfile
+        from read_snapshot import load_window
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, "2026-10-05", [self._cand("https://e.com/a")])
+            self._write(tmp, "2026-10-01", [self._cand("https://e.com/a"), self._cand("https://e.com/b")])
+            w = load_window(tmp, "candidates", "2026-10-05", 7)
+            urls = [c["url"] for c in w["candidates"]]
+            self.assertEqual(urls, ["https://e.com/a", "https://e.com/b"])
+            self.assertEqual(w["candidates"][0]["snapshot_date"], "2026-10-05")
+            self.assertTrue(w["candidates"][1]["snapshot_path"].endswith("2026-10-01.json"))
+            self.assertEqual(w["snapshot_dates"], ["2026-10-01", "2026-10-05"])
+            self.assertEqual(len(w["missing_dates"]), 5)
+
+    def test_missing_today_is_still_ok(self):
+        """오늘 수집이 실패해도 지난 6일 후보로 고른다 — stale로 막지 않는다."""
+        import tempfile
+        from read_snapshot import load_window
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, "2026-10-03", [self._cand("https://e.com/c")])
+            w = load_window(tmp, "candidates", "2026-10-05", 7)
+            r = gate(w, "2026-10-05")
+            self.assertEqual(r["status"], "ok")
+            self.assertIn("2026-10-05", w["missing_dates"])
+
+    def test_empty_window_raises(self):
+        import tempfile
+        from read_snapshot import load_window
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(FileNotFoundError):
+                load_window(tmp, "candidates", "2026-10-05", 7)
+
+    def test_unusable_bodies_are_filtered_after_merge(self):
+        import tempfile
+        from read_snapshot import load_window
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, "2026-10-04", [self._cand("https://e.com/x", chars=100)])
+            w = load_window(tmp, "candidates", "2026-10-05", 7)
+            self.assertEqual(gate(w, "2026-10-05")["status"], "no_usable")
+
+
 if __name__ == "__main__":
     unittest.main()

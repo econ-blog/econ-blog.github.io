@@ -4,14 +4,18 @@
 후보 기사를 수집·채점하여 최적의 포스팅 후보(무인: 1위 1건, 수동: 상위 3건)를 선별한다. 결과는 `daily-post.md`로 넘긴다.
 
 ## 1. 후보 스냅샷 읽기
-GitHub Actions(`daily-collect.yml`)가 매일 01:30 KST에 수집해 둔 스냅샷을 읽는다 (RSS 직접 호출 금지):
+GitHub Actions(`daily-collect.yml`)가 매일 01:30 KST에 수집해 둔 스냅샷을 **지난 7일치 합쳐** 읽는다 (RSS 직접 호출 금지).
+발행은 주 1회(월 05:00 KST)다 — 오늘 스냅샷 하나만 읽으면 일요일 하루치 뉴스에서 고르게 된다:
 
 ```bash
-.venv/bin/python scripts/read_snapshot.py
+.venv/bin/python scripts/read_snapshot.py --days 7
 ```
+
+- 각 후보에 `snapshot_path`(출처 파일)와 `snapshot_date`가 붙는다. 같은 기사는 가장 최근 날짜의 사본만 남는다.
+- `missing_dates`는 수집이 빠진 날이다. 하루 이틀 빠져도 진행한다.
 (수동 모드에서는 필요 시 `--allow-local-fetch` 추가)
 
-- `status == "ok"`: `candidates` 목록으로 §2 이하 진행.
+- `status == "ok"`: `candidates` 목록으로 §2 이하 진행. 일주일치라 후보가 많다 — 채점 기준은 같다.
 - 그 외 (`no_snapshot`, `stale`, `no_usable`, `sidecar_unreachable`): 후보를 지어내지 않고 상태를 보고한 뒤 즉시 종료.
 
 ## 2. 중복 판정
@@ -40,5 +44,5 @@ GitHub Actions(`daily-collect.yml`)가 매일 01:30 KST에 수집해 둔 스냅�
 
 ## 4. 임계값 판정 및 출력
 - **무인 모드**: 1위 점수 8점 미만 시 조용히 종료. 8점 이상 시 1위 후보만 `daily-post.md`로 전달.
-- **수동 모드**: 상위 3건을 표로 제시하여 사용자 선택을 받음. 3건 모두 8점 미만 시 "오늘 추천 후보 없음" 보고 후 중단.
+- **수동 모드**: 상위 3건을 표로 제시하여 사용자 선택을 받음. 3건 모두 8점 미만 시 "이번 주 추천 후보 없음" 보고 후 중단.
 </instructions>

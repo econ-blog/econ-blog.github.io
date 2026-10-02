@@ -8,15 +8,20 @@
 블로그의 유일한 산출 지표인데 그것을 눈으로 셌다.
 
 세 축:
-  C1 결번   — 오늘까지의 연속 구간에서 `date`가 없는 날. 발행도 보류도 없던 날이다.
+  C1 결번   — 발행 주기 한 칸(기본 7일) 안에 `date`가 하나도 없는 구간. 발행도 보류도 없던 칸이다.
   C2 보류   — `draft: true`로 남은 글. 3건 이상이면 게이트가 상시로 걸린다는 신호다.
-  C3 정지   — 마지막 발행으로부터 며칠 지났나. 7일 이상이면 ④ 중대 고장이다.
+  C3 정지   — 마지막 발행으로부터 며칠 지났나. 14일 이상이면 ④ 중대 고장이다.
+
+2026-10-02 사람이 발행을 매일에서 주 1회(월 05:00 KST)로 바꿨다. 그 전처럼 하루 단위로
+세면 글이 없는 엿새가 매주 결번으로 잡힌다. 그래서 창을 주기(`cadence_days`) 단위 칸으로
+자르고, 칸 안에 글이 하나라도 있으면 결번이 아니다. 매일 발행하던 과거 구간은 어느 칸에나
+글이 있으므로 그대로 통과한다. `--cadence 1`이면 예전과 같은 하루 단위 판정이다.
 
 규약: 표준 라이브러리 + 정규식만. 네트워크를 쓰지 않는다.
 
 사용:
-    .venv/bin/python .claude/audit/lib/continuity.py            # 최근 21일
-    .venv/bin/python .claude/audit/lib/continuity.py --days 14
+    .venv/bin/python .claude/audit/lib/continuity.py            # 최근 35일, 7일 칸
+    .venv/bin/python .claude/audit/lib/continuity.py --days 14 --cadence 7
 """
 import json
 import re
@@ -36,11 +41,15 @@ CONTENT_ROOT = (
 )
 EXCLUDE = {"_index.md", "welcome.md"}
 
-# 발행이 이만큼 멈추면 ④ 중대 고장. `health-check.md` notification_policy 와 같은 값이다.
-STALL_ALERT_DAYS = 7
+# 발행 주기(일). 주 1회 발행이다.
+CADENCE_DAYS = 7
+# 발행이 이만큼 멈추면 ④ 중대 고장 — 주 1회 기준 두 번 연속 결번이다.
+# `health-check.md` notification_policy 와 같은 값이다.
+STALL_ALERT_DAYS = 14
 # 보류가 이만큼 쌓이면 게이트가 상시로 걸린다는 뜻. §2 가 쓰는 값이다.
 HELD_ALERT = 3
-DEFAULT_WINDOW = 21
+# 월 1회 점검이 지난 한 달을 덮도록 5주.
+DEFAULT_WINDOW = 35
 
 
 def _posts(content_root: Path) -> list[dict]:
@@ -64,11 +73,13 @@ def _posts(content_root: Path) -> list[dict]:
 
 
 def gaps(content_root: Path = CONTENT_ROOT, today: str | None = None,
-         days: int = DEFAULT_WINDOW) -> dict:
+         days: int = DEFAULT_WINDOW, cadence_days: int = CADENCE_DAYS) -> dict:
     """오늘부터 `days`일 거슬러 본 연속성.
 
     `today` 자체는 결번으로 세지 않는다 — 05:00 KST 발행 전에 돌면 오늘은 아직
-    비어 있는 것이 정상이고, 그것을 고장으로 부르면 매일 새벽 거짓 경보가 된다.
+    비어 있는 것이 정상이고, 그것을 고장으로 부르면 발행일 새벽마다 거짓 경보가 된다.
+    창은 어제부터 거꾸로 `cadence_days`일씩 칸으로 자르고, 끝에 남는 짧은 칸은 버린다
+    (칸이 덜 찼는데 결번이라 부르면 거짓 경보다).
     """
     today = today or kst_today()
     t = date.fromisoformat(today)
@@ -78,7 +89,12 @@ def gaps(content_root: Path = CONTENT_ROOT, today: str | None = None,
         by_date.setdefault(p["date"], []).append(p)
 
     window = [(t - timedelta(days=i)).isoformat() for i in range(1, days + 1)]
-    missing = sorted(d for d in window if d not in by_date)
+    missing = []
+    for k in range(days // cadence_days):
+        span = window[k * cadence_days:(k + 1) * cadence_days]
+        if not any(d in by_date for d in span):
+            missing.append(span[0] if cadence_days == 1 else f"{span[-1]}~{span[0]}")
+    missing.sort()
     held = sorted(p["file"] for p in posts if p["draft"])
     held_in_window = sorted(
         p["file"] for p in posts if p["draft"] and p["date"] in window
@@ -91,8 +107,8 @@ def gaps(content_root: Path = CONTENT_ROOT, today: str | None = None,
     findings = []
     for d in missing:
         findings.append({"check": "C1", "at": d,
-                         "why": "발행도 보류도 없는 날 — 후보 8점 미만이었나 "
-                                "수집·세션이 안 돌았나를 갈라 적는다"})
+                         "why": "발행도 보류도 없는 주기 — 후보 8점 미만이었나, "
+                                "수집·세션이 안 돌았나, 계정 사용 한도에 막혔나를 갈라 적는다"})
     if len(held) >= HELD_ALERT:
         findings.append({"check": "C2", "at": f"{len(held)}건",
                          "why": f"보류 초안 {len(held)}건 >= {HELD_ALERT}건 — "
@@ -105,6 +121,7 @@ def gaps(content_root: Path = CONTENT_ROOT, today: str | None = None,
     return {
         "today": today,
         "window_days": days,
+        "cadence_days": cadence_days,
         "missing": missing,
         "missing_count": len(missing),
         "held": held,
@@ -120,18 +137,24 @@ def gaps(content_root: Path = CONTENT_ROOT, today: str | None = None,
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     days = DEFAULT_WINDOW
+    cadence = CADENCE_DAYS
     today = None
     if "--days" in argv:
         i = argv.index("--days")
         if i + 1 >= len(argv):
-            sys.exit("usage: continuity.py [--days N] [--date YYYY-MM-DD]")
+            sys.exit("usage: continuity.py [--days N] [--cadence N] [--date YYYY-MM-DD]")
         days = int(argv[i + 1])
     if "--date" in argv:
         i = argv.index("--date")
         if i + 1 >= len(argv):
-            sys.exit("usage: continuity.py [--days N] [--date YYYY-MM-DD]")
+            sys.exit("usage: continuity.py [--days N] [--cadence N] [--date YYYY-MM-DD]")
         today = argv[i + 1]
-    print(json.dumps(gaps(CONTENT_ROOT, today, days), ensure_ascii=False, indent=2))
+    if "--cadence" in argv:
+        i = argv.index("--cadence")
+        if i + 1 >= len(argv):
+            sys.exit("usage: continuity.py [--days N] [--cadence N] [--date YYYY-MM-DD]")
+        cadence = int(argv[i + 1])
+    print(json.dumps(gaps(CONTENT_ROOT, today, days, cadence), ensure_ascii=False, indent=2))
     return 0
 
 

@@ -6,11 +6,11 @@
 | 모드 | 트리거 | 내용 |
 |---|---|---|
 | `post` | `notify-post.yml` (main 푸시 · `content/posts/**`) | 오늘 발행된 글 본문 |
-| `health` | `notify-health.yml` (main 푸시 · `report/health-*.md`) | 격주 점검 중 사람이 알아야 할 것만 |
+| `health` | `notify-health.yml` (main 푸시 · `report/health-*.md`) | 월간 점검 중 사람이 알아야 할 것만 |
 | `alert` | 수집 워크플로 실패 | 자동화 경보 |
 
 주간 유지보수(`weekly-housekeeping.yml`)는 **어떤 메시지도 보내지 않는다.** 순수
-결정론 패스라 사람이 읽고 할 일이 없고, 실패는 격주 점검이 집어낸다.
+결정론 패스라 사람이 읽고 할 일이 없고, 실패는 월간 점검이 집어낸다.
 
 판정 토큰(`#P0827`)을 만드는 함수가 여기 있었지만 승인 루프와 함께 제거했다.
 다시 넣지 않는다 — 받는 쪽(`process_inbox.py`)이 더 이상 존재하지 않아서
@@ -148,10 +148,10 @@ def format_post_published(path: str, raw: str, note: str = "") -> str:
 
 
 def format_health_notification(body: str, report_path: str, url: str) -> str:
-    """격주 점검 알림. 보낼지 말지는 워크플로가 `알림:` 줄로 이미 판정했다."""
+    """월간 점검 알림. 보낼지 말지는 워크플로가 `알림:` 줄로 이미 판정했다."""
     lines = extract_block(body, "점검 요약")
     monthly = field(lines, "월간 리포트") == "예"
-    head = "📊 월간 현황 리포트" if monthly else "🔧 격주 점검 — 사람 확인 필요"
+    head = "📊 월간 현황 리포트" if monthly else "🔧 월간 점검 — 사람 확인 필요"
     name = os.path.basename(report_path) if report_path else "health report"
     return (
         f"{head} ({name})\n\n"

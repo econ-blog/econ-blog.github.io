@@ -1,4 +1,4 @@
-"""격주 점검(`/health-check`)의 원장.
+"""월간 점검(`/health-check`)의 원장. (2026-10-02까지는 격주였다)
 
 이 스크립트가 답하는 질문은 하나다: **이번 회차에 사람에게 월간 리포트를 보낼
 차례인가?**
@@ -87,20 +87,19 @@ def previous_run(ledger: dict, today: str) -> dict | None:
     return past[-1] if past else None
 
 
-# 격주 = 지난 회차로부터 이만큼 지났으면 돈다. 14가 아니라 12인 이유: 트리거가 주 단위로
-# 발화하므로 정확히 14일 뒤에는 발화 자체가 없다. 13일째 발화를 잡으려면 문턱이 14보다
-# 낮아야 하고, 7보다는 높아야 매주 도는 것이 되지 않는다.
-BIWEEKLY_MIN_GAP_DAYS = 12
+# 월간 = 지난 회차로부터 이만큼 지났으면 돈다. 트리거는 매월 1일에 발화하므로(2026-10-02~)
+# 정상 간격은 28~31일이다. 20인 이유: 그 간격은 늘 넘고, 사람이 월중에 손으로 깊은 점검을
+# 한 번 돌렸다면 그 직후의 정기 발화(약 10일 뒤)는 가벼운 패스로 넘긴다.
+# (격주 시절에는 주 단위 발화에 12였다.)
+MONTHLY_MIN_GAP_DAYS = 20
 
 
-def run_due(ledger: dict, today: str, min_gap_days: int = BIWEEKLY_MIN_GAP_DAYS) -> bool:
+def run_due(ledger: dict, today: str, min_gap_days: int = MONTHLY_MIN_GAP_DAYS) -> bool:
     """이번 발화에서 실제로 점검을 돌려야 하는가.
 
-    격주 주기를 cron으로 표현하지 않고 여기서 판정한다. 표준 cron은 "2주에 한 번"을
-    쓸 수 없고(요일과 일자를 같이 제한하면 AND가 아니라 OR로 해석된다), 회차 수를
-    세는 방식은 발화가 한 번 걸러질 때마다 위상이 밀린다. 그래서 트리거는 매주
-    발화시키고 **지난 회차로부터 며칠 지났는지**로 가른다 — 한 회차를 놓쳐도 다음
-    발화가 그대로 이어받고, 위상이 영구히 어긋나지 않는다.
+    주기를 회차 수가 아니라 **지난 회차로부터 며칠 지났는지**로 가른다 — 발화가 한 번
+    걸러져도(예: 계정 사용 한도) 다음 발화가 그대로 이어받고 위상이 어긋나지 않는다.
+    매월 1일 발화에서는 거의 늘 참이고, 거짓은 한 달 안에 손으로 다시 부른 경우다.
     """
     prev = previous_run(ledger, today)
     if prev is None:
@@ -115,7 +114,7 @@ def run_due(ledger: dict, today: str, min_gap_days: int = BIWEEKLY_MIN_GAP_DAYS)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="격주 점검 원장")
+    ap = argparse.ArgumentParser(description="월간 점검 원장")
     ap.add_argument("--path", default=LEDGER_PATH)
     ap.add_argument("--date", default="", help="KST 날짜 (기본: 오늘)")
     ap.add_argument("--record", action="store_true", help="회차를 원장에 적는다")

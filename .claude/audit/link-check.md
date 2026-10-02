@@ -4,7 +4,7 @@
 > (`scripts/housekeeping.py`, 매주 일 02:00 KST)가 같은 헬퍼(`linkcheck.py`·
 > `backfill.py`·`internal_links.py`)를 결정론적으로 돌려 사망 링크 제거와 백필까지
 > `main`에 직행시킨다. 이 문서는 **그 헬퍼들이 지키기로 한 규칙의 진리원**으로 남는다 —
-> 격주 점검이 `report/housekeeping-*.md`를 해석하거나 헬퍼가 낸 결과를 의심할 때 읽는다.
+> 월간 점검이 `report/housekeeping-*.md`를 해석하거나 헬퍼가 낸 결과를 의심할 때 읽는다.
 > 규칙을 바꾸려면 여기와 헬퍼를 같이 바꾼다.
 
 발행된 글의 내부·외부 링크가 살아 있는지 확인하고, **확정 사망 링크만** 수정 변경안으로

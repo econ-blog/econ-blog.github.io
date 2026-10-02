@@ -37,32 +37,33 @@ class TestMonthlyCadence(unittest.TestCase):
         self.assertTrue(health_state.monthly_due(led, "2026-09-24"))
 
 
-class TestBiweeklyGate(unittest.TestCase):
-    """격주 주기는 cron이 아니라 여기서 판정한다. 트리거는 매주 발화하고 이 게이트가
-    가른다 — 표준 cron으로 '2주에 한 번'을 쓸 수 없고, 회차 수를 세면 발화가 걸러질
-    때마다 위상이 밀린다."""
+class TestMonthlyGate(unittest.TestCase):
+    """주기는 cron이 아니라 여기서 판정한다. 트리거는 매월 1일에 발화하고(2026-10-02~)
+    이 게이트가 지난 회차로부터의 일수로 가른다 — 발화가 걸러져도 위상이 밀리지 않는다."""
 
     def _after(self, last_date, today):
         led = health_state.record({"last_monthly": "", "runs": []}, last_date, False, False)
         return health_state.run_due(led, today)
 
     def test_first_ever_run_proceeds(self):
-        self.assertTrue(health_state.run_due({"last_monthly": "", "runs": []}, "2026-09-06"))
+        self.assertTrue(health_state.run_due({"last_monthly": "", "runs": []}, "2026-11-01"))
 
-    def test_next_week_is_skipped(self):
-        self.assertFalse(self._after("2026-09-06", "2026-09-13"))
-
-    def test_two_weeks_later_proceeds(self):
-        self.assertTrue(self._after("2026-09-06", "2026-09-20"))
+    def test_next_monthly_firing_proceeds(self):
+        self.assertTrue(self._after("2026-10-01", "2026-11-01"))
+        self.assertTrue(self._after("2026-02-01", "2026-03-01"))  # 28일짜리 달
 
     def test_a_missed_firing_is_picked_up_by_the_next_one(self):
-        """9/20 발화가 걸러졌으면 9/27이 그대로 이어받는다 — 다시 2주를 기다리지 않는다."""
-        self.assertTrue(self._after("2026-09-06", "2026-09-27"))
+        """11/1 발화가 걸러졌으면 12/1이 그대로 이어받는다."""
+        self.assertTrue(self._after("2026-10-01", "2026-12-01"))
 
-    def test_threshold_catches_the_13th_day(self):
-        """주 단위로 발화하므로 정확히 14일째 발화는 없다. 문턱이 14면 매번 한 주씩 밀린다."""
-        self.assertTrue(self._after("2026-09-06", "2026-09-19"))
-        self.assertFalse(self._after("2026-09-06", "2026-09-12"))
+    def test_manual_run_mid_month_defers_the_next_firing(self):
+        """사람이 10/22에 손으로 깊은 점검을 돌렸으면 11/1 발화는 가벼운 패스다."""
+        self.assertFalse(self._after("2026-10-22", "2026-11-01"))
+
+    def test_threshold_is_twenty_days(self):
+        self.assertTrue(self._after("2026-10-01", "2026-10-21"))
+        self.assertFalse(self._after("2026-10-01", "2026-10-20"))
+        self.assertFalse(self._after("2026-09-27", "2026-10-11"))  # 격주 시절 간격은 이제 미달
 
     def test_unreadable_date_errs_toward_running(self):
         """건너뛰면 점검이 영영 안 돌 수 있다. 읽을 수 없으면 도는 쪽을 고른다.
