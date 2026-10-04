@@ -225,3 +225,7 @@ overseas-retail-investor:
 pre-subscription:
   title: "사전청약"
   aliases: ["사전청약 제도", "본청약"]
+
+housing-affordability-index:
+  title: "주택구입부담지수"
+  aliases: ["주택구입 부담지수", "주택구입부담 지수", "HAI"]
