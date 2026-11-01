@@ -229,3 +229,7 @@ pre-subscription:
 housing-affordability-index:
   title: "주택구입부담지수"
   aliases: ["주택구입 부담지수", "주택구입부담 지수", "HAI"]
+
+delinquency-rate:
+  title: "연체율"
+  aliases: ["대출 연체율"]
