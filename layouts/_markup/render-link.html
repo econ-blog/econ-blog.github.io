@@ -1,0 +1,28 @@
+{{- /*
+  본문 링크 렌더 훅 (2026-11-01 회차 5, H-2026-11-01-3).
+
+  보류(draft: true)된 글·용어를 가리키는 내부 링크는 빌드되지 않은 페이지를 가리키므로
+  404가 된다. 보류 한 건이 이미 발행된 남의 페이지 여러 곳을 조용히 망가뜨렸다
+  (회차 4: 9건, 그중 2건은 구글에 색인된 사전 페이지). 대상이 /posts/·/dictionary/ 아래인데
+  발행된 페이지가 없으면 링크 대신 글자만 내보낸다. 대상이 나중에 발행되면 다음 빌드에서
+  링크가 저절로 돌아온다 — 본문은 건드리지 않는다.
+
+  그 외 링크는 Hugo 기본 렌더와 같은 마크업을 낸다.
+*/ -}}
+{{- $dest := .Destination -}}
+{{- $u := urls.Parse $dest -}}
+{{- $dead := false -}}
+{{- if and (not $u.IsAbs) (not $u.Host) -}}
+  {{- $path := strings.TrimSuffix "/" $u.Path -}}
+  {{- if or (strings.HasPrefix $path "/dictionary/") (strings.HasPrefix $path "/posts/") -}}
+    {{- if not (site.GetPage $path) -}}
+      {{- $dead = true -}}
+      {{- warnf "render-link: 미발행 대상으로 가는 링크를 글자로 냈다 %s (%s)" $dest .Page.RelPermalink -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if $dead -}}
+{{- .Text -}}
+{{- else -}}
+<a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text }}</a>
+{{- end -}}

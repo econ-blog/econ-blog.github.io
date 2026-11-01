@@ -97,6 +97,20 @@
         "claims_total": 307,
         "claims_per_post": 9.9
       }
+    },
+    {
+      "date": "2026-11-01",
+      "snapshot": {
+        "d1_evergreen_mass_ratio": 0.1767,
+        "d2_vocab_used": 15,
+        "d3_links_per_post_median": 3,
+        "d3_self_reference": 0,
+        "d3_dead_ends": null,
+        "d4_primary_source_links": 40,
+        "d5_aged_ratio": 0.1884,
+        "d6_all_met": true,
+        "n1_count": 0
+      }
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "last_monthly": "2026-09",
+  "last_monthly": "2026-11",
   "runs": [
     {
       "date": "2026-08-28",
@@ -28,6 +28,13 @@
       "notified": true,
       "fixes": 17,
       "human_items": 5
+    },
+    {
+      "date": "2026-11-01",
+      "monthly_report": true,
+      "notified": true,
+      "fixes": 2,
+      "human_items": 3
     }
   ]
 }
