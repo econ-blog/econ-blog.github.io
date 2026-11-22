@@ -233,3 +233,7 @@ housing-affordability-index:
 delinquency-rate:
   title: "연체율"
   aliases: ["대출 연체율"]
+
+official-price-realization-rate:
+  title: "공시가격 현실화율"
+  aliases: ["현실화율", "시세반영률"]
